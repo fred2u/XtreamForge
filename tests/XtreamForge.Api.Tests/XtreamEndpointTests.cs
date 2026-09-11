@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.RegularExpressions;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -524,6 +525,51 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.Contains(logSink.Messages, message => message.Contains("invalid category payload", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(logSink.Messages, message => message.Contains("hidden-secret", StringComparison.Ordinal));
         Assert.DoesNotContain(logSink.Messages, message => message.Contains("username=user", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CategorySavePost_RedirectsUsingPersistedCategoryContext()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        using (var discoveryFactory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(CreateJsonHandler("[{\"category_id\":\"42\",\"category_name\":\"Alpha\"}]")))
+        using (var discoveryClient = discoveryFactory.CreateClient())
+        {
+            var discoveryResponse = await discoveryClient.GetAsync("/https/example.com/443/player_api.php?action=get_vod_categories");
+            Assert.Equal(HttpStatusCode.OK, discoveryResponse.StatusCode);
+        }
+
+        await using var scope = setupFactory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var source = await dbContext.XtreamSources.SingleAsync();
+        var upstreamCategory = await dbContext.UpstreamCategories.SingleAsync();
+
+        using var pageFactory = _factory.WithSqliteDatabase(databasePath);
+        using var client = pageFactory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var getResponse = await client.GetAsync($"/categories?sourceId={source.Id}&contentType=Vod");
+        var pageHtml = await getResponse.Content.ReadAsStringAsync();
+        var tokenMatch = Regex.Match(pageHtml, "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"");
+
+        Assert.True(getResponse.IsSuccessStatusCode);
+        Assert.True(tokenMatch.Success);
+
+        using var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["__RequestVerificationToken"] = tokenMatch.Groups[1].Value,
+            ["UpstreamCategoryRecordId"] = upstreamCategory.Id.ToString(),
+            ["SelectedSourceId"] = "999",
+            ["SelectedContentType"] = ContentType.Series.ToString(),
+            ["IsExcluded"] = "false",
+            ["OutputName"] = "Renamed"
+        });
+
+        var postResponse = await client.PostAsync("/categories?handler=Save", form);
+
+        Assert.Equal(HttpStatusCode.Redirect, postResponse.StatusCode);
+        Assert.Equal($"/categories?sourceId={source.Id}&contentType=Vod", postResponse.Headers.Location?.OriginalString);
     }
 
     private static FakeForwarderHandler CreateForwardingHandler() =>

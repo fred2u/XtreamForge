@@ -104,6 +104,14 @@ public sealed class XtreamCategoryMappingServiceTests
                 true,
                 null,
                 null));
+
+            await service.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(
+                category57.Id,
+                category57.XtreamSourceId,
+                ContentType.Vod,
+                false,
+                category42.DedicatedOutputCategoryId,
+                null));
         }
 
         var result = await service.SyncCategoriesAsync(

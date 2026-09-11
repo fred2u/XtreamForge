@@ -18,12 +18,12 @@ public sealed class IndexModel(XtreamCategoryMappingService categoryMappingServi
 
     public async Task<IActionResult> OnPostSaveAsync(CategoryConfigurationCommand command, CancellationToken cancellationToken)
     {
-        await categoryMappingService.SaveCategoryConfigurationAsync(command, cancellationToken);
+        var result = await categoryMappingService.SaveCategoryConfigurationAsync(command, cancellationToken);
 
         return RedirectToPage(new
         {
-            sourceId = command.SelectedSourceId,
-            contentType = command.SelectedContentType
+            sourceId = result.SourceId,
+            contentType = result.ContentType
         });
     }
 }

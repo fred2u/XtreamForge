@@ -181,7 +181,7 @@ public sealed class XtreamCategoryMappingService(IDbContextFactory<XtreamForgeDb
         return new CategoryAdministrationView(sources, effectiveSourceId, selectedContentType, outputCategories, upstreamCategories);
     }
 
-    public async Task SaveCategoryConfigurationAsync(CategoryConfigurationCommand command, CancellationToken cancellationToken = default)
+    public async Task<CategoryConfigurationResult> SaveCategoryConfigurationAsync(CategoryConfigurationCommand command, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
 
@@ -202,7 +202,7 @@ public sealed class XtreamCategoryMappingService(IDbContextFactory<XtreamForgeDb
             upstreamCategory.OutputCategory = null;
             upstreamCategory.OutputCategoryId = null;
             await dbContext.SaveChangesAsync(cancellationToken);
-            return;
+            return new CategoryConfigurationResult(upstreamCategory.XtreamSourceId, upstreamCategory.ContentType);
         }
 
         upstreamCategory.IsExcluded = false;
@@ -217,8 +217,12 @@ public sealed class XtreamCategoryMappingService(IDbContextFactory<XtreamForgeDb
                 : targetOutputCategory.DisplayName)
             : command.OutputName.Trim();
 
+        var isNameCustomized = targetOutputCategory.Id == upstreamCategory.DedicatedOutputCategoryId
+            ? !desiredOutputName.Equals(upstreamCategory.UpstreamCategoryName, StringComparison.Ordinal)
+            : targetOutputCategory.IsNameCustomized || !desiredOutputName.Equals(targetOutputCategory.DisplayName, StringComparison.Ordinal);
+
         targetOutputCategory.DisplayName = desiredOutputName;
-        targetOutputCategory.IsNameCustomized = !desiredOutputName.Equals(upstreamCategory.UpstreamCategoryName, StringComparison.Ordinal);
+        targetOutputCategory.IsNameCustomized = isNameCustomized;
         targetOutputCategory.IsEnabled = true;
         targetOutputCategory.UpdatedAtUtc = updatedAt;
 
@@ -231,6 +235,7 @@ public sealed class XtreamCategoryMappingService(IDbContextFactory<XtreamForgeDb
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        return new CategoryConfigurationResult(upstreamCategory.XtreamSourceId, upstreamCategory.ContentType);
     }
 
     private static OutputCategory CreateOutputCategory(
@@ -327,3 +332,7 @@ public sealed record CategoryConfigurationCommand(
     bool IsExcluded,
     int? MergeToOutputCategoryRecordId,
     string? OutputName);
+
+public sealed record CategoryConfigurationResult(
+    int SourceId,
+    ContentType ContentType);

@@ -82,6 +82,10 @@ else
                 <tbody>
                     @foreach (var category in Model.ViewModel.UpstreamCategories)
                     {
+                        var excludedInputId = $"exclude-{category.Id}";
+                        var mergeSelectId = $"merge-output-{category.Id}";
+                        var outputNameInputId = $"output-name-{category.Id}";
+
                         <tr>
                             <td>
                                 <div><strong>@category.UpstreamCategoryName</strong></div>
@@ -108,14 +112,14 @@ else
                                     <input type="hidden" name="SelectedContentType" value="@Model.ViewModel.SelectedContentType" />
                                     <input type="hidden" name="IsExcluded" value="false" />
 
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" name="IsExcluded" value="true" checked="@category.IsExcluded" />
+                                    <label class="checkbox-label" for="@excludedInputId">
+                                        <input id="@excludedInputId" type="checkbox" name="IsExcluded" value="true" checked="@category.IsExcluded" />
                                         Exclude
                                     </label>
 
-                                    <label>
-                                        Merge into output
-                                        <select name="MergeToOutputCategoryRecordId">
+                                    <label for="@mergeSelectId">
+                                        Merge output for @category.UpstreamCategoryName
+                                        <select id="@mergeSelectId" name="MergeToOutputCategoryRecordId">
                                             <option value="">Dedicated output (@category.DedicatedXtreamForgeCategoryId)</option>
                                             @foreach (var outputCategory in Model.ViewModel.OutputCategories.Where(outputCategory => outputCategory.Id != category.DedicatedOutputCategoryId))
                                             {
@@ -124,9 +128,9 @@ else
                                         </select>
                                     </label>
 
-                                    <label>
-                                        Output name
-                                        <input type="text" name="OutputName" value="@(category.OutputCategoryId == category.DedicatedOutputCategoryId ? category.DedicatedOutputName : category.ActiveOutputName ?? category.DedicatedOutputName)" maxlength="255" />
+                                    <label for="@outputNameInputId">
+                                        Output name for @category.UpstreamCategoryName
+                                        <input id="@outputNameInputId" type="text" name="OutputName" value="@(category.OutputCategoryId == category.DedicatedOutputCategoryId ? category.DedicatedOutputName : category.ActiveOutputName ?? category.DedicatedOutputName)" maxlength="255" />
                                     </label>
 
                                     <button type="submit">Save</button>

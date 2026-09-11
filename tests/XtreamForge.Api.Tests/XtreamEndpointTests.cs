@@ -164,7 +164,6 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
 
             return Task.FromResult(action switch
             {
-                "get_vod_categories" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "[{\"category_id\":\"10\",\"category_name\":\"Movies A\"},{\"category_id\":\"20\",\"category_name\":\"SPORT Movies\"},{\"category_id\":\"30\",\"category_name\":\"Movies B\"}]"),
                 "get_vod_streams" when categoryId == "10" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "[{\"stream_id\":\"100\",\"name\":\"Movie A\",\"category_id\":\"10\"}]"),
                 "get_vod_streams" when categoryId == "30" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "[{\"stream_id\":\"300\",\"name\":\"Movie B\",\"category_id\":\"30\"}]"),
                 _ => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.BadRequest, "{}")
@@ -182,8 +181,7 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
             payload,
             first => Assert.Equal(("100", "1"), (first.Id, first.CategoryId)),
             second => Assert.Equal(("300", "1"), (second.Id, second.CategoryId)));
-        Assert.Equal(3, handler.Requests.Count);
-        Assert.Contains(handler.Requests, request => request.RequestUri?.Query.Contains("action=get_vod_categories", StringComparison.Ordinal) == true);
+        Assert.Equal(2, handler.Requests.Count);
         Assert.Contains(handler.Requests, request => request.RequestUri?.Query.Contains("category_id=10", StringComparison.Ordinal) == true);
         Assert.Contains(handler.Requests, request => request.RequestUri?.Query.Contains("category_id=30", StringComparison.Ordinal) == true);
         Assert.DoesNotContain(handler.Requests, request => request.RequestUri?.Query.Contains("category_id=20", StringComparison.Ordinal) == true);
@@ -219,7 +217,6 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
             var action = ParseQuery(request.RequestUri, "action");
             return Task.FromResult(action switch
             {
-                "get_series_categories" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "[{\"category_id\":\"10\",\"category_name\":\"Drama\"},{\"category_id\":\"20\",\"category_name\":\"SPORT Series\"}]"),
                 "get_series" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "[{\"series_id\":\"501\",\"name\":\"Series A\",\"category_id\":\"10\"},{\"series_id\":\"502\",\"name\":\"Series B\",\"category_id\":\"20\"}]"),
                 _ => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.BadRequest, "{}")
             });
@@ -272,7 +269,6 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
             var action = ParseQuery(request.RequestUri, "action");
             return Task.FromResult(action switch
             {
-                "get_vod_categories" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "[{\"category_id\":\"10\",\"category_name\":\"Movies A\"},{\"category_id\":\"20\",\"category_name\":\"SPORT Movies\"},{\"category_id\":\"30\",\"category_name\":\"Movies B\"}]"),
                 "get_vod_info" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "{\"info\":{\"category_id\":\"10\",\"category_ids\":[\"10\",\"20\",\"30\"]},\"movie_data\":{\"category_id\":\"30\"}}"),
                 _ => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.BadRequest, "{}")
             });
@@ -318,7 +314,6 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
             var action = ParseQuery(request.RequestUri, "action");
             return Task.FromResult(action switch
             {
-                "get_series_categories" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "[{\"category_id\":\"20\",\"category_name\":\"SPORT Series\"}]"),
                 "get_series_info" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "{\"info\":{\"category_id\":\"20\",\"category_ids\":[\"20\"]}}"),
                 _ => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.BadRequest, "{}")
             });

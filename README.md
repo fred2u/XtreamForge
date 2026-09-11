@@ -290,7 +290,7 @@ The current test suite does not require a locally installed PostgreSQL instance.
 
 ## Known limitations
 
-- Only `get_vod_categories` and `get_series_categories` are currently rewritten
+- Xtream rewriting currently focuses on category translation for category, stream, and detail actions
 - Stream/info rewriting currently focuses on category translation only
 - No TMDB client or enrichment yet
 - No admin authentication yet

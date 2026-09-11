@@ -147,31 +147,37 @@ public sealed class XtreamContentProxyService(
         HttpContext context,
         CancellationToken cancellationToken)
     {
-        var categoryAction = contentType == ContentType.Vod ? "get_vod_categories" : "get_series_categories";
-        var categoryTargetUri = BuildTargetUri(destination.TargetUri, context.Request.Query, ("action", categoryAction), ["category_id", "vod_id", "series_id"]);
+        var sourceDescriptor = new XtreamSourceDescriptor(destination.Protocol, destination.Host, destination.Port);
+        var mappings = await categoryMappingService.GetEffectiveOutputCategoryMappingsAsync(sourceDescriptor, contentType, cancellationToken);
+        if (mappings.Count == 0
+            && !await categoryMappingService.HasDiscoveredCategoriesAsync(sourceDescriptor, contentType, cancellationToken))
+        {
+            var categoryAction = contentType == ContentType.Vod ? "get_vod_categories" : "get_series_categories";
+            var categoryTargetUri = BuildTargetUri(destination.TargetUri, context.Request.Query, ("action", categoryAction), ["category_id", "vod_id", "series_id"]);
 
-        using var requestMessage = XtreamProxyHttpRequestFactory.Create(categoryTargetUri, context.Request);
-        var httpClient = httpClientFactory.CreateClient(ForwarderService.HttpClientName);
-        using var responseMessage = await httpClient.SendAsync(
-            requestMessage,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken);
+            using var requestMessage = XtreamProxyHttpRequestFactory.Create(categoryTargetUri, context.Request);
+            var httpClient = httpClientFactory.CreateClient(ForwarderService.HttpClientName);
+            using var responseMessage = await httpClient.SendAsync(
+                requestMessage,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
 
-        responseMessage.EnsureSuccessStatusCode();
+            responseMessage.EnsureSuccessStatusCode();
 
-        var upstreamCategories = await responseMessage.Content.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(cancellationToken: cancellationToken) ?? [];
-        await categoryMappingService.SyncCategoriesAsync(
-            new XtreamSourceDescriptor(destination.Protocol, destination.Host, destination.Port),
-            contentType,
-            upstreamCategories
-                .Select(category => new DiscoveredCategory(category.CategoryId ?? string.Empty, category.CategoryName ?? string.Empty))
-                .ToList(),
-            cancellationToken);
+            var upstreamCategories = await responseMessage.Content.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(cancellationToken: cancellationToken) ?? [];
+            await categoryMappingService.SyncCategoriesAsync(
+                sourceDescriptor,
+                contentType,
+                upstreamCategories
+                    .Select(category => new DiscoveredCategory(category.CategoryId ?? string.Empty, category.CategoryName ?? string.Empty))
+                    .ToList(),
+                cancellationToken);
 
-        var mappings = await categoryMappingService.GetEffectiveOutputCategoryMappingsAsync(
-            new XtreamSourceDescriptor(destination.Protocol, destination.Host, destination.Port),
-            contentType,
-            cancellationToken);
+            mappings = await categoryMappingService.GetEffectiveOutputCategoryMappingsAsync(
+                sourceDescriptor,
+                contentType,
+                cancellationToken);
+        }
 
         var outputToUpstream = mappings.ToDictionary(
             mapping => mapping.XtreamForgeCategoryId.ToString(),

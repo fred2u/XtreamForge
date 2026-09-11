@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Collections.Concurrent;
 using System.Net;
 using Microsoft.Extensions.Options;
 using XtreamForge.Api.Configuration;
@@ -7,6 +8,9 @@ namespace XtreamForge.Api.Services;
 
 public sealed class XtreamUpstreamDestinationResolver(IOptions<XtreamProxyOptions> options)
 {
+    private static readonly TimeSpan PublicHostCacheLifetime = TimeSpan.FromMinutes(5);
+    private static readonly ConcurrentDictionary<string, CachedHostEvaluation> PublicHostCache = new(StringComparer.OrdinalIgnoreCase);
+
     public UpstreamResolutionResult Resolve(
         string protocol,
         string host,
@@ -74,6 +78,19 @@ public sealed class XtreamUpstreamDestinationResolver(IOptions<XtreamProxyOption
 
     private static bool IsPubliclyRoutableHost(string host)
     {
+        if (PublicHostCache.TryGetValue(host, out var cachedEvaluation)
+            && cachedEvaluation.ExpiresAtUtc > DateTimeOffset.UtcNow)
+        {
+            return cachedEvaluation.IsAllowed;
+        }
+
+        var isAllowed = EvaluatePubliclyRoutableHost(host);
+        PublicHostCache[host] = new CachedHostEvaluation(isAllowed, DateTimeOffset.UtcNow.Add(PublicHostCacheLifetime));
+        return isAllowed;
+    }
+
+    private static bool EvaluatePubliclyRoutableHost(string host)
+    {
         try
         {
             if (IPAddress.TryParse(host, out var parsedAddress))
@@ -132,6 +149,8 @@ public sealed class XtreamUpstreamDestinationResolver(IOptions<XtreamProxyOption
 
         return uriBuilder.Uri;
     }
+
+    private sealed record CachedHostEvaluation(bool IsAllowed, DateTimeOffset ExpiresAtUtc);
 }
 
 public sealed record XtreamUpstreamDestination(

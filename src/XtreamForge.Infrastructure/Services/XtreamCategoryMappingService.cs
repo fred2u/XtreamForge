@@ -230,6 +230,22 @@ public sealed class XtreamCategoryMappingService(
             : [];
     }
 
+    public async Task<bool> HasDiscoveredCategoriesAsync(
+        XtreamSourceDescriptor sourceDescriptor,
+        ContentType contentType,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sourceDescriptor);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        return await dbContext.UpstreamCategories
+            .AnyAsync(category => category.XtreamSource.Protocol == sourceDescriptor.Protocol
+                && category.XtreamSource.Host == sourceDescriptor.Host
+                && category.XtreamSource.Port == sourceDescriptor.Port
+                && category.ContentType == contentType,
+                cancellationToken);
+    }
+
     private static List<DiscoveredCategory> NormalizeDiscoveredCategories(IReadOnlyList<DiscoveredCategory> discoveredCategories) =>
         discoveredCategories
             .Where(category => !string.IsNullOrWhiteSpace(category.UpstreamCategoryId) && !string.IsNullOrWhiteSpace(category.UpstreamCategoryName))

@@ -143,7 +143,16 @@ public sealed class XtreamCategoryMappingService(
         var upstreamCategory = await dbContext.UpstreamCategories
             .Include(category => category.OutputCategory)
             .Include(category => category.DedicatedOutputCategory)
-            .SingleAsync(category => category.Id == command.UpstreamCategoryRecordId, cancellationToken);
+            .SingleOrDefaultAsync(
+                category => category.Id == command.UpstreamCategoryRecordId
+                    && category.XtreamSourceId == command.SelectedSourceId
+                    && category.ContentType == command.SelectedContentType,
+                cancellationToken);
+
+        if (upstreamCategory is null)
+        {
+            throw new InvalidOperationException("The category does not belong to the selected source or content type.");
+        }
 
         var outputCategories = await dbContext.OutputCategories
             .Where(outputCategory => outputCategory.XtreamSourceId == upstreamCategory.XtreamSourceId && outputCategory.ContentType == upstreamCategory.ContentType)

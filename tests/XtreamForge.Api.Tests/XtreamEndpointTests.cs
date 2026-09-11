@@ -667,8 +667,8 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         {
             ["__RequestVerificationToken"] = tokenMatch.Groups[1].Value,
             ["UpstreamCategoryRecordId"] = upstreamCategory.Id.ToString(),
-            ["SelectedSourceId"] = "999",
-            ["SelectedContentType"] = ContentType.Series.ToString(),
+            ["SelectedSourceId"] = source.Id.ToString(),
+            ["SelectedContentType"] = ContentType.Vod.ToString(),
             ["IsExcluded"] = "false",
             ["OutputName"] = "Renamed"
         });

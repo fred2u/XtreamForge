@@ -28,13 +28,22 @@ public sealed class IndexModel(
 
     public async Task<IActionResult> OnPostSaveAsync(CategoryConfigurationCommand command, CancellationToken cancellationToken)
     {
-        var result = await categoryMappingService.SaveCategoryConfigurationAsync(command, cancellationToken);
-
-        return RedirectToPage(new
+        try
         {
-            sourceId = result.SourceId,
-            contentType = result.ContentType
-        });
+            var result = await categoryMappingService.SaveCategoryConfigurationAsync(command, cancellationToken);
+
+            return RedirectToPage(new
+            {
+                sourceId = result.SourceId,
+                contentType = result.ContentType
+            });
+        }
+        catch (InvalidOperationException exception)
+        {
+            ModelState.AddModelError(string.Empty, exception.Message);
+            await LoadViewModelAsync(command.SelectedSourceId, command.SelectedContentType, null, cancellationToken);
+            return Page();
+        }
     }
 
     public async Task<IActionResult> OnPostCreateRuleAsync(CategoryRuleEditorCommand command, CancellationToken cancellationToken)
@@ -83,20 +92,47 @@ public sealed class IndexModel(
 
     public async Task<IActionResult> OnPostDeleteRuleAsync(CategoryRuleIdentityCommand command, CancellationToken cancellationToken)
     {
-        var result = await categoryRuleService.DeleteRuleAsync(command, cancellationToken);
-        return RedirectToPage(new { sourceId = result.SourceId, contentType = result.ContentType });
+        try
+        {
+            var result = await categoryRuleService.DeleteRuleAsync(command, cancellationToken);
+            return RedirectToPage(new { sourceId = result.SourceId, contentType = result.ContentType });
+        }
+        catch (InvalidOperationException exception)
+        {
+            ModelState.AddModelError(string.Empty, exception.Message);
+            await LoadViewModelAsync(command.SelectedSourceId, command.SelectedContentType, null, cancellationToken);
+            return Page();
+        }
     }
 
     public async Task<IActionResult> OnPostMoveRuleUpAsync(CategoryRuleIdentityCommand command, CancellationToken cancellationToken)
     {
-        var result = await categoryRuleService.MoveRuleAsync(command, CategoryRuleMoveDirection.Up, cancellationToken);
-        return RedirectToPage(new { sourceId = result.SourceId, contentType = result.ContentType });
+        try
+        {
+            var result = await categoryRuleService.MoveRuleAsync(command, CategoryRuleMoveDirection.Up, cancellationToken);
+            return RedirectToPage(new { sourceId = result.SourceId, contentType = result.ContentType });
+        }
+        catch (InvalidOperationException exception)
+        {
+            ModelState.AddModelError(string.Empty, exception.Message);
+            await LoadViewModelAsync(command.SelectedSourceId, command.SelectedContentType, null, cancellationToken);
+            return Page();
+        }
     }
 
     public async Task<IActionResult> OnPostMoveRuleDownAsync(CategoryRuleIdentityCommand command, CancellationToken cancellationToken)
     {
-        var result = await categoryRuleService.MoveRuleAsync(command, CategoryRuleMoveDirection.Down, cancellationToken);
-        return RedirectToPage(new { sourceId = result.SourceId, contentType = result.ContentType });
+        try
+        {
+            var result = await categoryRuleService.MoveRuleAsync(command, CategoryRuleMoveDirection.Down, cancellationToken);
+            return RedirectToPage(new { sourceId = result.SourceId, contentType = result.ContentType });
+        }
+        catch (InvalidOperationException exception)
+        {
+            ModelState.AddModelError(string.Empty, exception.Message);
+            await LoadViewModelAsync(command.SelectedSourceId, command.SelectedContentType, null, cancellationToken);
+            return Page();
+        }
     }
 
     private async Task LoadViewModelAsync(int? sourceId, ContentType contentType, string? previewCategoryName, CancellationToken cancellationToken)

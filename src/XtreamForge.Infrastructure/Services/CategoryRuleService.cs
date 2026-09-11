@@ -110,7 +110,12 @@ public sealed class CategoryRuleService(
         var normalizedPattern = ValidateAndNormalizePattern(command.Pattern);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var rule = await dbContext.CategoryRules.SingleAsync(existingRule => existingRule.Id == command.RuleId.Value, cancellationToken);
+        var rule = await dbContext.CategoryRules.SingleOrDefaultAsync(existingRule => existingRule.Id == command.RuleId.Value, cancellationToken);
+        if (rule is null)
+        {
+            throw new InvalidOperationException("Category rule was not found.");
+        }
+
         EnsureRuleScope(rule, command.SelectedSourceId, command.SelectedContentType);
 
         rule.Action = command.Action;
@@ -137,7 +142,12 @@ public sealed class CategoryRuleService(
             .ThenBy(rule => rule.Id)
             .ToListAsync(cancellationToken);
 
-        var rule = rules.Single(existingRule => existingRule.Id == command.RuleId);
+        var rule = rules.SingleOrDefault(existingRule => existingRule.Id == command.RuleId);
+        if (rule is null)
+        {
+            throw new InvalidOperationException("Category rule was not found.");
+        }
+
         dbContext.CategoryRules.Remove(rule);
         rules.Remove(rule);
 

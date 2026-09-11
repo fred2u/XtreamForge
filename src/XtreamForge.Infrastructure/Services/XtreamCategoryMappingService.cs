@@ -329,10 +329,11 @@ public sealed class XtreamCategoryMappingService(
                 return new EffectiveOutputCategoryMapping(
                     outputCategory.Id,
                     outputCategory.XtreamForgeCategoryId,
+                    outputCategory.SortOrder,
                     outputCategory.DisplayName,
                     group.Select(result => result.Category.UpstreamCategoryId).Distinct(StringComparer.Ordinal).ToList());
             })
-            .OrderBy(category => upstreamCategories.First(item => item.OutputCategoryId == category.OutputCategoryRecordId).OutputCategory!.SortOrder)
+            .OrderBy(category => category.SortOrder)
             .ThenBy(category => category.XtreamForgeCategoryId)
             .ToList();
     }
@@ -445,6 +446,7 @@ public sealed record RewrittenCategory(string CategoryId, string CategoryName, I
 public sealed record EffectiveOutputCategoryMapping(
     int OutputCategoryRecordId,
     int XtreamForgeCategoryId,
+    int SortOrder,
     string DisplayName,
     IReadOnlyList<string> IncludedUpstreamCategoryIds);
 

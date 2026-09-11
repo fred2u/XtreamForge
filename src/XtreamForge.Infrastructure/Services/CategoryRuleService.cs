@@ -315,10 +315,16 @@ public sealed record CategoryRuleEditorCommand(
     bool CaseSensitive,
     bool IsEnabled);
 
-public sealed record CategoryRuleIdentityCommand(
+public record CategoryRuleIdentityCommand(
     int RuleId,
     int SelectedSourceId,
     ContentType SelectedContentType);
+
+public sealed record CategoryRuleDeleteCommand(
+    int RuleId,
+    int SelectedSourceId,
+    ContentType SelectedContentType,
+    bool ConfirmDelete) : CategoryRuleIdentityCommand(RuleId, SelectedSourceId, SelectedContentType);
 
 public sealed record CategoryRuleMutationResult(
     int SourceId,

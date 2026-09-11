@@ -139,6 +139,19 @@ public sealed class CategoryRuleEvaluatorTests
         Assert.Equal(10, result.MatchedRuleSequence);
     }
 
+    [Fact]
+    public void Rules_WithSameSequence_AreEvaluatedById()
+    {
+        var result = _evaluator.Evaluate("SPORT DOCUMENTAIRE",
+        [
+            new CategoryRuleDefinition(2, 10, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true),
+            new CategoryRuleDefinition(1, 10, CategoryRuleAction.Include, CategoryRuleOperator.Contains, "DOCUMENTAIRE", false, true)
+        ]);
+
+        Assert.Equal(CategoryInclusionDecision.Include, result.Decision);
+        Assert.Equal(1, result.MatchedRuleId);
+    }
+
     private CategoryRuleEvaluationResult Evaluate(string categoryName, CategoryRuleOperator @operator, string pattern, bool caseSensitive, CategoryRuleAction action) =>
         _evaluator.Evaluate(categoryName,
         [

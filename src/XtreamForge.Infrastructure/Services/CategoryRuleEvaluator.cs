@@ -9,7 +9,7 @@ public sealed class CategoryRuleEvaluator
         ArgumentNullException.ThrowIfNull(categoryName);
         ArgumentNullException.ThrowIfNull(rules);
 
-        foreach (var rule in rules.OrderBy(rule => rule.Sequence))
+        foreach (var rule in rules.OrderBy(rule => rule.Sequence).ThenBy(rule => rule.Id ?? int.MaxValue))
         {
             if (!rule.IsEnabled)
             {

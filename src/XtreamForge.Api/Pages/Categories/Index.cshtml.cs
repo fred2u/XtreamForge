@@ -90,8 +90,15 @@ public sealed class IndexModel(
         }
     }
 
-    public async Task<IActionResult> OnPostDeleteRuleAsync(CategoryRuleIdentityCommand command, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostDeleteRuleAsync(CategoryRuleDeleteCommand command, CancellationToken cancellationToken)
     {
+        if (!command.ConfirmDelete)
+        {
+            ModelState.AddModelError(string.Empty, "Confirm delete before removing a rule.");
+            await LoadViewModelAsync(command.SelectedSourceId, command.SelectedContentType, null, cancellationToken);
+            return Page();
+        }
+
         try
         {
             var result = await categoryRuleService.DeleteRuleAsync(command, cancellationToken);

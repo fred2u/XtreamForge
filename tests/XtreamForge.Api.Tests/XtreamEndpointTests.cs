@@ -782,6 +782,7 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
             ["RuleId"] = firstRule.Id.ToString(),
             ["SelectedSourceId"] = source.Id.ToString(),
             ["SelectedContentType"] = ContentType.Vod.ToString(),
+            ["ConfirmDelete"] = "true",
             ["Action"] = firstRule.Action.ToString(),
             ["Operator"] = firstRule.Operator.ToString(),
             ["Pattern"] = firstRule.Pattern,

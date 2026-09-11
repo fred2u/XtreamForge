@@ -11,6 +11,12 @@ internal static class XtreamProxyHttpRequestFactory
 
         if (ShouldCreateRequestContent(request))
         {
+            request.EnableBuffering();
+            if (request.Body.CanSeek)
+            {
+                request.Body.Position = 0;
+            }
+
             requestMessage.Content = new StreamContent(request.Body);
         }
 

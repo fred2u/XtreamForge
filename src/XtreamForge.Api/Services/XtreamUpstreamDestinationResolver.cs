@@ -64,12 +64,56 @@ public sealed class XtreamUpstreamDestinationResolver(IOptions<XtreamProxyOption
     private bool IsAllowedHost(string host)
     {
         var proxyOptions = options.Value;
-        if (proxyOptions.AllowAnyDestination)
+        if (proxyOptions.AllowedHosts.Contains(host, StringComparer.OrdinalIgnoreCase))
         {
             return true;
         }
 
-        return proxyOptions.AllowedHosts.Contains(host, StringComparer.OrdinalIgnoreCase);
+        return proxyOptions.AllowAnyDestination && IsPubliclyRoutableHost(host);
+    }
+
+    private static bool IsPubliclyRoutableHost(string host)
+    {
+        try
+        {
+            if (IPAddress.TryParse(host, out var parsedAddress))
+            {
+                return IsPubliclyRoutableAddress(parsedAddress);
+            }
+
+            var addresses = Dns.GetHostAddresses(host);
+            return addresses.Length > 0 && addresses.All(IsPubliclyRoutableAddress);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsPubliclyRoutableAddress(IPAddress address)
+    {
+        if (IPAddress.IsLoopback(address))
+        {
+            return false;
+        }
+
+        if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+        {
+            return false;
+        }
+
+        var bytes = address.GetAddressBytes();
+        return bytes[0] switch
+        {
+            0 => false,
+            10 => false,
+            100 when bytes[1] >= 64 && bytes[1] <= 127 => false,
+            127 => false,
+            169 when bytes[1] == 254 => false,
+            172 when bytes[1] >= 16 && bytes[1] <= 31 => false,
+            192 when bytes[1] == 168 => false,
+            _ => true
+        };
     }
 
     private static string NormalizeRestPath(string? rest) => (rest ?? string.Empty).Trim('/');

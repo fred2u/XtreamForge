@@ -160,13 +160,19 @@ else
                                         Enabled
                                     </label>
 
+                                    <label class="checkbox-label compact-checkbox-label">
+                                        <input type="hidden" name="ConfirmDelete" value="false" />
+                                        <input type="checkbox" name="ConfirmDelete" value="true" />
+                                        Confirm delete
+                                    </label>
+
                                     <div class="rule-actions">
                                         <button type="submit" formaction="?handler=MoveRuleUp" aria-label="Move rule @rule.Sequence up">↑</button>
                                         <button type="submit" formaction="?handler=MoveRuleDown" aria-label="Move rule @rule.Sequence down">↓</button>
                                     </div>
 
                                     <button type="submit">Save</button>
-                                    <button type="submit" formaction="?handler=DeleteRule" onclick="return confirm('Delete this rule?');">Delete</button>
+                                    <button type="submit" formaction="?handler=DeleteRule">Delete</button>
                                 </form>
                             </td>
                         </tr>

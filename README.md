@@ -9,6 +9,7 @@ XtreamForge is an early-stage, self-hosted .NET application that will sit in fro
 This repository currently provides the initial foundation only:
 
 - ASP.NET Core application combining Minimal APIs and integrated Razor Pages administration UI
+- Initial Xtream request interception and transparent forwarding foundation
 - .NET Aspire orchestration
 - PostgreSQL + EF Core infrastructure
 - Docker Compose development setup

@@ -10,7 +10,8 @@ public static class XtreamEndpointExtensions
 
         services.AddHttpClient(ForwarderService.HttpClientName);
         services.AddScoped<ForwarderService>();
-        services.AddScoped<XtreamPlayerApiHandler>();
+        services.AddSingleton<XtreamUpstreamDestinationResolver>();
+        services.AddSingleton<XtreamRequestClassifier>();
 
         return services;
     }
@@ -23,14 +24,14 @@ public static class XtreamEndpointExtensions
                 "/{protocol}/{host}/{port}",
                 SupportedHttpMethods,
                 HandleXtreamRequestAsync)
-            .WithSummary("Handles or forwards Xtream-compatible requests.");
+            .ExcludeFromDescription();
 
         endpoints.MapMethods(
                 "/{protocol}/{host}/{port}/{**rest}",
                 SupportedHttpMethods,
                 HandleXtreamRequestAsync)
             .WithName("HandleXtreamRequest")
-            .WithSummary("Handles or forwards Xtream-compatible requests.");
+            .ExcludeFromDescription();
 
         return endpoints;
     }
@@ -52,44 +53,24 @@ public static class XtreamEndpointExtensions
         string port,
         string? rest,
         HttpContext context,
-        XtreamPlayerApiHandler xtreamPlayerApiHandler,
+        XtreamUpstreamDestinationResolver destinationResolver,
+        XtreamRequestClassifier requestClassifier,
         ForwarderService forwarderService)
     {
-        if (!IsSupportedProtocol(protocol))
+        var resolutionResult = destinationResolver.Resolve(protocol, host, port, rest, context.Request.QueryString);
+        if (!resolutionResult.IsValid)
         {
-            return TypedResults.BadRequest("Invalid protocol. Only http and https are supported.");
+            return TypedResults.BadRequest(resolutionResult.Error);
         }
 
-        if (!int.TryParse(port, out var parsedPort) || parsedPort is < 1 or > 65535)
+        var destination = resolutionResult.Destination;
+        if (destination is null)
         {
-            return TypedResults.BadRequest("Invalid port.");
+            return TypedResults.BadRequest("Invalid upstream destination.");
         }
 
-        var normalizedRest = NormalizeRestPath(rest);
+        var classification = requestClassifier.Classify(destination.Rest, context.Request.Query);
 
-        if (await xtreamPlayerApiHandler.TryHandleAsync(normalizedRest, context, context.RequestAborted) is { } localResult)
-        {
-            return localResult;
-        }
-
-        var targetUri = BuildTargetUri(protocol, host, parsedPort, normalizedRest, context.Request.QueryString);
-        return await forwarderService.ForwardAsync(targetUri, context);
-    }
-
-    private static bool IsSupportedProtocol(string protocol) =>
-        protocol.Equals("http", StringComparison.OrdinalIgnoreCase)
-        || protocol.Equals("https", StringComparison.OrdinalIgnoreCase);
-
-    private static string NormalizeRestPath(string? rest) => (rest ?? string.Empty).Trim('/');
-
-    private static Uri BuildTargetUri(string protocol, string host, int port, string rest, QueryString queryString)
-    {
-        var uriBuilder = new UriBuilder(protocol, host, port)
-        {
-            Path = string.IsNullOrEmpty(rest) ? string.Empty : rest,
-            Query = queryString.Value is ['?', .. var query] ? query : string.Empty
-        };
-
-        return uriBuilder.Uri;
+        return await forwarderService.ForwardAsync(destination, classification, context);
     }
 }

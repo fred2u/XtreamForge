@@ -9,13 +9,13 @@ XtreamForge is an early-stage, self-hosted .NET application that will sit in fro
 This repository currently provides the initial foundation only:
 
 - ASP.NET Core application combining Minimal APIs and integrated Razor Pages administration UI
-- Initial Xtream request interception and transparent forwarding foundation
+- Initial Xtream request routing, classification, and transparent forwarding foundation
 - .NET Aspire orchestration
 - PostgreSQL + EF Core infrastructure
 - Docker Compose development setup
 - xUnit test foundation
 
-Future Xtream proxying, category mapping, TMDB lookup, metadata rewriting, and authentication are intentionally out of scope for this first PR.
+Category mapping, TMDB lookup, metadata rewriting, and authentication are intentionally out of scope for the current foundation.
 
 ## Architecture
 
@@ -100,7 +100,53 @@ Override them for any non-local usage.
 
 - Aspire injects the database connection into the application.
 - Docker Compose supplies the same connection via environment variables.
-- The API applies EF Core migrations on startup by default.
+- The API attempts EF Core migrations in the background on startup by default.
+
+## Xtream proxy
+
+Xtream clients should call XtreamForge using a URL that embeds the original upstream destination:
+
+```text
+http://localhost:8080/{protocol}/{host}/{port}/{rest}?username=USER&******
+```
+
+Examples:
+
+```text
+http://localhost:8080/http/example.com/8080/player_api.php?username=user&******
+http://localhost:8080/https/example.com/443/player_api.php?username=user&******
+```
+
+Current behavior:
+
+- XtreamForge validates `protocol`, `host`, and `port`
+- recognized `player_api.php` actions are classified for future transformation
+- all requests are currently forwarded upstream unchanged
+- request methods, bodies, headers, query strings, and streamed responses are preserved where appropriate
+
+Recognized `player_api.php` actions:
+
+- `get_vod_categories`
+- `get_series_categories`
+- `get_vod_streams`
+- `get_series`
+- `get_vod_info`
+- `get_series_info`
+
+Transparent fallback behavior:
+
+- known action -> forwarded upstream unchanged
+- unknown `player_api.php` action -> forwarded upstream unchanged
+- `player_api.php` without `action` -> forwarded upstream unchanged
+- non-`player_api.php` request -> forwarded upstream unchanged
+
+Security notes:
+
+- Xtream credentials in the query string are preserved for upstream forwarding but are not intentionally logged or persisted by this proxy layer.
+- The proxy route allows a client to choose the upstream destination, which has SSRF implications. XtreamForge currently enforces an explicit destination validation policy for protocol, host, and port and is designed so stricter authorization rules can be added later.
+- IPv4 addresses and DNS hostnames are supported in the route format today.
+- IPv6 literals are not currently supported by this path-based route format.
+- The generic Xtream proxy route is excluded from generated OpenAPI documentation to avoid misleading native API descriptions.
 
 ## Useful endpoints
 
@@ -120,7 +166,7 @@ The current test suite does not require a locally installed PostgreSQL instance.
 
 ## Known limitations
 
-- No Xtream proxy/authentication behavior yet
+- Xtream requests are currently proxied transparently; category rewriting, filtering, and enrichment are not implemented yet
 - No category remapping yet
 - No TMDB client or enrichment yet
 - No admin authentication yet

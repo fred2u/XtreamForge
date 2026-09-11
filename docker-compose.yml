@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: xtreamforge
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - xtreamforge-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d xtreamforge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: src/XtreamForge.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__database: Host=postgres;Port=5432;Database=xtreamforge;Username=postgres;******
+      Database__ApplyMigrations: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  admin:
+    build:
+      context: .
+      dockerfile: src/XtreamForge.Admin/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__database: Host=postgres;Port=5432;Database=xtreamforge;Username=postgres;******
+      Api__BaseUrl: http://api:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+    ports:
+      - "8081:8080"
+
+volumes:
+  xtreamforge-postgres-data:

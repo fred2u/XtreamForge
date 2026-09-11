@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/XtreamForge.Admin/XtreamForge.Admin.csproj" />
+    <Project Path="src/XtreamForge.Api/XtreamForge.Api.csproj" />
+    <Project Path="src/XtreamForge.AppHost/XtreamForge.AppHost.csproj" />
+    <Project Path="src/XtreamForge.Infrastructure/XtreamForge.Infrastructure.csproj" />
+    <Project Path="src/XtreamForge.ServiceDefaults/XtreamForge.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/XtreamForge.Api.Tests/XtreamForge.Api.Tests.csproj" />
+    <Project Path="tests/XtreamForge.Infrastructure.Tests/XtreamForge.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>

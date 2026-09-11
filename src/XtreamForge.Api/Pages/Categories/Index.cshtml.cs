@@ -5,6 +5,7 @@ using XtreamForge.Infrastructure.Services;
 
 namespace XtreamForge.Api.Pages.Categories;
 
+[ValidateAntiForgeryToken]
 public sealed class IndexModel(XtreamCategoryMappingService categoryMappingService) : PageModel
 {
     public CategoryAdministrationView ViewModel { get; private set; } =

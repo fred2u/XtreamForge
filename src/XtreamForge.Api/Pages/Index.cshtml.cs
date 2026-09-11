@@ -14,7 +14,7 @@ public sealed class IndexModel(
 
     public string DatabaseStatus { get; private set; } = "Checking";
 
-    public string DatabaseDetails { get; private set; } = "Checking PostgreSQL connectivity.";
+    public string DatabaseDetails { get; private set; } = "Checking database connectivity.";
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
@@ -22,11 +22,12 @@ public sealed class IndexModel(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
             var canConnect = await dbContext.Database.CanConnectAsync(cancellationToken);
+            var providerDisplayName = GetDatabaseProviderDisplayName(dbContext);
 
             DatabaseStatus = canConnect ? "Connected" : "Unavailable";
             DatabaseDetails = canConnect
-                ? "PostgreSQL is reachable."
-                : "PostgreSQL is not reachable.";
+                ? $"{providerDisplayName} is reachable."
+                : $"{providerDisplayName} is not reachable.";
         }
         catch (Exception exception)
         {
@@ -34,5 +35,22 @@ public sealed class IndexModel(
             DatabaseStatus = "Unavailable";
             DatabaseDetails = "The database connectivity check failed.";
         }
+    }
+
+    private static string GetDatabaseProviderDisplayName(XtreamForgeDbContext dbContext)
+    {
+        var providerName = dbContext.Database.ProviderName;
+
+        if (providerName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return "PostgreSQL";
+        }
+
+        if (providerName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return "SQLite";
+        }
+
+        return "The configured database";
     }
 }

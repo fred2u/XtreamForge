@@ -510,6 +510,22 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.DoesNotContain(logSink.Messages, message => message.Contains("series_id=42", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task InvalidCategoryJson_ReturnsBadGateway_WithoutLoggingCredentials()
+    {
+        var logSink = new TestLogSink();
+        var handler = CreateJsonHandler("{not-json");
+        using var factory = _factory.WithForwarderHandler(handler, logSink, failIfDatabaseAccessed: true);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/https/example.com/443/player_api.php?action=get_vod_categories&username=user&******");
+
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        Assert.Contains(logSink.Messages, message => message.Contains("invalid category payload", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(logSink.Messages, message => message.Contains("hidden-secret", StringComparison.Ordinal));
+        Assert.DoesNotContain(logSink.Messages, message => message.Contains("username=user", StringComparison.Ordinal));
+    }
+
     private static FakeForwarderHandler CreateForwardingHandler() =>
         new((_, _) => Task.FromResult(FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "{\"forwarded\":true}")));
 

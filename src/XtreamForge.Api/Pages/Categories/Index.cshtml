@@ -102,10 +102,11 @@ else
                                 }
                             </td>
                             <td>
-                                <form method="post" asp-page-handler="Save" class="category-rule-form">
+                                <form method="post" asp-page-handler="Save" asp-antiforgery="true" class="category-rule-form">
                                     <input type="hidden" name="UpstreamCategoryRecordId" value="@category.Id" />
                                     <input type="hidden" name="SelectedSourceId" value="@Model.ViewModel.SelectedSourceId" />
                                     <input type="hidden" name="SelectedContentType" value="@Model.ViewModel.SelectedContentType" />
+                                    <input type="hidden" name="IsExcluded" value="false" />
 
                                     <label class="checkbox-label">
                                         <input type="checkbox" name="IsExcluded" value="true" checked="@category.IsExcluded" />

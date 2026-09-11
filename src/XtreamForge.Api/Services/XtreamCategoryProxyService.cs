@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using XtreamForge.Api.Models;
 using XtreamForge.Infrastructure.Models;
 using XtreamForge.Infrastructure.Services;
@@ -71,6 +72,17 @@ public sealed class XtreamCategoryProxyService(
             logger.LogWarning(
                 exception,
                 "Failed retrieving upstream categories for {Host}:{Port} and action {Action}.",
+                ForwarderService.SanitizeForLog(destination.Host),
+                destination.Port,
+                ForwarderService.SanitizeForLog(classification.Action ?? "none"));
+
+            return Results.StatusCode(StatusCodes.Status502BadGateway);
+        }
+        catch (JsonException exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Received an invalid category payload from {Host}:{Port} for action {Action}.",
                 ForwarderService.SanitizeForLog(destination.Host),
                 destination.Port,
                 ForwarderService.SanitizeForLog(classification.Action ?? "none"));

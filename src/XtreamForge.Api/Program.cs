@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc;
 using XtreamForge.Api.Services;
 using Microsoft.Extensions.Hosting;
 using XtreamForge.Api.Endpoints;
@@ -8,13 +9,17 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.AddXtreamForgeInfrastructure();
 builder.Services.AddOpenApi();
-builder.Services.AddRazorPages();
+builder.Services.AddRazorPages(options =>
+{
+    options.Conventions.ConfigureFilter(new AutoValidateAntiforgeryTokenAttribute());
+});
 builder.Services.AddXtreamEndpoints();
 builder.Services.AddHostedService<DatabaseMigrationBackgroundService>();
 
 var app = builder.Build();
 
 app.MapDefaultEndpoints();
+app.UseAntiforgery();
 
 if (app.Environment.IsDevelopment())
 {

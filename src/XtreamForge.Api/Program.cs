@@ -1,3 +1,4 @@
+using XtreamForge.Api.Services;
 using Microsoft.Extensions.Hosting;
 using XtreamForge.Api.Endpoints;
 using XtreamForge.Infrastructure.Extensions;
@@ -9,6 +10,7 @@ builder.AddXtreamForgeInfrastructure();
 builder.Services.AddOpenApi();
 builder.Services.AddRazorPages();
 builder.Services.AddXtreamEndpoints();
+builder.Services.AddHostedService<DatabaseMigrationBackgroundService>();
 
 var app = builder.Build();
 
@@ -24,11 +26,6 @@ app.MapStaticAssets();
 app.MapRazorPages();
 app.MapStatusEndpoints();
 app.MapXtreamEndpoints();
-
-if (app.Configuration.GetValue("Database:ApplyMigrations", true))
-{
-    await app.ApplyInfrastructureMigrationsAsync();
-}
 
 app.Run();
 

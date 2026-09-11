@@ -1,14 +1,24 @@
 @page "/categories"
 @using XtreamForge.Infrastructure.Models
+@using XtreamForge.Infrastructure.Services
 @model XtreamForge.Api.Pages.Categories.IndexModel
 @{
     ViewData["Title"] = "Categories";
+    var categories = Model.ViewModel.Categories;
+    var rules = Model.ViewModel.Rules;
 }
 
 <h1>Categories</h1>
-<p class="page-subtitle">Manage discovered upstream VOD and Series categories and map them to stable XtreamForge output categories.</p>
+<p class="page-subtitle">Manage discovered upstream VOD and Series categories, inclusion rules, and stable XtreamForge output categories.</p>
 
-@if (Model.ViewModel.Sources.Count == 0)
+@if (!ViewContext.ModelState.IsValid)
+{
+    <section class="status-card validation-card">
+        <div asp-validation-summary="All"></div>
+    </section>
+}
+
+@if (categories.Sources.Count == 0)
 {
     <section class="status-card">
         <h2>No sources discovered yet</h2>
@@ -21,9 +31,9 @@ else
         <label>
             Source
             <select name="sourceId">
-                @foreach (var source in Model.ViewModel.Sources)
+                @foreach (var source in categories.Sources)
                 {
-                    <option value="@source.Id" selected="@(source.Id == Model.ViewModel.SelectedSourceId)">@source.Protocol://@source.Host:@source.Port</option>
+                    <option value="@source.Id" selected="@(source.Id == categories.SelectedSourceId)">@source.Protocol://@source.Host:@source.Port</option>
                 }
             </select>
         </label>
@@ -31,24 +41,175 @@ else
         <label>
             Content type
             <select name="contentType">
-                <option value="@ContentType.Vod" selected="@(Model.ViewModel.SelectedContentType == ContentType.Vod)">VOD</option>
-                <option value="@ContentType.Series" selected="@(Model.ViewModel.SelectedContentType == ContentType.Series)">Series</option>
+                <option value="@ContentType.Vod" selected="@(categories.SelectedContentType == ContentType.Vod)">VOD</option>
+                <option value="@ContentType.Series" selected="@(categories.SelectedContentType == ContentType.Series)">Series</option>
             </select>
         </label>
 
         <button type="submit">Load</button>
     </form>
 
+    <section class="status-card category-rules-card">
+        <h2>Category rules</h2>
+        <p class="category-meta">Rules are evaluated in ascending order. The first enabled matching rule wins. No match means Include.</p>
+
+        <form method="post" asp-page-handler="CreateRule" asp-antiforgery="true" class="rule-editor-grid">
+            <input type="hidden" name="SelectedSourceId" value="@categories.SelectedSourceId" />
+            <input type="hidden" name="SelectedContentType" value="@categories.SelectedContentType" />
+            <input type="hidden" name="IsEnabled" value="false" />
+            <input type="hidden" name="CaseSensitive" value="false" />
+
+            <label>
+                Action
+                <select name="Action">
+                    <option value="@CategoryRuleAction.Include" selected="@(Model.NewRule.Action == CategoryRuleAction.Include)">Include</option>
+                    <option value="@CategoryRuleAction.Exclude" selected="@(Model.NewRule.Action == CategoryRuleAction.Exclude)">Exclude</option>
+                </select>
+            </label>
+
+            <label>
+                Operator
+                <select name="Operator">
+                    <option value="@CategoryRuleOperator.Contains" selected="@(Model.NewRule.Operator == CategoryRuleOperator.Contains)">Contains</option>
+                    <option value="@CategoryRuleOperator.StartsWith" selected="@(Model.NewRule.Operator == CategoryRuleOperator.StartsWith)">StartsWith</option>
+                </select>
+            </label>
+
+            <label>
+                Pattern
+                <input type="text" name="Pattern" value="@Model.NewRule.Pattern" maxlength="255" />
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" name="CaseSensitive" value="true" checked="@Model.NewRule.CaseSensitive" />
+                Case sensitive
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" name="IsEnabled" value="true" checked="@Model.NewRule.IsEnabled" />
+                Enabled
+            </label>
+
+            <button type="submit">Add rule</button>
+        </form>
+
+        @if (rules.Rules.Count == 0)
+        {
+            <p>No rules configured for this source and content type.</p>
+        }
+        else
+        {
+            <table class="category-table rules-table">
+                <thead>
+                    <tr>
+                        <th>Order</th>
+                        <th>Action</th>
+                        <th>Operator</th>
+                        <th>Pattern</th>
+                        <th>Case sensitive</th>
+                        <th>Enabled</th>
+                        <th>Reorder</th>
+                        <th>Save</th>
+                        <th>Delete</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var rule in rules.Rules)
+                    {
+                        var actionCssClass = rule.Action == CategoryRuleAction.Include ? "category-pill-include" : "category-pill-exclude";
+                        var patternInputId = $"rule-pattern-{rule.Id}";
+                        var actionInputId = $"rule-action-{rule.Id}";
+                        var operatorInputId = $"rule-operator-{rule.Id}";
+                        var caseSensitiveInputId = $"rule-case-sensitive-{rule.Id}";
+                        var enabledInputId = $"rule-enabled-{rule.Id}";
+
+                        <tr>
+                            <td>@rule.Sequence</td>
+                            <td><span class="category-pill @actionCssClass">@rule.Action</span></td>
+                            <td>@rule.Operator</td>
+                            <td colspan="6">
+                                <form method="post" asp-page-handler="UpdateRule" asp-antiforgery="true" class="rule-row-form">
+                                    <input type="hidden" name="RuleId" value="@rule.Id" />
+                                    <input type="hidden" name="SelectedSourceId" value="@categories.SelectedSourceId" />
+                                    <input type="hidden" name="SelectedContentType" value="@categories.SelectedContentType" />
+                                    <input type="hidden" name="CaseSensitive" value="false" />
+                                    <input type="hidden" name="IsEnabled" value="false" />
+
+                                    <label for="@actionInputId" class="sr-only">Action for rule @rule.Sequence</label>
+                                    <select id="@actionInputId" name="Action">
+                                        <option value="@CategoryRuleAction.Include" selected="@(rule.Action == CategoryRuleAction.Include)">Include</option>
+                                        <option value="@CategoryRuleAction.Exclude" selected="@(rule.Action == CategoryRuleAction.Exclude)">Exclude</option>
+                                    </select>
+
+                                    <label for="@operatorInputId" class="sr-only">Operator for rule @rule.Sequence</label>
+                                    <select id="@operatorInputId" name="Operator">
+                                        <option value="@CategoryRuleOperator.Contains" selected="@(rule.Operator == CategoryRuleOperator.Contains)">Contains</option>
+                                        <option value="@CategoryRuleOperator.StartsWith" selected="@(rule.Operator == CategoryRuleOperator.StartsWith)">StartsWith</option>
+                                    </select>
+
+                                    <label for="@patternInputId" class="sr-only">Pattern for rule @rule.Sequence</label>
+                                    <input id="@patternInputId" type="text" name="Pattern" value="@rule.Pattern" maxlength="255" />
+
+                                    <label for="@caseSensitiveInputId" class="checkbox-label compact-checkbox-label">
+                                        <input id="@caseSensitiveInputId" type="checkbox" name="CaseSensitive" value="true" checked="@rule.CaseSensitive" />
+                                        Case sensitive
+                                    </label>
+
+                                    <label for="@enabledInputId" class="checkbox-label compact-checkbox-label">
+                                        <input id="@enabledInputId" type="checkbox" name="IsEnabled" value="true" checked="@rule.IsEnabled" />
+                                        Enabled
+                                    </label>
+
+                                    <div class="rule-actions">
+                                        <button type="submit" formaction="?handler=MoveRuleUp">↑</button>
+                                        <button type="submit" formaction="?handler=MoveRuleDown">↓</button>
+                                    </div>
+
+                                    <button type="submit">Save</button>
+                                    <button type="submit" formaction="?handler=DeleteRule" onclick="return confirm('Delete this rule?');">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        <div class="rule-preview-grid">
+            <form method="get" class="rule-preview-form">
+                <input type="hidden" name="sourceId" value="@categories.SelectedSourceId" />
+                <input type="hidden" name="contentType" value="@categories.SelectedContentType" />
+
+                <label>
+                    Test rules with a category name
+                    <input type="text" name="previewCategoryName" value="@rules.PreviewCategoryName" maxlength="255" />
+                </label>
+
+                <button type="submit">Test rules</button>
+            </form>
+
+            @if (rules.Preview is not null)
+            {
+                <div class="status-card preview-result-card">
+                    <h3>Preview result</h3>
+                    <p><strong>Category:</strong> @rules.Preview.CategoryName</p>
+                    <p><strong>Result:</strong> @rules.Preview.Evaluation.Decision</p>
+                    <p><strong>Reason:</strong> @GetRuleReason(rules.Preview.Evaluation)</p>
+                </div>
+            }
+        </div>
+    </section>
+
     <section class="status-card category-summary-card">
         <h2>Output categories</h2>
-        @if (Model.ViewModel.OutputCategories.Count == 0)
+        @if (categories.OutputCategories.Count == 0)
         {
             <p>No categories discovered for this source yet.</p>
         }
         else
         {
             <ul class="output-category-list">
-                @foreach (var outputCategory in Model.ViewModel.OutputCategories)
+                @foreach (var outputCategory in categories.OutputCategories)
                 {
                     <li>
                         <strong>@outputCategory.XtreamForgeCategoryId</strong>
@@ -65,7 +226,7 @@ else
 
     <section class="status-card category-table-card">
         <h2>Upstream category rules</h2>
-        @if (Model.ViewModel.UpstreamCategories.Count == 0)
+        @if (categories.UpstreamCategories.Count == 0)
         {
             <p>No upstream categories have been discovered for this source and content type yet.</p>
         }
@@ -75,16 +236,18 @@ else
                 <thead>
                     <tr>
                         <th>Upstream category</th>
+                        <th>Status</th>
                         <th>Current output</th>
-                        <th>Rule</th>
+                        <th>Category mapping</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var category in Model.ViewModel.UpstreamCategories)
+                    @foreach (var category in categories.UpstreamCategories)
                     {
                         var excludedInputId = $"exclude-{category.Id}";
                         var mergeSelectId = $"merge-output-{category.Id}";
                         var outputNameInputId = $"output-name-{category.Id}";
+                        var statusCssClass = category.EffectiveDecision == CategoryInclusionDecision.Include ? "category-pill-include" : "category-pill-exclude";
 
                         <tr>
                             <td>
@@ -92,9 +255,13 @@ else
                                 <div class="category-meta">Upstream ID: @category.UpstreamCategoryId</div>
                             </td>
                             <td>
-                                @if (category.IsExcluded)
+                                <span class="category-pill @statusCssClass">@category.EffectiveDecision</span>
+                                <div class="category-meta">@GetRuleReason(category)</div>
+                            </td>
+                            <td>
+                                @if (category.IsManuallyExcluded)
                                 {
-                                    <span class="category-pill category-pill-muted">Excluded</span>
+                                    <span class="category-pill category-pill-muted">Manual exclusion</span>
                                 }
                                 else if (category.ActiveXtreamForgeCategoryId is int activeId && category.ActiveOutputName is not null)
                                 {
@@ -108,20 +275,20 @@ else
                             <td>
                                 <form method="post" asp-page-handler="Save" asp-antiforgery="true" class="category-rule-form">
                                     <input type="hidden" name="UpstreamCategoryRecordId" value="@category.Id" />
-                                    <input type="hidden" name="SelectedSourceId" value="@Model.ViewModel.SelectedSourceId" />
-                                    <input type="hidden" name="SelectedContentType" value="@Model.ViewModel.SelectedContentType" />
+                                    <input type="hidden" name="SelectedSourceId" value="@categories.SelectedSourceId" />
+                                    <input type="hidden" name="SelectedContentType" value="@categories.SelectedContentType" />
                                     <input type="hidden" name="IsExcluded" value="false" />
 
                                     <label class="checkbox-label" for="@excludedInputId">
-                                        <input id="@excludedInputId" type="checkbox" name="IsExcluded" value="true" checked="@category.IsExcluded" />
-                                        Exclude
+                                        <input id="@excludedInputId" type="checkbox" name="IsExcluded" value="true" checked="@category.IsManuallyExcluded" />
+                                        Manual exclude
                                     </label>
 
                                     <label for="@mergeSelectId">
                                         Merge output for @category.UpstreamCategoryName
                                         <select id="@mergeSelectId" name="MergeToOutputCategoryRecordId">
                                             <option value="">Dedicated output (@category.DedicatedXtreamForgeCategoryId)</option>
-                                            @foreach (var outputCategory in Model.ViewModel.OutputCategories.Where(outputCategory => outputCategory.Id != category.DedicatedOutputCategoryId))
+                                            @foreach (var outputCategory in categories.OutputCategories.Where(outputCategory => outputCategory.Id != category.DedicatedOutputCategoryId))
                                             {
                                                 <option value="@outputCategory.Id" selected="@(outputCategory.Id == category.OutputCategoryId)">@outputCategory.XtreamForgeCategoryId - @outputCategory.DisplayName</option>
                                             }
@@ -142,4 +309,33 @@ else
             </table>
         }
     </section>
+}
+
+@functions {
+    private static string GetRuleReason(CategoryRuleEvaluationResult evaluation)
+    {
+        if (!evaluation.IsMatch)
+        {
+            return "No rule matched -> Included by default.";
+        }
+
+        return $"Rule {evaluation.MatchedRuleSequence} matches first: {evaluation.MatchedRuleAction} {evaluation.MatchedRuleOperator} \"{evaluation.MatchedPattern}\".";
+    }
+
+    private static string GetRuleReason(UpstreamCategorySummary category)
+    {
+        if (category.IsManuallyExcluded)
+        {
+            return "Excluded by manual category configuration.";
+        }
+
+        if (category.MatchedRuleSequence is null)
+        {
+            return category.EffectiveDecision == CategoryInclusionDecision.Include
+                ? "No rule matched -> Included by default."
+                : "Excluded by manual category configuration.";
+        }
+
+        return $"Rule {category.MatchedRuleSequence} matches first: {category.MatchedRuleAction} {category.MatchedRuleOperator} \"{category.MatchedPattern}\".";
+    }
 }

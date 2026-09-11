@@ -82,6 +82,10 @@ body {
     gap: 0.75rem;
 }
 
+.validation-card {
+    margin-bottom: 1rem;
+}
+
 .filters-panel {
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     align-items: end;
@@ -124,7 +128,8 @@ body {
 }
 
 .category-summary-card,
-.category-table-card {
+.category-table-card,
+.category-rules-card {
     margin-top: 1rem;
 }
 
@@ -158,6 +163,16 @@ body {
     color: #374151;
 }
 
+.category-pill-include {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.category-pill-exclude {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
 .category-table {
     width: 100%;
     border-collapse: collapse;
@@ -177,6 +192,89 @@ body {
     font-size: 0.9rem;
 }
 
+.rule-editor-grid,
+.rule-preview-form {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.rule-editor-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    align-items: end;
+    margin: 1rem 0 1.5rem;
+}
+
+.rule-editor-grid label,
+.rule-preview-form label {
+    display: grid;
+    gap: 0.35rem;
+    font-weight: 600;
+}
+
+.rule-editor-grid select,
+.rule-editor-grid input[type="text"],
+.rule-preview-form input[type="text"],
+.rule-row-form select,
+.rule-row-form input[type="text"] {
+    width: 100%;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.75rem;
+    font: inherit;
+}
+
+.rule-editor-grid button,
+.rule-preview-form button,
+.rule-row-form button {
+    width: fit-content;
+    padding: 0.7rem 1rem;
+    border: 0;
+    border-radius: 0.75rem;
+    background: #2563eb;
+    color: #ffffff;
+    font: inherit;
+    cursor: pointer;
+}
+
+.rule-row-form {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    align-items: center;
+}
+
+.rule-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.compact-checkbox-label {
+    font-weight: 400;
+}
+
+.rule-preview-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+    margin-top: 1.5rem;
+}
+
+.preview-result-card {
+    margin-top: 0;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 .status-value {
     margin: 0 0 0.5rem;
     font-size: 1.5rem;
@@ -190,5 +288,10 @@ body {
 
     .content {
         padding-top: 1rem;
+    }
+
+    .rule-row-form,
+    .rule-preview-grid {
+        grid-template-columns: 1fr;
     }
 }

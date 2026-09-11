@@ -159,7 +159,7 @@ Security notes:
 
 ## Category management
 
-XtreamForge now persists category discovery and category rules in PostgreSQL, scoped by upstream destination (`protocol` + `host` + `port`) and content type (`Vod` / `Series`).
+XtreamForge now persists category discovery, category mappings, and category rules in PostgreSQL, scoped by upstream destination (`protocol` + `host` + `port`) and content type (`Vod` / `Series`).
 
 Current category capabilities:
 
@@ -183,6 +183,51 @@ Notes:
 - Source identity is based on upstream destination only; credentials are not used as the source key and are not stored with category records.
 - VOD and Series mappings are independent.
 - `get_vod_streams` and `get_series` rewriting are not implemented yet, but the mapping model is designed so future work can translate XtreamForge category IDs back to upstream category IDs.
+
+## Category Rules
+
+Category rules decide whether an upstream category participates in the effective XtreamForge catalogue before rename/merge mapping is applied.
+
+Rule behavior:
+
+- rules are stored in PostgreSQL
+- rules are scoped independently per upstream source and content type
+- rules are evaluated sequentially in ascending order
+- the first enabled matching rule wins
+- matching supports `StartsWith` and `Contains`
+- each rule can be case-sensitive or case-insensitive
+- `Include` and `Exclude` actions are supported
+- no matching rule means `Include`
+- excluded categories remain discovered in PostgreSQL and are not deleted
+- administrators can reorder rules from the Categories admin page
+
+Manual category exclusion still takes precedence over rule evaluation.
+
+Example:
+
+| Order | Action  | Match      | Pattern       |
+|------:|---------|------------|---------------|
+| 10    | Include | Contains   | DOCUMENTAIRE  |
+| 20    | Exclude | Contains   | SPORT         |
+| 30    | Exclude | StartsWith | \|XXX\|       |
+
+Category:
+
+```text
+|FR| DOCUMENTAIRE SPORT
+```
+
+Result:
+
+```text
+Included
+```
+
+Reason:
+
+```text
+Rule 10 matches first. Rule 20 is never used for this category.
+```
 
 ## Useful endpoints
 

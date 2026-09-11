@@ -24,6 +24,8 @@ public static class InfrastructureExtensions
         builder.Services.AddDbContextFactory<XtreamForgeDbContext>(options => ConfigureDbContext(options, builder.Configuration));
         builder.Services.AddScoped(static serviceProvider =>
             serviceProvider.GetRequiredService<IDbContextFactory<XtreamForgeDbContext>>().CreateDbContext());
+        builder.Services.AddSingleton<CategoryRuleEvaluator>();
+        builder.Services.AddScoped<CategoryRuleService>();
         builder.Services.AddScoped<XtreamCategoryMappingService>();
         builder.Services.AddHealthChecks()
             .AddDbContextCheck<XtreamForgeDbContext>(name: "database");

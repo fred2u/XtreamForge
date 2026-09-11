@@ -8,6 +8,7 @@ public sealed class XtreamForgeDbContext(DbContextOptions<XtreamForgeDbContext> 
     public DbSet<XtreamSource> XtreamSources => Set<XtreamSource>();
     public DbSet<UpstreamCategory> UpstreamCategories => Set<UpstreamCategory>();
     public DbSet<OutputCategory> OutputCategories => Set<OutputCategory>();
+    public DbSet<CategoryRule> CategoryRules => Set<CategoryRule>();
     public DbSet<Setting> Settings => Set<Setting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -70,6 +71,27 @@ public sealed class XtreamForgeDbContext(DbContextOptions<XtreamForgeDbContext> 
             .WithMany(category => category.DedicatedUpstreamCategories)
             .HasForeignKey(category => category.DedicatedOutputCategoryId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        var categoryRules = modelBuilder.Entity<CategoryRule>();
+        categoryRules.ToTable("category_rules");
+        categoryRules.HasKey(rule => rule.Id);
+        categoryRules.HasIndex(rule => new { rule.XtreamSourceId, rule.ContentType, rule.Sequence }).IsUnique();
+        categoryRules.HasIndex(rule => new { rule.XtreamSourceId, rule.ContentType, rule.IsEnabled, rule.Sequence });
+        categoryRules.Property(rule => rule.Id).HasColumnName("id");
+        categoryRules.Property(rule => rule.XtreamSourceId).HasColumnName("xtream_source_id");
+        categoryRules.Property(rule => rule.ContentType).HasColumnName("content_type").HasConversion<string>().HasMaxLength(20);
+        categoryRules.Property(rule => rule.Sequence).HasColumnName("sequence");
+        categoryRules.Property(rule => rule.Action).HasColumnName("action").HasConversion<string>().HasMaxLength(20);
+        categoryRules.Property(rule => rule.Operator).HasColumnName("operator").HasConversion<string>().HasMaxLength(20);
+        categoryRules.Property(rule => rule.Pattern).HasColumnName("pattern").HasMaxLength(255).IsRequired();
+        categoryRules.Property(rule => rule.CaseSensitive).HasColumnName("case_sensitive");
+        categoryRules.Property(rule => rule.IsEnabled).HasColumnName("is_enabled");
+        categoryRules.Property(rule => rule.CreatedAtUtc).HasColumnName("created_at_utc");
+        categoryRules.Property(rule => rule.UpdatedAtUtc).HasColumnName("updated_at_utc");
+        categoryRules.HasOne(rule => rule.XtreamSource)
+            .WithMany(source => source.CategoryRules)
+            .HasForeignKey(rule => rule.XtreamSourceId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         var settings = modelBuilder.Entity<Setting>();
 

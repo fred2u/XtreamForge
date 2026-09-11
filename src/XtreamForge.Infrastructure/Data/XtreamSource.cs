@@ -17,4 +17,6 @@ public sealed class XtreamSource
     public ICollection<UpstreamCategory> UpstreamCategories { get; set; } = [];
 
     public ICollection<OutputCategory> OutputCategories { get; set; } = [];
+
+    public ICollection<CategoryRule> CategoryRules { get; set; } = [];
 }

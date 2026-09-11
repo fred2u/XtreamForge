@@ -1,8 +1,13 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using XtreamForge.Infrastructure.Data;
+using XtreamForge.Infrastructure.Models;
+using XtreamForge.Infrastructure.Services;
 
 namespace XtreamForge.Api.Tests;
 
@@ -118,34 +123,21 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
     }
 
     [Theory]
-    [InlineData("get_vod_categories", null, null)]
-    [InlineData("get_series_categories", null, null)]
     [InlineData("get_vod_streams", "category_id", "101")]
     [InlineData("get_series", "category_id", "202")]
     [InlineData("get_vod_info", "vod_id", "303")]
     [InlineData("get_series_info", "series_id", "404")]
-    public async Task RecognizedPlayerApiActions_AreForwardedUnchanged(
+    public async Task NonCategoryTransformCandidateActions_AreForwardedUnchanged(
         string action,
-        string? extraKey,
-        string? extraValue)
+        string parameterName,
+        string parameterValue)
     {
         var handler = CreateForwardingHandler();
         using var factory = _factory.WithForwarderHandler(handler, failIfDatabaseAccessed: true);
         using var client = factory.CreateClient();
 
-        var queryParameters = new List<string>
-        {
-            "username=test-user",
-            "******",
-            $"action={action}"
-        };
-
-        if (extraKey is not null && extraValue is not null)
-        {
-            queryParameters.Add($"{extraKey}={extraValue}");
-        }
-
-        var response = await client.GetAsync($"/https/example.com/443/PLAYER_API.PHP?{string.Join('&', queryParameters)}");
+        var response = await client.GetAsync(
+            $"/https/example.com/443/PLAYER_API.PHP?action={action}&{parameterName}={parameterValue}");
 
         var forwardedRequest = Assert.Single(handler.Requests);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -155,11 +147,154 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.Equal(443, forwardedRequest.RequestUri.Port);
         Assert.Equal("/PLAYER_API.PHP", forwardedRequest.RequestUri.AbsolutePath);
         Assert.Contains($"action={action}", forwardedRequest.RequestUri.Query, StringComparison.Ordinal);
+        Assert.Contains($"{parameterName}={parameterValue}", forwardedRequest.RequestUri.Query, StringComparison.Ordinal);
+    }
 
-        if (extraKey is not null && extraValue is not null)
+    [Theory]
+    [InlineData(ContentType.Vod, "get_vod_categories")]
+    [InlineData(ContentType.Series, "get_series_categories")]
+    public async Task CategoryActions_AreRewritten_AndDiscoveredInDatabase(ContentType contentType, string action)
+    {
+        var upstreamPayload = "[{\"category_id\":\"42\",\"category_name\":\"|FR| 4K ⁴ᴷ\"},{\"category_id\":\"57\",\"category_name\":\"|FR| FILMS 4K UHD\"}]";
+        var handler = CreateJsonHandler(upstreamPayload);
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
+
+        using var factory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(factory);
+        using var scopedFactory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(handler);
+        using var client = scopedFactory.CreateClient();
+
+        var response = await client.GetAsync($"/https/example.com/443/player_api.php?action={action}");
+        var payload = await response.Content.ReadFromJsonAsync<List<CategoryResponse>>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Collection(
+            payload,
+            first =>
+            {
+                Assert.Equal("1", first.CategoryId);
+                Assert.Equal("|FR| 4K ⁴ᴷ", first.CategoryName);
+            },
+            second =>
+            {
+                Assert.Equal("2", second.CategoryId);
+                Assert.Equal("|FR| FILMS 4K UHD", second.CategoryName);
+            });
+
+        await using var scope = scopedFactory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var source = await dbContext.XtreamSources.SingleAsync();
+        var upstreamCategories = await dbContext.UpstreamCategories.Where(category => category.ContentType == contentType).OrderBy(category => category.UpstreamCategoryId).ToListAsync();
+        var outputCategories = await dbContext.OutputCategories.Where(category => category.ContentType == contentType).OrderBy(category => category.XtreamForgeCategoryId).ToListAsync();
+
+        Assert.Equal("https", source.Protocol);
+        Assert.Equal("example.com", source.Host);
+        Assert.Equal(443, source.Port);
+        Assert.Equal(2, upstreamCategories.Count);
+        Assert.Equal(2, outputCategories.Count);
+        Assert.All(upstreamCategories, category => Assert.False(category.IsExcluded));
+    }
+
+    [Fact]
+    public async Task CategoryConfiguration_CanRenameMergeAndExcludeCategories()
+    {
+        var upstreamPayload = "[{\"category_id\":\"42\",\"category_name\":\"|FR| 4K ⁴ᴷ\"},{\"category_id\":\"57\",\"category_name\":\"|FR| FILMS 4K UHD\"},{\"category_id\":\"94\",\"category_name\":\"|xxx| Something\"}]";
+        var initialHandler = CreateJsonHandler(upstreamPayload);
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
+
+        using var factory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(factory);
+
+        using (var discoveryFactory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(initialHandler))
+        using (var discoveryClient = discoveryFactory.CreateClient())
         {
-            Assert.Contains($"{extraKey}={extraValue}", forwardedRequest.RequestUri.Query, StringComparison.Ordinal);
+            var discoveryResponse = await discoveryClient.GetAsync("/https/example.com/443/player_api.php?action=get_vod_categories");
+            Assert.Equal(HttpStatusCode.OK, discoveryResponse.StatusCode);
         }
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+            var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+            var categories = await dbContext.UpstreamCategories.OrderBy(category => category.UpstreamCategoryId).ToListAsync();
+            var category42 = categories.Single(category => category.UpstreamCategoryId == "42");
+            var category57 = categories.Single(category => category.UpstreamCategoryId == "57");
+            var category94 = categories.Single(category => category.UpstreamCategoryId == "94");
+
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(
+                category42.Id,
+                category42.XtreamSourceId,
+                ContentType.Vod,
+                false,
+                null,
+                "|FR| FILMS 4K"));
+
+            category42 = await dbContext.UpstreamCategories.AsNoTracking().SingleAsync(category => category.Id == category42.Id);
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(
+                category57.Id,
+                category57.XtreamSourceId,
+                ContentType.Vod,
+                false,
+                category42.DedicatedOutputCategoryId,
+                "|FR| FILMS 4K"));
+
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(
+                category94.Id,
+                category94.XtreamSourceId,
+                ContentType.Vod,
+                true,
+                null,
+                null));
+        }
+
+        var rewriteHandler = CreateJsonHandler(upstreamPayload);
+        using var rewriteFactory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(rewriteHandler);
+        using var client = rewriteFactory.CreateClient();
+
+        var response = await client.GetAsync("/https/example.com/443/player_api.php?action=get_vod_categories");
+        var payload = await response.Content.ReadFromJsonAsync<List<CategoryResponse>>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Single(payload);
+        Assert.Equal("1", payload[0].CategoryId);
+        Assert.Equal("|FR| FILMS 4K", payload[0].CategoryName);
+
+        await using var verifyScope = rewriteFactory.Services.CreateAsyncScope();
+        var verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var excludedCategory = await verifyDbContext.UpstreamCategories.SingleAsync(category => category.UpstreamCategoryId == "94");
+        var mergedCategory = await verifyDbContext.UpstreamCategories.SingleAsync(category => category.UpstreamCategoryId == "57");
+        Assert.True(excludedCategory.IsExcluded);
+        Assert.Equal(1, mergedCategory.OutputCategoryId);
+    }
+
+    [Fact]
+    public async Task CategoryRefresh_KeepsStableXtreamForgeIdsAcrossReorderingAndAdditions()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
+        using var factory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(factory);
+
+        using (var firstFactory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(CreateJsonHandler("[{\"category_id\":\"42\",\"category_name\":\"Alpha\"},{\"category_id\":\"57\",\"category_name\":\"Beta\"}]")))
+        using (var firstClient = firstFactory.CreateClient())
+        {
+            await firstClient.GetAsync("/https/example.com/443/player_api.php?action=get_vod_categories");
+        }
+
+        using var secondFactory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(CreateJsonHandler("[{\"category_id\":\"57\",\"category_name\":\"Beta\"},{\"category_id\":\"81\",\"category_name\":\"Gamma\"},{\"category_id\":\"42\",\"category_name\":\"Alpha\"}]"));
+        using var secondClient = secondFactory.CreateClient();
+
+        var response = await secondClient.GetAsync("/https/example.com/443/player_api.php?action=get_vod_categories");
+        var payload = await response.Content.ReadFromJsonAsync<List<CategoryResponse>>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Collection(
+            payload,
+            first => Assert.Equal(("1", "Alpha"), (first.CategoryId, first.CategoryName)),
+            second => Assert.Equal(("2", "Beta"), (second.CategoryId, second.CategoryName)),
+            third => Assert.Equal(("3", "Gamma"), (third.CategoryId, third.CategoryName)));
     }
 
     [Fact]
@@ -378,6 +513,24 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
     private static FakeForwarderHandler CreateForwardingHandler() =>
         new((_, _) => Task.FromResult(FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "{\"forwarded\":true}")));
 
+    private static FakeForwarderHandler CreateJsonHandler(string json) =>
+        new((_, _) =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json)
+            };
+            response.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            return Task.FromResult(response);
+        });
+
+    private static async Task EnsureDatabaseCreatedAsync(WebApplicationFactory<Program> factory)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        await dbContext.Database.EnsureCreatedAsync();
+    }
+
     private static IEnumerable<string> GetHeaderValues(HttpResponseMessage response, string headerName)
     {
         if (response.Headers.TryGetValues(headerName, out var responseHeaderValues))
@@ -394,4 +547,8 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
     }
 
     private sealed record StatusResponse(string ApplicationName, string ApplicationVersion, string Status);
+
+    private sealed record CategoryResponse(
+        [property: JsonPropertyName("category_id")] string CategoryId,
+        [property: JsonPropertyName("category_name")] string CategoryName);
 }

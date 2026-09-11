@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using XtreamForge.Infrastructure.Data;
@@ -11,9 +12,11 @@ using XtreamForge.Infrastructure.Data;
 namespace XtreamForge.Infrastructure.Migrations
 {
     [DbContext(typeof(XtreamForgeDbContext))]
-    partial class XtreamForgeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260911222029_AddXtreamCategoryManagement")]
+    partial class AddXtreamCategoryManagement
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

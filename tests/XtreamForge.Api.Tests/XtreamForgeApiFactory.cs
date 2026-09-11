@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,15 +29,20 @@ public sealed class XtreamForgeApiFactory : WebApplicationFactory<Program>
             });
         });
     }
+}
 
-    internal WebApplicationFactory<Program> WithForwarderHandler(
+internal static class XtreamForgeApiFactoryExtensions
+{
+    internal static WebApplicationFactory<Program> WithForwarderHandler(
+        this WebApplicationFactory<Program> factory,
         HttpMessageHandler handler,
         TestLogSink? logSink = null,
         bool failIfDatabaseAccessed = false)
     {
+        ArgumentNullException.ThrowIfNull(factory);
         ArgumentNullException.ThrowIfNull(handler);
 
-        return WithWebHostBuilder(builder =>
+        return factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureTestServices(services =>
             {
@@ -47,6 +53,7 @@ public sealed class XtreamForgeApiFactory : WebApplicationFactory<Program>
                 {
                     services.RemoveAll<IDbContextFactory<XtreamForgeDbContext>>();
                     services.RemoveAll<XtreamForgeDbContext>();
+                    services.RemoveAll<DbContextOptions<XtreamForgeDbContext>>();
                     services.AddSingleton<IDbContextFactory<XtreamForgeDbContext>, ThrowingDbContextFactory>();
                     services.AddScoped(static serviceProvider =>
                         serviceProvider.GetRequiredService<IDbContextFactory<XtreamForgeDbContext>>().CreateDbContext());
@@ -63,25 +70,47 @@ public sealed class XtreamForgeApiFactory : WebApplicationFactory<Program>
         });
     }
 
-    internal WebApplicationFactory<Program> WithFailingDatabaseFactory() =>
-        WithWebHostBuilder(builder =>
+    internal static WebApplicationFactory<Program> WithFailingDatabaseFactory(
+        this WebApplicationFactory<Program> factory) =>
+        factory.WithWebHostBuilder(builder =>
         {
             builder.ConfigureTestServices(services =>
             {
                 services.RemoveAll<IDbContextFactory<XtreamForgeDbContext>>();
                 services.RemoveAll<XtreamForgeDbContext>();
+                services.RemoveAll<DbContextOptions<XtreamForgeDbContext>>();
                 services.AddSingleton<IDbContextFactory<XtreamForgeDbContext>, ThrowingDbContextFactory>();
                 services.AddScoped(static serviceProvider =>
                     serviceProvider.GetRequiredService<IDbContextFactory<XtreamForgeDbContext>>().CreateDbContext());
             });
         });
 
-    private sealed class ThrowingDbContextFactory : IDbContextFactory<XtreamForgeDbContext>
-    {
-        public XtreamForgeDbContext CreateDbContext() =>
-            throw new InvalidOperationException("Database access is not expected during proxy requests.");
+    internal static WebApplicationFactory<Program> WithSqliteDatabase(
+        this WebApplicationFactory<Program> factory,
+        string? databasePath = null) =>
+        factory.WithWebHostBuilder(builder =>
+        {
+            var effectiveDatabasePath = databasePath ?? Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
+            var connectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = effectiveDatabasePath
+            }.ToString();
 
-        public Task<XtreamForgeDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) =>
-            throw new InvalidOperationException("Database access is not expected during proxy requests.");
-    }
+            builder.ConfigureAppConfiguration((_, configurationBuilder) =>
+            {
+                configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:database"] = connectionString
+                });
+            });
+        });
+}
+
+internal sealed class ThrowingDbContextFactory : IDbContextFactory<XtreamForgeDbContext>
+{
+    public XtreamForgeDbContext CreateDbContext() =>
+        throw new InvalidOperationException("Database access is not expected during proxy requests.");
+
+    public Task<XtreamForgeDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) =>
+        throw new InvalidOperationException("Database access is not expected during proxy requests.");
 }

@@ -6,16 +6,17 @@ XtreamForge is an early-stage, self-hosted .NET application that will sit in fro
 
 ## Current status
 
-This repository currently provides the initial foundation only:
+This repository currently provides the initial foundation plus the first category-management feature:
 
 - ASP.NET Core application combining Minimal APIs and integrated Razor Pages administration UI
 - Initial Xtream request routing, classification, and transparent forwarding foundation
+- Database-backed VOD/Series category discovery and category rewriting
 - .NET Aspire orchestration
 - PostgreSQL + EF Core infrastructure
 - Docker Compose development setup
 - xUnit test foundation
 
-Category mapping, TMDB lookup, metadata rewriting, and authentication are intentionally out of scope for the current foundation.
+TMDB lookup, metadata rewriting, and authentication are intentionally out of scope for the current implementation.
 
 ## Architecture
 
@@ -127,8 +128,9 @@ http://localhost:8080/https/example.com/443/player_api.php?username=user&******
 Current behavior:
 
 - XtreamForge validates `protocol`, `host`, and `port`
-- recognized `player_api.php` actions are classified for future transformation
-- all requests are currently forwarded upstream unchanged
+- `get_vod_categories` and `get_series_categories` are fetched from upstream and rewritten from PostgreSQL-backed rules
+- other recognized `player_api.php` actions are classified for future transformation
+- all non-category requests are currently forwarded upstream unchanged
 - request methods, bodies, headers, query strings, and streamed responses are preserved where appropriate
 
 Recognized `player_api.php` actions:
@@ -142,7 +144,7 @@ Recognized `player_api.php` actions:
 
 Transparent fallback behavior:
 
-- known action -> forwarded upstream unchanged
+- known non-category action -> forwarded upstream unchanged
 - unknown `player_api.php` action -> forwarded upstream unchanged
 - `player_api.php` without `action` -> forwarded upstream unchanged
 - non-`player_api.php` request -> forwarded upstream unchanged
@@ -154,6 +156,33 @@ Security notes:
 - IPv4 addresses and DNS hostnames are supported in the route format today.
 - IPv6 literals are not currently supported by this path-based route format.
 - The generic Xtream proxy route is excluded from generated OpenAPI documentation to avoid misleading native API descriptions.
+
+## Category management
+
+XtreamForge now persists category discovery and category rules in PostgreSQL, scoped by upstream destination (`protocol` + `host` + `port`) and content type (`Vod` / `Series`).
+
+Current category capabilities:
+
+- discover upstream VOD and Series categories on the first matching `player_api.php` request
+- keep categories unchanged by default
+- rename categories
+- exclude categories
+- merge multiple upstream categories into one XtreamForge output category
+- persist stable XtreamForge category IDs across refreshes and restarts
+
+How it works today:
+
+1. Request `get_vod_categories` or `get_series_categories` through the Xtream proxy route.
+2. XtreamForge fetches the upstream categories and stores the discovered source/category records.
+3. Open the integrated admin UI and go to `Categories`.
+4. Select the upstream source and content type, then update rename/exclude/merge rules.
+5. Repeat the category request to receive the rewritten category list with stable XtreamForge IDs.
+
+Notes:
+
+- Source identity is based on upstream destination only; credentials are not used as the source key and are not stored with category records.
+- VOD and Series mappings are independent.
+- `get_vod_streams` and `get_series` rewriting are not implemented yet, but the mapping model is designed so future work can translate XtreamForge category IDs back to upstream category IDs.
 
 ## Useful endpoints
 
@@ -173,15 +202,15 @@ The current test suite does not require a locally installed PostgreSQL instance.
 
 ## Known limitations
 
-- Xtream requests are currently proxied transparently; category rewriting, filtering, and enrichment are not implemented yet
-- No category remapping yet
+- Only `get_vod_categories` and `get_series_categories` are currently rewritten
+- Stream-list filtering/remapping is not implemented yet
 - No TMDB client or enrichment yet
 - No admin authentication yet
 - No background jobs yet
 
 ## Suggested next steps
 
-1. Add upstream Xtream client primitives.
-2. Introduce category mapping persistence and admin workflows.
-3. Add TMDB lookup/enrichment services.
+1. Add category-aware rewriting for `get_vod_streams` and `get_series`.
+2. Add TMDB lookup/enrichment services.
+3. Add admin authentication and auditing.
 4. Expand API compatibility coverage and health reporting.

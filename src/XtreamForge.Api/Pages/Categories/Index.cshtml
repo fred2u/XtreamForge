@@ -1,7 +1,140 @@
 @page "/categories"
+@using XtreamForge.Infrastructure.Models
+@model XtreamForge.Api.Pages.Categories.IndexModel
 @{
     ViewData["Title"] = "Categories";
 }
 
 <h1>Categories</h1>
-<p class="page-subtitle">Category remapping and filtering configuration will be added in a future pull request.</p>
+<p class="page-subtitle">Manage discovered upstream VOD and Series categories and map them to stable XtreamForge output categories.</p>
+
+@if (Model.ViewModel.Sources.Count == 0)
+{
+    <section class="status-card">
+        <h2>No sources discovered yet</h2>
+        <p>Xtream sources are created automatically the first time XtreamForge refreshes categories from an upstream provider.</p>
+    </section>
+}
+else
+{
+    <form method="get" class="filters-panel">
+        <label>
+            Source
+            <select name="sourceId">
+                @foreach (var source in Model.ViewModel.Sources)
+                {
+                    <option value="@source.Id" selected="@(source.Id == Model.ViewModel.SelectedSourceId)">@source.Protocol://@source.Host:@source.Port</option>
+                }
+            </select>
+        </label>
+
+        <label>
+            Content type
+            <select name="contentType">
+                <option value="@ContentType.Vod" selected="@(Model.ViewModel.SelectedContentType == ContentType.Vod)">VOD</option>
+                <option value="@ContentType.Series" selected="@(Model.ViewModel.SelectedContentType == ContentType.Series)">Series</option>
+            </select>
+        </label>
+
+        <button type="submit">Load</button>
+    </form>
+
+    <section class="status-card category-summary-card">
+        <h2>Output categories</h2>
+        @if (Model.ViewModel.OutputCategories.Count == 0)
+        {
+            <p>No categories discovered for this source yet.</p>
+        }
+        else
+        {
+            <ul class="output-category-list">
+                @foreach (var outputCategory in Model.ViewModel.OutputCategories)
+                {
+                    <li>
+                        <strong>@outputCategory.XtreamForgeCategoryId</strong>
+                        <span>@outputCategory.DisplayName</span>
+                        @if (outputCategory.IsNameCustomized)
+                        {
+                            <span class="category-pill">Renamed</span>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+
+    <section class="status-card category-table-card">
+        <h2>Upstream category rules</h2>
+        @if (Model.ViewModel.UpstreamCategories.Count == 0)
+        {
+            <p>No upstream categories have been discovered for this source and content type yet.</p>
+        }
+        else
+        {
+            <table class="category-table">
+                <thead>
+                    <tr>
+                        <th>Upstream category</th>
+                        <th>Current output</th>
+                        <th>Rule</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var category in Model.ViewModel.UpstreamCategories)
+                    {
+                        <tr>
+                            <td>
+                                <div><strong>@category.UpstreamCategoryName</strong></div>
+                                <div class="category-meta">Upstream ID: @category.UpstreamCategoryId</div>
+                            </td>
+                            <td>
+                                @if (category.IsExcluded)
+                                {
+                                    <span class="category-pill category-pill-muted">Excluded</span>
+                                }
+                                else if (category.ActiveXtreamForgeCategoryId is int activeId && category.ActiveOutputName is not null)
+                                {
+                                    <div><strong>@activeId</strong> - @category.ActiveOutputName</div>
+                                    @if (category.OutputCategoryId != category.DedicatedOutputCategoryId)
+                                    {
+                                        <div class="category-meta">Merged into shared output category</div>
+                                    }
+                                }
+                            </td>
+                            <td>
+                                <form method="post" asp-page-handler="Save" class="category-rule-form">
+                                    <input type="hidden" name="UpstreamCategoryRecordId" value="@category.Id" />
+                                    <input type="hidden" name="SelectedSourceId" value="@Model.ViewModel.SelectedSourceId" />
+                                    <input type="hidden" name="SelectedContentType" value="@Model.ViewModel.SelectedContentType" />
+
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" name="IsExcluded" value="true" checked="@category.IsExcluded" />
+                                        Exclude
+                                    </label>
+
+                                    <label>
+                                        Merge into output
+                                        <select name="MergeToOutputCategoryRecordId">
+                                            <option value="">Dedicated output (@category.DedicatedXtreamForgeCategoryId)</option>
+                                            @foreach (var outputCategory in Model.ViewModel.OutputCategories.Where(outputCategory => outputCategory.Id != category.DedicatedOutputCategoryId))
+                                            {
+                                                <option value="@outputCategory.Id" selected="@(outputCategory.Id == category.OutputCategoryId)">@outputCategory.XtreamForgeCategoryId - @outputCategory.DisplayName</option>
+                                            }
+                                        </select>
+                                    </label>
+
+                                    <label>
+                                        Output name
+                                        <input type="text" name="OutputName" value="@(category.OutputCategoryId == category.DedicatedOutputCategoryId ? category.DedicatedOutputName : category.ActiveOutputName ?? category.DedicatedOutputName)" maxlength="255" />
+                                    </label>
+
+                                    <button type="submit">Save</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+}

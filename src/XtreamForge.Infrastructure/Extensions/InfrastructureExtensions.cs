@@ -24,6 +24,7 @@ public static class InfrastructureExtensions
         builder.Services.AddDbContextFactory<XtreamForgeDbContext>(options => ConfigureDbContext(options, builder.Configuration));
         builder.Services.AddScoped(static serviceProvider =>
             serviceProvider.GetRequiredService<IDbContextFactory<XtreamForgeDbContext>>().CreateDbContext());
+        builder.Services.AddScoped<XtreamCategoryMappingService>();
         builder.Services.AddHealthChecks()
             .AddDbContextCheck<XtreamForgeDbContext>(name: "database");
 
@@ -45,7 +46,14 @@ public static class InfrastructureExtensions
             throw new InvalidOperationException("Connection string 'database' is required.");
         }
 
-        options.UseNpgsql(connectionString, npgsql =>
-            npgsql.MigrationsAssembly(typeof(XtreamForgeDbContext).Assembly.FullName));
+        if (connectionString.Contains("Host=", StringComparison.OrdinalIgnoreCase))
+        {
+            options.UseNpgsql(connectionString, npgsql =>
+                npgsql.MigrationsAssembly(typeof(XtreamForgeDbContext).Assembly.FullName));
+
+            return;
+        }
+
+        options.UseSqlite(connectionString);
     }
 }

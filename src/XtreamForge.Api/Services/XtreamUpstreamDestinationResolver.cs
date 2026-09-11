@@ -39,10 +39,12 @@ public sealed class XtreamUpstreamDestinationResolver(IOptions<XtreamProxyOption
             return UpstreamResolutionResult.Invalid("Upstream host is not allowed.");
         }
 
+        var normalizedProtocol = protocol.ToLowerInvariant();
+        var normalizedHost = host.ToLowerInvariant();
         var normalizedRest = NormalizeRestPath(rest);
-        var targetUri = BuildTargetUri(protocol, host, parsedPort, normalizedRest, queryString);
+        var targetUri = BuildTargetUri(normalizedProtocol, normalizedHost, parsedPort, normalizedRest, queryString);
 
-        return UpstreamResolutionResult.Success(new XtreamUpstreamDestination(protocol, host, parsedPort, normalizedRest, targetUri));
+        return UpstreamResolutionResult.Success(new XtreamUpstreamDestination(normalizedProtocol, normalizedHost, parsedPort, normalizedRest, targetUri));
     }
 
     private static bool IsSupportedProtocol(string protocol) =>

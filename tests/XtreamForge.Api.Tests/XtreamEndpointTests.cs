@@ -130,6 +130,29 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
     }
 
     [Fact]
+    public async Task RequestWithoutRemainingPath_IsForwarded()
+    {
+        var handler = new FakeForwarderHandler((request, _) =>
+        {
+            Assert.NotNull(request.RequestUri);
+            Assert.Equal("https", request.RequestUri.Scheme);
+            Assert.Equal("example.com", request.RequestUri.Host);
+            Assert.Equal(443, request.RequestUri.Port);
+            Assert.Equal("/", request.RequestUri.AbsolutePath);
+            Assert.Equal("?ping=true", request.RequestUri.Query);
+            return Task.FromResult(FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "{\"forwarded\":true}"));
+        });
+
+        using var factory = _factory.WithForwarderHandler(handler);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/https/example.com/443?ping=true");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
     public async Task Forwarding_PreservesMethodAndHeaders_ButNotHost()
     {
         var handler = new FakeForwarderHandler((_, _) =>

@@ -37,6 +37,7 @@ public sealed class ForwarderService(IHttpClientFactory httpClientFactory)
             return Results.Empty;
         }
 
+        await context.Response.StartAsync(context.RequestAborted);
         await using var responseStream = await responseMessage.Content.ReadAsStreamAsync(context.RequestAborted);
         await responseStream.CopyToAsync(context.Response.Body, context.RequestAborted);
 
@@ -87,6 +88,11 @@ public sealed class ForwarderService(IHttpClientFactory httpClientFactory)
 
         foreach (var header in responseMessage.Content.Headers)
         {
+            if (header.Key.Equals(HeaderNames.ContentLength, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             response.Headers[header.Key] = header.Value.ToArray();
         }
 

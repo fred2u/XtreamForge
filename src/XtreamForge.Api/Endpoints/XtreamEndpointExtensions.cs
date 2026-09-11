@@ -19,40 +19,61 @@ public static class XtreamEndpointExtensions
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        endpoints.MapMethods("/{protocol}/{host}/{port}/{**rest}", [HttpMethods.Get, HttpMethods.Head, HttpMethods.Post, HttpMethods.Put, HttpMethods.Patch, HttpMethods.Delete, HttpMethods.Options],
-            async Task<IResult> (
-                string protocol,
-                string host,
-                string port,
-                string? rest,
-                HttpContext context,
-                XtreamPlayerApiHandler xtreamPlayerApiHandler,
-                ForwarderService forwarderService) =>
-            {
-                if (!IsSupportedProtocol(protocol))
-                {
-                    return TypedResults.BadRequest("Invalid protocol. Only http and https are supported.");
-                }
+        endpoints.MapMethods(
+                "/{protocol}/{host}/{port}",
+                SupportedHttpMethods,
+                HandleXtreamRequestAsync)
+            .WithSummary("Handles or forwards Xtream-compatible requests.");
 
-                if (!int.TryParse(port, out var parsedPort) || parsedPort is < 1 or > 65535)
-                {
-                    return TypedResults.BadRequest("Invalid port.");
-                }
-
-                var normalizedRest = NormalizeRestPath(rest);
-
-                if (await xtreamPlayerApiHandler.TryHandleAsync(normalizedRest, context, context.RequestAborted) is { } localResult)
-                {
-                    return localResult;
-                }
-
-                var targetUri = BuildTargetUri(protocol, host, parsedPort, normalizedRest, context.Request.QueryString);
-                return await forwarderService.ForwardAsync(targetUri, context);
-            })
+        endpoints.MapMethods(
+                "/{protocol}/{host}/{port}/{**rest}",
+                SupportedHttpMethods,
+                HandleXtreamRequestAsync)
             .WithName("HandleXtreamRequest")
             .WithSummary("Handles or forwards Xtream-compatible requests.");
 
         return endpoints;
+    }
+
+    private static readonly string[] SupportedHttpMethods =
+    [
+        HttpMethods.Get,
+        HttpMethods.Head,
+        HttpMethods.Post,
+        HttpMethods.Put,
+        HttpMethods.Patch,
+        HttpMethods.Delete,
+        HttpMethods.Options
+    ];
+
+    private static async Task<IResult> HandleXtreamRequestAsync(
+        string protocol,
+        string host,
+        string port,
+        string? rest,
+        HttpContext context,
+        XtreamPlayerApiHandler xtreamPlayerApiHandler,
+        ForwarderService forwarderService)
+    {
+        if (!IsSupportedProtocol(protocol))
+        {
+            return TypedResults.BadRequest("Invalid protocol. Only http and https are supported.");
+        }
+
+        if (!int.TryParse(port, out var parsedPort) || parsedPort is < 1 or > 65535)
+        {
+            return TypedResults.BadRequest("Invalid port.");
+        }
+
+        var normalizedRest = NormalizeRestPath(rest);
+
+        if (await xtreamPlayerApiHandler.TryHandleAsync(normalizedRest, context, context.RequestAborted) is { } localResult)
+        {
+            return localResult;
+        }
+
+        var targetUri = BuildTargetUri(protocol, host, parsedPort, normalizedRest, context.Request.QueryString);
+        return await forwarderService.ForwardAsync(targetUri, context);
     }
 
     private static bool IsSupportedProtocol(string protocol) =>

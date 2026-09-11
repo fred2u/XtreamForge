@@ -20,8 +20,9 @@ public static class InfrastructureExtensions
         builder.Services.AddOptions<TmdbOptions>()
             .BindConfiguration(TmdbOptions.SectionName);
 
-        builder.Services.AddDbContext<XtreamForgeDbContext>(options => ConfigureDbContext(options, builder.Configuration));
         builder.Services.AddDbContextFactory<XtreamForgeDbContext>(options => ConfigureDbContext(options, builder.Configuration));
+        builder.Services.AddScoped(static serviceProvider =>
+            serviceProvider.GetRequiredService<IDbContextFactory<XtreamForgeDbContext>>().CreateDbContext());
         builder.Services.AddHealthChecks()
             .AddDbContextCheck<XtreamForgeDbContext>(name: "database");
 

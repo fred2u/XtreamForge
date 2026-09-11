@@ -210,6 +210,26 @@ public sealed class XtreamCategoryMappingService(
         return await GetEffectiveOutputCategoriesAsync(dbContext, sourceId, contentType, null, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<EffectiveOutputCategoryMapping>> GetEffectiveOutputCategoryMappingsAsync(
+        XtreamSourceDescriptor sourceDescriptor,
+        ContentType contentType,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sourceDescriptor);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var sourceId = await dbContext.XtreamSources
+            .Where(source => source.Protocol == sourceDescriptor.Protocol
+                && source.Host == sourceDescriptor.Host
+                && source.Port == sourceDescriptor.Port)
+            .Select(source => (int?)source.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return sourceId is int resolvedSourceId
+            ? await GetEffectiveOutputCategoriesAsync(dbContext, resolvedSourceId, contentType, null, cancellationToken)
+            : [];
+    }
+
     private static List<DiscoveredCategory> NormalizeDiscoveredCategories(IReadOnlyList<DiscoveredCategory> discoveredCategories) =>
         discoveredCategories
             .Where(category => !string.IsNullOrWhiteSpace(category.UpstreamCategoryId) && !string.IsNullOrWhiteSpace(category.UpstreamCategoryName))

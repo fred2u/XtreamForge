@@ -14,6 +14,7 @@ public static class XtreamEndpointExtensions
             .BindConfiguration(XtreamProxyOptions.SectionName);
         services.AddScoped<ForwarderService>();
         services.AddScoped<XtreamCategoryProxyService>();
+        services.AddScoped<XtreamContentProxyService>();
         services.AddSingleton<XtreamUpstreamDestinationResolver>();
         services.AddSingleton<XtreamRequestClassifier>();
 
@@ -60,6 +61,7 @@ public static class XtreamEndpointExtensions
         XtreamUpstreamDestinationResolver destinationResolver,
         XtreamRequestClassifier requestClassifier,
         XtreamCategoryProxyService categoryProxyService,
+        XtreamContentProxyService contentProxyService,
         ForwarderService forwarderService)
     {
         var resolutionResult = destinationResolver.Resolve(protocol, host, port, rest, context.Request.QueryString);
@@ -78,6 +80,11 @@ public static class XtreamEndpointExtensions
         if (await categoryProxyService.TryHandleAsync(destination, classification, context) is { } categoryResult)
         {
             return categoryResult;
+        }
+
+        if (await contentProxyService.TryHandleAsync(destination, classification, context) is { } contentResult)
+        {
+            return contentResult;
         }
 
         return await forwarderService.ForwardAsync(destination, classification, context);

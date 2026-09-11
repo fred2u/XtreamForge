@@ -129,6 +129,8 @@ Current behavior:
 
 - XtreamForge validates `protocol`, `host`, and `port`
 - `get_vod_categories` and `get_series_categories` are fetched from upstream and rewritten from PostgreSQL-backed rules
+- `get_vod_streams` and `get_series` use effective XtreamForge category mappings and return XtreamForge category IDs
+- `get_vod_info` and `get_series_info` rewrite category references to XtreamForge category IDs
 - other recognized `player_api.php` actions are classified for future transformation
 - all non-category requests are currently forwarded upstream unchanged
 - request methods, bodies, headers, query strings, and streamed responses are preserved where appropriate
@@ -182,7 +184,9 @@ Notes:
 
 - Source identity is based on upstream destination only; credentials are not used as the source key and are not stored with category records.
 - VOD and Series mappings are independent.
-- `get_vod_streams` and `get_series` rewriting are not implemented yet, but the mapping model is designed so future work can translate XtreamForge category IDs back to upstream category IDs.
+- `get_vod_streams` and `get_series` now translate XtreamForge output category IDs back to the currently effective upstream category IDs before querying/filtering results.
+- returned stream and detail payloads expose XtreamForge category IDs instead of upstream category IDs.
+- effective reverse mappings exclude upstream categories removed by manual exclusion or category rules.
 
 ## Category Rules
 
@@ -229,6 +233,45 @@ Reason:
 Rule 10 matches first. Rule 20 is never used for this category.
 ```
 
+## Stream and detail category translation
+
+XtreamForge now applies the effective category model when processing:
+
+- `get_vod_streams`
+- `get_series`
+- `get_vod_info`
+- `get_series_info`
+
+Behavior:
+
+- Xtream clients send XtreamForge output category IDs.
+- XtreamForge resolves those IDs to the effective included upstream category IDs for the selected source and content type.
+- manual exclusions and category rules are respected before any reverse mapping is used.
+- merged output categories are queried using only the currently included upstream category IDs.
+- stream list results are filtered and rewritten so returned `category_id` values use XtreamForge IDs.
+- detail results rewrite discovered `category_id` / `category_ids` values to XtreamForge IDs.
+
+Example:
+
+```text
+Upstream:
+10 -> |FR| 4K
+20 -> |FR| UHD
+30 -> |FR| COMEDIE
+
+XtreamForge:
+10 + 20 -> output 5 "4K Movies"
+30      -> output 6 "Comedy"
+```
+
+If the client requests:
+
+```text
+player_api.php?action=get_vod_streams&category_id=5
+```
+
+XtreamForge resolves output category `5` back to the currently effective included upstream categories for that output category, queries/filter results accordingly, and returns items with `category_id=5`.
+
 ## Useful endpoints
 
 - Dashboard UI: `http://localhost:8080/`
@@ -248,14 +291,14 @@ The current test suite does not require a locally installed PostgreSQL instance.
 ## Known limitations
 
 - Only `get_vod_categories` and `get_series_categories` are currently rewritten
-- Stream-list filtering/remapping is not implemented yet
+- Stream/info rewriting currently focuses on category translation only
 - No TMDB client or enrichment yet
 - No admin authentication yet
 - No background jobs yet
 
 ## Suggested next steps
 
-1. Add category-aware rewriting for `get_vod_streams` and `get_series`.
+1. Add TMDB-aware rewriting for `get_vod_info` and `get_series_info`.
 2. Add TMDB lookup/enrichment services.
 3. Add admin authentication and auditing.
 4. Expand API compatibility coverage and health reporting.

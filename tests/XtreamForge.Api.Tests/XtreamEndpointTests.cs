@@ -46,6 +46,20 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
     }
 
     [Fact]
+    public async Task Dashboard_WhenDatabaseCheckThrows_ShowsUnavailableFallback()
+    {
+        using var factory = _factory.WithFailingDatabaseFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/");
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("Unavailable", content);
+        Assert.Contains("The database connectivity check failed.", content);
+    }
+
+    [Fact]
     public void DependencyInjection_CanConstructInfrastructureServices()
     {
         using var scope = _factory.Services.CreateScope();
@@ -213,6 +227,28 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.False(forwardedRequest.Headers.ContainsKey("Connection"));
         Assert.False(forwardedRequest.Headers.ContainsKey("X-Transient"));
         Assert.Null(forwardedRequest.Host);
+    }
+
+    [Fact]
+    public async Task Forwarding_PreservesExplicitEmptyRequestBodyContentHeaders()
+    {
+        var handler = CreateForwardingHandler();
+        using var factory = _factory.WithForwarderHandler(handler);
+        using var client = factory.CreateClient();
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/http/example.com/8080/player_api.php?action=get_live_categories")
+        {
+            Content = new ByteArrayContent([])
+        };
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+
+        var response = await client.SendAsync(request);
+        var forwardedRequest = Assert.Single(handler.Requests);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(string.Empty, forwardedRequest.Body);
+        Assert.True(forwardedRequest.Headers.TryGetValue("Content-Type", out var contentTypeValues));
+        Assert.Equal(["application/json"], contentTypeValues);
     }
 
     [Fact]

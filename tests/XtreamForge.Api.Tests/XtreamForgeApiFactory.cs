@@ -60,6 +60,19 @@ public sealed class XtreamForgeApiFactory : WebApplicationFactory<Program>
         });
     }
 
+    internal WebApplicationFactory<Program> WithFailingDatabaseFactory() =>
+        WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IDbContextFactory<XtreamForgeDbContext>>();
+                services.RemoveAll<XtreamForgeDbContext>();
+                services.AddSingleton<IDbContextFactory<XtreamForgeDbContext>, ThrowingDbContextFactory>();
+                services.AddScoped(static serviceProvider =>
+                    serviceProvider.GetRequiredService<IDbContextFactory<XtreamForgeDbContext>>().CreateDbContext());
+            });
+        });
+
     private sealed class ThrowingDbContextFactory : IDbContextFactory<XtreamForgeDbContext>
     {
         public XtreamForgeDbContext CreateDbContext() =>

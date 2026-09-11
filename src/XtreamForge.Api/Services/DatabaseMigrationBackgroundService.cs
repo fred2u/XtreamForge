@@ -26,7 +26,8 @@ public sealed class DatabaseMigrationBackgroundService(
         }
         catch (Exception exception)
         {
-            logger.LogWarning(exception, "Database migrations could not be applied during background startup.");
+            logger.LogError(exception, "Database migrations could not be applied during background startup.");
+            throw;
         }
     }
 }

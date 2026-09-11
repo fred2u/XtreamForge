@@ -60,10 +60,10 @@ public sealed class ForwarderService(
             logger.LogWarning(
                 exception,
                 "Timed out forwarding Xtream request to upstream {Host}:{Port} for endpoint type {EndpointType} and action {Action}.",
-                destination.Host,
+                SanitizeForLog(destination.Host),
                 destination.Port,
                 classification.EndpointType,
-                classification.Action ?? "none");
+                SanitizeForLog(classification.Action ?? "none"));
 
             return Results.StatusCode(StatusCodes.Status504GatewayTimeout);
         }
@@ -72,10 +72,10 @@ public sealed class ForwarderService(
             logger.LogWarning(
                 exception,
                 "Failed forwarding Xtream request to upstream {Host}:{Port} for endpoint type {EndpointType} and action {Action}.",
-                destination.Host,
+                SanitizeForLog(destination.Host),
                 destination.Port,
                 classification.EndpointType,
-                classification.Action ?? "none");
+                SanitizeForLog(classification.Action ?? "none"));
 
             return Results.StatusCode(StatusCodes.Status502BadGateway);
         }
@@ -86,7 +86,7 @@ public sealed class ForwarderService(
         var requestMessage = new HttpRequestMessage(new HttpMethod(request.Method), targetUri);
         var headersToSkip = GetHopByHopHeaders(request.Headers);
 
-        if (HasRequestBody(request))
+        if (ShouldCreateRequestContent(request))
         {
             requestMessage.Content = new StreamContent(request.Body);
         }
@@ -107,8 +107,11 @@ public sealed class ForwarderService(
         return requestMessage;
     }
 
-    private static bool HasRequestBody(HttpRequest request) =>
-        request.ContentLength is > 0 || request.Headers.ContainsKey(HeaderNames.TransferEncoding);
+    private static bool ShouldCreateRequestContent(HttpRequest request) =>
+        request.ContentLength is not null
+        || request.Headers.ContainsKey(HeaderNames.TransferEncoding)
+        || request.Headers.Any(static header =>
+            header.Key.StartsWith("Content-", StringComparison.OrdinalIgnoreCase));
 
     private static bool ShouldSkipRequestHeader(string headerName, HashSet<string> headersToSkip) =>
         headerName.Equals(HeaderNames.Host, StringComparison.OrdinalIgnoreCase)
@@ -173,4 +176,8 @@ public sealed class ForwarderService(
             headersToSkip.Add(token);
         }
     }
+
+    private static string SanitizeForLog(string value) =>
+        value.Replace("\r", string.Empty, StringComparison.Ordinal)
+            .Replace("\n", string.Empty, StringComparison.Ordinal);
 }

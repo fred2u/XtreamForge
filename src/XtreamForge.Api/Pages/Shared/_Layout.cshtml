@@ -1,3 +1,7 @@
+@{
+    var currentPage = ViewContext.RouteData.Values["page"]?.ToString() ?? string.Empty;
+}
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,9 +15,9 @@
         <aside class="sidebar">
             <div class="brand">XtreamForge</div>
             <nav class="navigation" aria-label="Primary administration navigation">
-                <a asp-page="/Index">Dashboard</a>
-                <a asp-page="/Categories/Index">Categories</a>
-                <a asp-page="/Settings/Index">Settings</a>
+                <a asp-page="/Index" aria-current="@(currentPage.Equals("/Index", StringComparison.OrdinalIgnoreCase) ? "page" : null)">Dashboard</a>
+                <a asp-page="/Categories/Index" aria-current="@(currentPage.Equals("/Categories/Index", StringComparison.OrdinalIgnoreCase) ? "page" : null)">Categories</a>
+                <a asp-page="/Settings/Index" aria-current="@(currentPage.Equals("/Settings/Index", StringComparison.OrdinalIgnoreCase) ? "page" : null)">Settings</a>
             </nav>
         </aside>
 

@@ -855,6 +855,120 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
     }
 
     [Fact]
+    public async Task CategoryRuleAdmin_NewRuleForm_DefaultsToEnabled()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        using (var discoveryFactory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(CreateJsonHandler("[{\"category_id\":\"42\",\"category_name\":\"Alpha\"}]")))
+        using (var discoveryClient = discoveryFactory.CreateClient())
+        {
+            await discoveryClient.GetAsync("/https/example.com/443/player_api.php?action=get_vod_categories");
+        }
+
+        var source = await GetSourceAsync(setupFactory);
+
+        using var pageFactory = _factory.WithSqliteDatabase(databasePath);
+        using var client = pageFactory.CreateClient();
+        var pageHtml = await GetCategoriesPageHtmlAsync(client, source.Id, ContentType.Vod);
+
+        Assert.True(IsCreateRuleEnabledChecked(pageHtml));
+    }
+
+    [Fact]
+    public async Task CategoryRuleAdmin_UiBinding_PersistsEnabledStateAcrossCreateUpdateAndReload()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        using (var discoveryFactory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(CreateJsonHandler("[{\"category_id\":\"42\",\"category_name\":\"Alpha\"}]")))
+        using (var discoveryClient = discoveryFactory.CreateClient())
+        {
+            await discoveryClient.GetAsync("/https/example.com/443/player_api.php?action=get_vod_categories");
+        }
+
+        var source = await GetSourceAsync(setupFactory);
+
+        using var pageFactory = _factory.WithSqliteDatabase(databasePath);
+        using var client = pageFactory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var token = await GetAntiforgeryTokenAsync(client, source.Id, ContentType.Vod);
+        using var createRule = CreateCategoryRuleFormContent(
+            token,
+            source.Id,
+            ContentType.Vod,
+            CategoryRuleAction.Exclude,
+            CategoryRuleOperator.Contains,
+            "SPORT",
+            caseSensitive: false,
+            isEnabled: true);
+
+        var createResponse = await client.PostAsync("/categories?handler=CreateRule", createRule);
+        Assert.Equal(HttpStatusCode.Redirect, createResponse.StatusCode);
+
+        var rule = await GetRuleByPatternAsync(setupFactory, "SPORT");
+        Assert.True(rule.IsEnabled);
+        Assert.False(rule.CaseSensitive);
+
+        var pageHtml = await GetCategoriesPageHtmlAsync(client, source.Id, ContentType.Vod);
+        Assert.True(IsRuleCheckboxChecked(pageHtml, rule.Id, "rule-enabled"));
+
+        token = await GetAntiforgeryTokenAsync(client, source.Id, ContentType.Vod);
+        using var disableRule = CreateCategoryRuleFormContent(
+            token,
+            source.Id,
+            ContentType.Vod,
+            rule.Action,
+            rule.Operator,
+            rule.Pattern,
+            caseSensitive: rule.CaseSensitive,
+            isEnabled: false,
+            ruleId: rule.Id);
+
+        var disableResponse = await client.PostAsync("/categories?handler=UpdateRule", disableRule);
+        Assert.Equal(HttpStatusCode.Redirect, disableResponse.StatusCode);
+
+        var disabledRule = await GetRuleByIdAsync(setupFactory, rule.Id);
+        Assert.False(disabledRule.IsEnabled);
+        Assert.Equal(rule.Sequence, disabledRule.Sequence);
+        Assert.Equal(rule.Action, disabledRule.Action);
+        Assert.Equal(rule.Operator, disabledRule.Operator);
+        Assert.Equal(rule.Pattern, disabledRule.Pattern);
+        Assert.Equal(rule.CaseSensitive, disabledRule.CaseSensitive);
+
+        pageHtml = await GetCategoriesPageHtmlAsync(client, source.Id, ContentType.Vod);
+        Assert.False(IsRuleCheckboxChecked(pageHtml, rule.Id, "rule-enabled"));
+
+        token = await GetAntiforgeryTokenAsync(client, source.Id, ContentType.Vod);
+        using var enableRule = CreateCategoryRuleFormContent(
+            token,
+            source.Id,
+            ContentType.Vod,
+            rule.Action,
+            rule.Operator,
+            rule.Pattern,
+            caseSensitive: rule.CaseSensitive,
+            isEnabled: true,
+            ruleId: rule.Id);
+
+        var enableResponse = await client.PostAsync("/categories?handler=UpdateRule", enableRule);
+        Assert.Equal(HttpStatusCode.Redirect, enableResponse.StatusCode);
+
+        var reenabledRule = await GetRuleByIdAsync(setupFactory, rule.Id);
+        Assert.True(reenabledRule.IsEnabled);
+        Assert.Equal(rule.Sequence, reenabledRule.Sequence);
+        Assert.Equal(rule.Action, reenabledRule.Action);
+        Assert.Equal(rule.Operator, reenabledRule.Operator);
+        Assert.Equal(rule.Pattern, reenabledRule.Pattern);
+        Assert.Equal(rule.CaseSensitive, reenabledRule.CaseSensitive);
+
+        pageHtml = await GetCategoriesPageHtmlAsync(client, source.Id, ContentType.Vod);
+        Assert.True(IsRuleCheckboxChecked(pageHtml, rule.Id, "rule-enabled"));
+    }
+
+    [Fact]
     public async Task CategoryRuleAdmin_PostHandlers_CreateEditMoveAndDeleteRules()
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
@@ -995,11 +1109,102 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
 
     private static async Task<string> GetAntiforgeryTokenAsync(HttpClient client, int sourceId, ContentType contentType)
     {
-        var response = await client.GetAsync($"/categories?sourceId={sourceId}&contentType={contentType}");
-        var pageHtml = await response.Content.ReadAsStringAsync();
+        var pageHtml = await GetCategoriesPageHtmlAsync(client, sourceId, contentType);
         var tokenMatch = Regex.Match(pageHtml, "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"");
         Assert.True(tokenMatch.Success);
         return tokenMatch.Groups[1].Value;
+    }
+
+    private static async Task<string> GetCategoriesPageHtmlAsync(HttpClient client, int sourceId, ContentType contentType)
+    {
+        var response = await client.GetAsync($"/categories?sourceId={sourceId}&contentType={contentType}");
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
+
+    private static bool IsCreateRuleEnabledChecked(string pageHtml)
+    {
+        var match = Regex.Match(
+            pageHtml,
+            "<form method=\"post\"[^>]*class=\"rule-editor-grid\"[\\s\\S]*?<input[^>]*type=\"checkbox\"[^>]*name=\"IsEnabled\"[^>]*>",
+            RegexOptions.CultureInvariant);
+
+        Assert.True(match.Success);
+        return match.Value.Contains("checked=\"checked\"", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsRuleCheckboxChecked(string pageHtml, int ruleId, string prefix)
+    {
+        var match = Regex.Match(
+            pageHtml,
+            $@"<input[^>]*id=""{Regex.Escape($"{prefix}-{ruleId}")}""[^>]*>",
+            RegexOptions.CultureInvariant);
+
+        Assert.True(match.Success);
+        return match.Value.Contains("checked=\"checked\"", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static FormUrlEncodedContent CreateCategoryRuleFormContent(
+        string antiforgeryToken,
+        int sourceId,
+        ContentType contentType,
+        CategoryRuleAction action,
+        CategoryRuleOperator @operator,
+        string pattern,
+        bool caseSensitive,
+        bool isEnabled,
+        int? ruleId = null)
+    {
+        var formFields = new List<KeyValuePair<string, string>>
+        {
+            new("__RequestVerificationToken", antiforgeryToken),
+            new("SelectedSourceId", sourceId.ToString()),
+            new("SelectedContentType", contentType.ToString()),
+            new("Action", action.ToString()),
+            new("Operator", @operator.ToString()),
+            new("Pattern", pattern)
+        };
+
+        if (ruleId is not null)
+        {
+            formFields.Add(new KeyValuePair<string, string>("RuleId", ruleId.Value.ToString()));
+        }
+
+        AddCheckboxField(formFields, "CaseSensitive", caseSensitive);
+        AddCheckboxField(formFields, "IsEnabled", isEnabled);
+
+        return new FormUrlEncodedContent(formFields);
+    }
+
+    private static void AddCheckboxField(List<KeyValuePair<string, string>> formFields, string fieldName, bool isChecked)
+    {
+        if (isChecked)
+        {
+            formFields.Add(new KeyValuePair<string, string>(fieldName, "true"));
+        }
+
+        formFields.Add(new KeyValuePair<string, string>(fieldName, "false"));
+    }
+
+    private static async Task<XtreamSource> GetSourceAsync(WebApplicationFactory<Program> factory)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        return await dbContext.XtreamSources.AsNoTracking().SingleAsync();
+    }
+
+    private static async Task<CategoryRule> GetRuleByPatternAsync(WebApplicationFactory<Program> factory, string pattern)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        return await dbContext.CategoryRules.AsNoTracking().SingleAsync(rule => rule.Pattern == pattern);
+    }
+
+    private static async Task<CategoryRule> GetRuleByIdAsync(WebApplicationFactory<Program> factory, int ruleId)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        return await dbContext.CategoryRules.AsNoTracking().SingleAsync(rule => rule.Id == ruleId);
     }
 
     private static IEnumerable<string> GetHeaderValues(HttpResponseMessage response, string headerName)

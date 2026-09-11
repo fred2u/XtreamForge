@@ -56,8 +56,6 @@ else
         <form method="post" asp-page-handler="CreateRule" asp-antiforgery="true" class="rule-editor-grid">
             <input type="hidden" name="SelectedSourceId" value="@categories.SelectedSourceId" />
             <input type="hidden" name="SelectedContentType" value="@categories.SelectedContentType" />
-            <input type="hidden" name="IsEnabled" value="false" />
-            <input type="hidden" name="CaseSensitive" value="false" />
 
             <label>
                 Action
@@ -82,11 +80,13 @@ else
 
             <label class="checkbox-label">
                 <input type="checkbox" name="CaseSensitive" value="true" checked="@Model.NewRule.CaseSensitive" />
+                <input type="hidden" name="CaseSensitive" value="false" />
                 Case sensitive
             </label>
 
             <label class="checkbox-label">
                 <input type="checkbox" name="IsEnabled" value="true" checked="@Model.NewRule.IsEnabled" />
+                <input type="hidden" name="IsEnabled" value="false" />
                 Enabled
             </label>
 
@@ -132,8 +132,6 @@ else
                                     <input type="hidden" name="RuleId" value="@rule.Id" />
                                     <input type="hidden" name="SelectedSourceId" value="@categories.SelectedSourceId" />
                                     <input type="hidden" name="SelectedContentType" value="@categories.SelectedContentType" />
-                                    <input type="hidden" name="CaseSensitive" value="false" />
-                                    <input type="hidden" name="IsEnabled" value="false" />
 
                                     <label for="@actionInputId" class="sr-only">Action for rule @rule.Sequence</label>
                                     <select id="@actionInputId" name="Action">
@@ -152,17 +150,19 @@ else
 
                                     <label for="@caseSensitiveInputId" class="checkbox-label compact-checkbox-label">
                                         <input id="@caseSensitiveInputId" type="checkbox" name="CaseSensitive" value="true" checked="@rule.CaseSensitive" />
+                                        <input type="hidden" name="CaseSensitive" value="false" />
                                         Case sensitive
                                     </label>
 
                                     <label for="@enabledInputId" class="checkbox-label compact-checkbox-label">
                                         <input id="@enabledInputId" type="checkbox" name="IsEnabled" value="true" checked="@rule.IsEnabled" />
+                                        <input type="hidden" name="IsEnabled" value="false" />
                                         Enabled
                                     </label>
 
                                     <label class="checkbox-label compact-checkbox-label">
-                                        <input type="hidden" name="ConfirmDelete" value="false" />
                                         <input type="checkbox" name="ConfirmDelete" value="true" />
+                                        <input type="hidden" name="ConfirmDelete" value="false" />
                                         Confirm delete
                                     </label>
 

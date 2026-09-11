@@ -114,6 +114,26 @@ public sealed class XtreamUpstreamDestinationResolver(IOptions<XtreamProxyOption
             return false;
         }
 
+        if (address.IsIPv4MappedToIPv6)
+        {
+            return IsPubliclyRoutableAddress(address.MapToIPv4());
+        }
+
+        if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+        {
+            if (address.Equals(IPAddress.IPv6None)
+                || address.Equals(IPAddress.IPv6Loopback)
+                || address.IsIPv6LinkLocal
+                || address.IsIPv6Multicast
+                || address.IsIPv6SiteLocal)
+            {
+                return false;
+            }
+
+            var ipv6Bytes = address.GetAddressBytes();
+            return (ipv6Bytes[0] & 0xfe) != 0xfc;
+        }
+
         if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
         {
             return false;

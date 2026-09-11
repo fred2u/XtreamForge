@@ -167,12 +167,29 @@ else
                                     </label>
 
                                     <div class="rule-actions">
-                                        <button type="submit" formaction="?handler=MoveRuleUp" aria-label="Move rule @rule.Sequence up">↑</button>
-                                        <button type="submit" formaction="?handler=MoveRuleDown" aria-label="Move rule @rule.Sequence down">↓</button>
+                                        <button
+                                            type="submit"
+                                            asp-page-handler="MoveRuleUp"
+                                            asp-route-sourceId="@categories.SelectedSourceId"
+                                            asp-route-contentType="@categories.SelectedContentType"
+                                            asp-route-previewCategoryName="@rules.PreviewCategoryName"
+                                            aria-label="Move rule @rule.Sequence up">↑</button>
+                                        <button
+                                            type="submit"
+                                            asp-page-handler="MoveRuleDown"
+                                            asp-route-sourceId="@categories.SelectedSourceId"
+                                            asp-route-contentType="@categories.SelectedContentType"
+                                            asp-route-previewCategoryName="@rules.PreviewCategoryName"
+                                            aria-label="Move rule @rule.Sequence down">↓</button>
                                     </div>
 
                                     <button type="submit">Save</button>
-                                    <button type="submit" formaction="?handler=DeleteRule">Delete</button>
+                                    <button
+                                        type="submit"
+                                        asp-page-handler="DeleteRule"
+                                        asp-route-sourceId="@categories.SelectedSourceId"
+                                        asp-route-contentType="@categories.SelectedContentType"
+                                        asp-route-previewCategoryName="@rules.PreviewCategoryName">Delete</button>
                                 </form>
                             </td>
                         </tr>

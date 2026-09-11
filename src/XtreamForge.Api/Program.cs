@@ -21,7 +21,6 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.UseHttpsRedirection();
 app.MapStaticAssets();
 app.MapRazorPages();
 app.MapStatusEndpoints();

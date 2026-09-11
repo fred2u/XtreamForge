@@ -1,3 +1,4 @@
+using XtreamForge.Api.Configuration;
 using XtreamForge.Api.Services;
 
 namespace XtreamForge.Api.Endpoints;
@@ -9,6 +10,8 @@ public static class XtreamEndpointExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddHttpClient(ForwarderService.HttpClientName);
+        services.AddOptions<XtreamProxyOptions>()
+            .BindConfiguration(XtreamProxyOptions.SectionName);
         services.AddScoped<ForwarderService>();
         services.AddSingleton<XtreamUpstreamDestinationResolver>();
         services.AddSingleton<XtreamRequestClassifier>();

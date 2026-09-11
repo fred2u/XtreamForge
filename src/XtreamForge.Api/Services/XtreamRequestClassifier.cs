@@ -22,9 +22,10 @@ public sealed class XtreamRequestClassifier
         }
 
         var action = query["action"].ToString();
-        var isKnownAction = !string.IsNullOrWhiteSpace(action) && TransformCandidateActions.Contains(action);
+        var normalizedAction = string.IsNullOrWhiteSpace(action) ? null : action;
+        var isKnownAction = normalizedAction is not null && TransformCandidateActions.Contains(normalizedAction);
 
-        return new XtreamRequestClassification(rest, true, action, isKnownAction);
+        return new XtreamRequestClassification(rest, true, normalizedAction, isKnownAction);
     }
 }
 

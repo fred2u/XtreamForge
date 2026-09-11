@@ -1,8 +1,11 @@
+using System.Globalization;
 using System.Net;
+using Microsoft.Extensions.Options;
+using XtreamForge.Api.Configuration;
 
 namespace XtreamForge.Api.Services;
 
-public sealed class XtreamUpstreamDestinationResolver
+public sealed class XtreamUpstreamDestinationResolver(IOptions<XtreamProxyOptions> options)
 {
     public UpstreamResolutionResult Resolve(
         string protocol,
@@ -21,7 +24,7 @@ public sealed class XtreamUpstreamDestinationResolver
             return UpstreamResolutionResult.Invalid("Invalid host.");
         }
 
-        if (!int.TryParse(port, out var parsedPort))
+        if (!int.TryParse(port, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedPort))
         {
             return UpstreamResolutionResult.Invalid("Invalid port.");
         }
@@ -29,6 +32,11 @@ public sealed class XtreamUpstreamDestinationResolver
         if (parsedPort is < 1 or > 65535)
         {
             return UpstreamResolutionResult.Invalid("Port must be between 1 and 65535.");
+        }
+
+        if (!IsAllowedHost(host))
+        {
+            return UpstreamResolutionResult.Invalid("Upstream host is not allowed.");
         }
 
         var normalizedRest = NormalizeRestPath(rest);
@@ -49,6 +57,17 @@ public sealed class XtreamUpstreamDestinationResolver
         }
 
         return Uri.CheckHostName(host) is UriHostNameType.Dns or UriHostNameType.IPv4;
+    }
+
+    private bool IsAllowedHost(string host)
+    {
+        var proxyOptions = options.Value;
+        if (proxyOptions.AllowAnyDestination)
+        {
+            return true;
+        }
+
+        return proxyOptions.AllowedHosts.Contains(host, StringComparer.OrdinalIgnoreCase);
     }
 
     private static string NormalizeRestPath(string? rest) => (rest ?? string.Empty).Trim('/');

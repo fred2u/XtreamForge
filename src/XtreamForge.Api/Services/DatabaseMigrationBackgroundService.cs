@@ -1,5 +1,4 @@
-using Microsoft.EntityFrameworkCore;
-using XtreamForge.Infrastructure.Data;
+using XtreamForge.Infrastructure.Services;
 
 namespace XtreamForge.Api.Services;
 
@@ -17,9 +16,7 @@ public sealed class DatabaseMigrationBackgroundService(
 
         try
         {
-            await using var scope = serviceProvider.CreateAsyncScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-            await dbContext.Database.MigrateAsync(stoppingToken);
+            await InfrastructureMigrationRunner.MigrateAsync(serviceProvider, stoppingToken);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {

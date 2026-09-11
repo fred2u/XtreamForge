@@ -107,6 +107,16 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Fact]
+    public async Task DisallowedHost_ReturnsBadRequest()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/http/not-allowed.example/8080/player_api.php");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Theory]
     [InlineData("get_vod_categories", null, null)]
     [InlineData("get_series_categories", null, null)]

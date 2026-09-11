@@ -21,7 +21,10 @@ public sealed class XtreamForgeApiFactory : WebApplicationFactory<Program>
             configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:database"] = "Host=localhost;Port=5432;Database=xtreamforge_tests;Username=test;******",
-                ["Database:ApplyMigrations"] = "false"
+                ["Database:ApplyMigrations"] = "false",
+                ["XtreamProxy:AllowedHosts:0"] = "example.com",
+                ["XtreamProxy:AllowedHosts:1"] = "127.0.0.1",
+                ["XtreamProxy:AllowedHosts:2"] = "localhost"
             });
         });
     }

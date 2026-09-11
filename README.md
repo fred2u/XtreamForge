@@ -51,6 +51,8 @@ Placeholder configuration sections are present for future integrations:
 - `Xtream:Username`
 - `Xtream:Password`
 - `Tmdb:ApiKey`
+- `XtreamProxy:AllowAnyDestination`
+- `XtreamProxy:AllowedHosts`
 
 Do not commit credentials.
 
@@ -64,6 +66,11 @@ dotnet user-secrets --project src/XtreamForge.Api set "Tmdb:ApiKey" "your-tmdb-k
 ```
 
 Database connections are supplied through the standard `ConnectionStrings__database` setting.
+
+Proxy destination control is configured through `XtreamProxy`:
+
+- `AllowAnyDestination`: development convenience switch; leave `false` outside trusted local development
+- `AllowedHosts`: explicit upstream DNS/IP allowlist used when `AllowAnyDestination` is `false`
 
 ## Run with .NET Aspire
 
@@ -143,7 +150,7 @@ Transparent fallback behavior:
 Security notes:
 
 - Xtream credentials in the query string are preserved for upstream forwarding but are not intentionally logged or persisted by this proxy layer.
-- The proxy route allows a client to choose the upstream destination, which has SSRF implications. XtreamForge currently enforces an explicit destination validation policy for protocol, host, and port and is designed so stricter authorization rules can be added later.
+- The proxy route allows a client to choose the upstream destination, which has SSRF implications. XtreamForge currently enforces an explicit destination validation policy for protocol, host, port, and configured upstream host authorization.
 - IPv4 addresses and DNS hostnames are supported in the route format today.
 - IPv6 literals are not currently supported by this path-based route format.
 - The generic Xtream proxy route is excluded from generated OpenAPI documentation to avoid misleading native API descriptions.

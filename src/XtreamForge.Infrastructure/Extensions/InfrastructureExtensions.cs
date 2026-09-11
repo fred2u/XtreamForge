@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using XtreamForge.Infrastructure.Configuration;
 using XtreamForge.Infrastructure.Data;
+using XtreamForge.Infrastructure.Services;
 
 namespace XtreamForge.Infrastructure.Extensions;
 
@@ -33,9 +34,7 @@ public static class InfrastructureExtensions
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        await using var scope = app.Services.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-        await dbContext.Database.MigrateAsync(cancellationToken);
+        await InfrastructureMigrationRunner.MigrateAsync(app.Services, cancellationToken);
     }
 
     private static void ConfigureDbContext(DbContextOptionsBuilder options, IConfiguration configuration)

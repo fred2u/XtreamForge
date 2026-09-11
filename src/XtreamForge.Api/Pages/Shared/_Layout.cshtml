@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - XtreamForge</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <div class="layout-shell">
+        <aside class="sidebar">
+            <div class="brand">XtreamForge</div>
+            <nav class="navigation">
+                <a asp-page="/Index">Dashboard</a>
+                <a asp-page="/Categories/Index">Categories</a>
+                <a asp-page="/Settings/Index">Settings</a>
+            </nav>
+        </aside>
+
+        <main class="content">
+            @RenderBody()
+        </main>
+    </div>
+</body>
+</html>

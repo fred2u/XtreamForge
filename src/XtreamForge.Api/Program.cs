@@ -7,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.AddXtreamForgeInfrastructure();
 builder.Services.AddOpenApi();
+builder.Services.AddRazorPages();
 
 var app = builder.Build();
 
@@ -17,6 +18,9 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseHttpsRedirection();
+app.MapStaticAssets();
+app.MapRazorPages();
 app.MapStatusEndpoints();
 
 if (app.Configuration.GetValue("Database:ApplyMigrations", true))

@@ -1,6 +1,5 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/XtreamForge.Admin/XtreamForge.Admin.csproj" />
     <Project Path="src/XtreamForge.Api/XtreamForge.Api.csproj" />
     <Project Path="src/XtreamForge.AppHost/XtreamForge.AppHost.csproj" />
     <Project Path="src/XtreamForge.Infrastructure/XtreamForge.Infrastructure.csproj" />

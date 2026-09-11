@@ -8,8 +8,7 @@ XtreamForge is an early-stage, self-hosted .NET application that will sit in fro
 
 This repository currently provides the initial foundation only:
 
-- ASP.NET Core Minimal API for future Xtream-compatible endpoints
-- Blazor-based administration UI
+- ASP.NET Core application combining Minimal APIs and integrated Razor Pages administration UI
 - .NET Aspire orchestration
 - PostgreSQL + EF Core infrastructure
 - Docker Compose development setup
@@ -22,17 +21,14 @@ Future Xtream proxying, category mapping, TMDB lookup, metadata rewriting, and a
 ```mermaid
 flowchart LR
     Client[Xtream Client] --> Api[XtreamForge API]
-    Admin[Admin UI] --> Api
     Api --> Upstream[Xtream upstream API]
     Api --> Tmdb[TMDB API]
     Api --> Db[(PostgreSQL)]
-    Admin --> Db
 ```
 
 ### Projects
 
-- `src/XtreamForge.Api` - Minimal API with health and status endpoints
-- `src/XtreamForge.Admin` - Blazor admin UI with a simple dashboard
+- `src/XtreamForge.Api` - Minimal APIs plus integrated Razor Pages admin UI with health and status endpoints
 - `src/XtreamForge.Infrastructure` - EF Core, PostgreSQL wiring, options, migrations
 - `src/XtreamForge.ServiceDefaults` - Aspire service defaults (OpenTelemetry, health checks, service discovery, resilience)
 - `src/XtreamForge.AppHost` - Aspire orchestration for local development
@@ -80,8 +76,7 @@ dotnet run --project src/XtreamForge.AppHost
 The AppHost starts:
 
 - PostgreSQL with persistent storage
-- `XtreamForge.Api`
-- `XtreamForge.Admin`
+- `XtreamForge.Api` (serving both API and administration UI)
 - the Aspire dashboard
 
 ## Run with Docker Compose
@@ -90,7 +85,7 @@ The AppHost starts:
 docker compose up --build
 ```
 
-This starts PostgreSQL, the API, and the Admin UI.
+This starts PostgreSQL and the single XtreamForge web service, which serves both the API and the administration UI.
 
 Development-only defaults are used in `docker-compose.yml`:
 
@@ -102,15 +97,15 @@ Override them for any non-local usage.
 
 ## PostgreSQL notes
 
-- Aspire injects the database connection into the applications.
+- Aspire injects the database connection into the application.
 - Docker Compose supplies the same connection via environment variables.
 - The API applies EF Core migrations on startup by default.
 
 ## Useful endpoints
 
+- Dashboard UI: `http://localhost:8080/`
 - API status: `http://localhost:8080/api/status`
 - API health: `http://localhost:8080/health`
-- Admin UI: `http://localhost:8081/`
 
 ## Test
 

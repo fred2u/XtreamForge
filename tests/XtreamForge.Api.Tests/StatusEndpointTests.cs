@@ -30,6 +30,21 @@ public sealed class StatusEndpointTests : IClassFixture<XtreamForgeApiFactory>
     }
 
     [Fact]
+    public async Task GetDashboard_ReturnsIntegratedRazorPagesUi()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/");
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("XtreamForge", content);
+        Assert.Contains("Dashboard", content);
+        Assert.Contains("Categories", content);
+        Assert.Contains("Settings", content);
+    }
+
+    [Fact]
     public void DependencyInjection_CanConstructInfrastructureServices()
     {
         using var scope = _factory.Services.CreateScope();

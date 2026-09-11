@@ -2,7 +2,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\XtreamForge.Api\XtreamForge.Api.csproj" />
-    <ProjectReference Include="..\XtreamForge.Admin\XtreamForge.Admin.csproj" />
   </ItemGroup>
 
   <ItemGroup>

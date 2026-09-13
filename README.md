@@ -207,6 +207,8 @@ Notes:
 
 - Source identity is based on upstream destination only; credentials are not used as the source key and are not stored with category records.
 - `get_vod_streams` and `get_series` translate XtreamForge output category IDs back to the currently effective upstream category IDs before querying/filtering results.
+- for `get_vod_streams` and `get_series`, missing `category_id`, empty `category_id`, and `category_id=ALL` all mean "all categories" and still pass through XtreamForge filtering/remapping.
+- in all-category mode, XtreamForge keeps the upstream query shape when possible: missing `category_id` stays absent upstream, while explicit `category_id=ALL` stays present.
 - returned stream and detail payloads expose XtreamForge category IDs instead of upstream category IDs.
 - effective reverse mappings exclude upstream categories removed by manual disable or category rules.
 - legacy source-local renamed/merged outputs are migrated into global custom-category records as safely as practical; identical legacy names are preserved rather than silently merged across sources.
@@ -295,6 +297,15 @@ player_api.php?action=get_vod_streams&category_id=5
 ```
 
 XtreamForge resolves output category `5` back to the currently effective included upstream categories for that output category, queries/filter results accordingly, and returns items with `category_id=5`.
+
+If the client requests either:
+
+```text
+player_api.php?action=get_vod_streams
+player_api.php?action=get_vod_streams&category_id=ALL
+```
+
+XtreamForge treats both requests as "all categories", performs one upstream catalogue request, rewrites `category_id` / `category_ids` to XtreamForge IDs, removes excluded category references, drops items with no effective included category, and deduplicates the result set. The same behavior applies to `get_series`.
 
 ## Useful endpoints
 

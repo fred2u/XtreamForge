@@ -39,11 +39,11 @@ public sealed class XtreamContentProxyService(
         try
         {
             var categoryContext = await RefreshCategoryContextAsync(destination, classification.ContentType!.Value, context, context.RequestAborted);
-            var requestedCategoryId = context.Request.Query["category_id"].ToString();
+            var categoryRequest = ClassifyCategoryRequest(context.Request.Query);
             var responsePayload = new JsonArray();
             var seenIds = new HashSet<string>(StringComparer.Ordinal);
 
-            foreach (var targetUri in GetStreamTargetUris(destination.TargetUri, context.Request.Query, categoryContext, requestedCategoryId))
+            foreach (var targetUri in GetStreamTargetUris(destination.TargetUri, context.Request.Query, categoryContext, categoryRequest))
             {
                 using var requestMessage = XtreamProxyHttpRequestFactory.Create(targetUri, context.Request);
                 var httpClient = httpClientFactory.CreateClient(ForwarderService.HttpClientName);
@@ -195,15 +195,15 @@ public sealed class XtreamContentProxyService(
         Uri originalTargetUri,
         IQueryCollection originalQuery,
         EffectiveCategoryContext categoryContext,
-        string requestedCategoryId)
+        CategoryRequest categoryRequest)
     {
-        if (string.IsNullOrWhiteSpace(requestedCategoryId))
+        if (categoryRequest.Mode == CategoryRequestMode.All)
         {
             yield return originalTargetUri;
             yield break;
         }
 
-        if (!categoryContext.OutputToUpstreamCategoryIds.TryGetValue(requestedCategoryId, out var upstreamCategoryIds)
+        if (!categoryContext.OutputToUpstreamCategoryIds.TryGetValue(categoryRequest.CategoryId!, out var upstreamCategoryIds)
             || upstreamCategoryIds.Count == 0)
         {
             yield break;
@@ -231,25 +231,59 @@ public sealed class XtreamContentProxyService(
                 continue;
             }
 
-            var upstreamCategoryId = TryGetScalarString(jsonObject["category_id"]);
-            if (upstreamCategoryId is null
-                || !categoryContext.UpstreamToOutputCategoryIds.TryGetValue(upstreamCategoryId, out var outputCategoryId))
+            var dedupeKey = TryGetScalarString(jsonObject[identifierProperty])
+                ?? jsonObject.ToJsonString();
+
+            var clonedObject = (JsonObject)jsonObject.DeepClone();
+            var rewriteResult = RewriteCategoryReferences(clonedObject, categoryContext.UpstreamToOutputCategoryIds);
+            if (!rewriteResult.FoundCategoryReference || rewriteResult.IncludedOutputCategoryIds.Count == 0)
             {
                 continue;
             }
 
-            var dedupeKey = TryGetScalarString(jsonObject[identifierProperty])
-                ?? jsonObject.ToJsonString();
+            NormalizePrimaryCategoryId(clonedObject);
 
             if (!seenIds.Add(dedupeKey))
             {
                 continue;
             }
 
-            var clonedObject = (JsonObject)jsonObject.DeepClone();
-            clonedObject["category_id"] = outputCategoryId;
             resultItems.Add(clonedObject);
         }
+    }
+
+    private static void NormalizePrimaryCategoryId(JsonObject jsonObject)
+    {
+        var categoryId = TryGetScalarString(jsonObject["category_id"]);
+        if (!string.IsNullOrWhiteSpace(categoryId))
+        {
+            return;
+        }
+
+        if (jsonObject["category_ids"] is not JsonArray categoryIdsArray)
+        {
+            return;
+        }
+
+        var firstIncludedCategoryId = categoryIdsArray
+            .Select(TryGetScalarString)
+            .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
+
+        if (firstIncludedCategoryId is not null)
+        {
+            jsonObject["category_id"] = firstIncludedCategoryId;
+        }
+    }
+
+    private static CategoryRequest ClassifyCategoryRequest(IQueryCollection query)
+    {
+        var requestedCategoryId = query["category_id"].ToString();
+        var normalizedCategoryId = requestedCategoryId.Trim();
+
+        return string.IsNullOrWhiteSpace(normalizedCategoryId)
+            || normalizedCategoryId.Equals("ALL", StringComparison.OrdinalIgnoreCase)
+            ? new CategoryRequest(CategoryRequestMode.All, null)
+            : new CategoryRequest(CategoryRequestMode.Specific, normalizedCategoryId);
     }
 
     private static CategoryRewriteResult RewriteCategoryReferences(JsonNode node, IReadOnlyDictionary<string, string> upstreamToOutputCategoryIds)
@@ -456,6 +490,16 @@ public sealed class XtreamContentProxyService(
     private sealed record EffectiveCategoryContext(
         IReadOnlyDictionary<string, IReadOnlyList<string>> OutputToUpstreamCategoryIds,
         IReadOnlyDictionary<string, string> UpstreamToOutputCategoryIds);
+
+    private sealed record CategoryRequest(
+        CategoryRequestMode Mode,
+        string? CategoryId);
+
+    private enum CategoryRequestMode
+    {
+        All = 1,
+        Specific = 2
+    }
 
     private sealed record CategoryRewriteResult(
         bool FoundCategoryReference,

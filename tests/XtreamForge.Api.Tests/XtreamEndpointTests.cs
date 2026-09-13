@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -190,8 +191,201 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.DoesNotContain(handler.Requests, request => request.RequestUri?.Query.Contains("category_id=10", StringComparison.Ordinal) == true);
     }
 
+    [Theory]
+    [InlineData("", null)]
+    [InlineData("&category_id=ALL", "ALL")]
+    [InlineData("&category_id=all", "all")]
+    [InlineData("&category_id=All", "All")]
+    [InlineData("&category_id=", "")]
+    public async Task GetVodStreams_AllCategoryModes_UseSingleUpstreamRequest_AndApplyEquivalentTransformations(string querySuffix, string? expectedForwardedCategoryId)
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        await using (var scope = setupFactory.Services.CreateAsyncScope())
+        {
+            var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+            var ruleService = scope.ServiceProvider.GetRequiredService<CategoryRuleService>();
+
+            await mappingService.SyncCategoriesAsync(
+                new XtreamSourceDescriptor("https", "example.com", 443),
+                ContentType.Vod,
+                [
+                    new DiscoveredCategory("10", "Movies A"),
+                    new DiscoveredCategory("20", "SPORT Movies"),
+                    new DiscoveredCategory("30", "Movies B")
+                ]);
+
+            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+            var sourceId = await dbContext.XtreamSources.Select(source => source.Id).SingleAsync();
+            var categories = await dbContext.UpstreamCategories.OrderBy(category => category.UpstreamCategoryId).ToListAsync();
+            var category20 = categories.Single(category => category.UpstreamCategoryId == "20");
+            var category30 = categories.Single(category => category.UpstreamCategoryId == "30");
+
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category20.Id, sourceId, ContentType.Vod, CategoryMappingSelection.Disabled, null, null));
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category30.Id, sourceId, ContentType.Vod, CategoryMappingSelection.Custom, null, "Movies B Shared"));
+            await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
+        }
+
+        var handler = new FakeForwarderHandler((request, _) =>
+        {
+            var action = ParseQuery(request.RequestUri, "action");
+            return Task.FromResult(action switch
+            {
+                "get_vod_streams" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, """
+                    [
+                      {"stream_id":"101","name":"Movie A","category_id":"10","category_ids":["10","20"],"stream_icon":"poster-a"},
+                      {"stream_id":"102","name":"Filtered","category_id":"20","category_ids":["20"],"stream_icon":"poster-b"},
+                      {"stream_id":"103","name":"Movie B","category_id":"30","category_ids":"[\"30\"]","stream_icon":"poster-c"},
+                      {"stream_id":"103","name":"Movie B duplicate","category_id":"30","category_ids":["30"],"stream_icon":"poster-c-dup"}
+                    ]
+                    """),
+                _ => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.BadRequest, "{}")
+            });
+        });
+
+        using var verifyScope = setupFactory.Services.CreateAsyncScope();
+        var verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var customCategoryId = await verifyDbContext.CustomCategories.Select(category => category.XtreamForgeCategoryId).SingleAsync();
+
+        using var factory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(handler);
+        using var client = factory.CreateClient();
+        var response = await client.GetAsync($"/https/example.com/443/player_api.php?action=get_vod_streams{querySuffix}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Single(handler.Requests);
+        Assert.Equal(expectedForwardedCategoryId, ParseQuery(Assert.Single(handler.Requests).RequestUri, "category_id"));
+
+        var payload = await response.Content.ReadFromJsonAsync<List<ExtendedStreamResponse>>();
+        Assert.NotNull(payload);
+        Assert.Equal(2, payload.Count);
+
+        var movieA = Assert.Single(payload, item => item.Id == "101");
+        Assert.Equal("1", movieA.CategoryId);
+        Assert.Equal(["1"], movieA.CategoryIds);
+        Assert.Equal("poster-a", movieA.StreamIcon);
+
+        var movieB = Assert.Single(payload, item => item.Id == "103");
+        Assert.Equal(customCategoryId.ToString(), movieB.CategoryId);
+        Assert.Equal([customCategoryId.ToString()], movieB.CategoryIds);
+        Assert.Equal("poster-c", movieB.StreamIcon);
+    }
+
+    [Theory]
+    [InlineData("", null)]
+    [InlineData("&category_id=ALL", "ALL")]
+    public async Task GetSeries_AllCategoryModes_UseSingleUpstreamRequest_AndApplyEffectiveMappings(string querySuffix, string? expectedForwardedCategoryId)
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        await using (var scope = setupFactory.Services.CreateAsyncScope())
+        {
+            var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+            var ruleService = scope.ServiceProvider.GetRequiredService<CategoryRuleService>();
+
+            await mappingService.SyncCategoriesAsync(
+                new XtreamSourceDescriptor("https", "example.com", 443),
+                ContentType.Series,
+                [
+                    new DiscoveredCategory("10", "Drama"),
+                    new DiscoveredCategory("20", "SPORT Series"),
+                    new DiscoveredCategory("30", "Drama Plus")
+                ]);
+
+            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+            var sourceId = await dbContext.XtreamSources.Select(source => source.Id).SingleAsync();
+            var category30 = await dbContext.UpstreamCategories.SingleAsync(category => category.UpstreamCategoryId == "30");
+
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category30.Id, sourceId, ContentType.Series, CategoryMappingSelection.Custom, null, "Drama Shared"));
+            await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Series, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
+        }
+
+        var handler = new FakeForwarderHandler((request, _) =>
+        {
+            var action = ParseQuery(request.RequestUri, "action");
+            return Task.FromResult(action switch
+            {
+                "get_series" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, """
+                    [
+                      {"series_id":"501","name":"Series A","category_id":"10"},
+                      {"series_id":"502","name":"Series B","category_id":"20"},
+                      {"series_id":"503","name":"Series C","category_id":"30","category_ids":["30"]},
+                      {"series_id":"503","name":"Series C duplicate","category_id":"30","category_ids":["30"]}
+                    ]
+                    """),
+                _ => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.BadRequest, "{}")
+            });
+        });
+
+        using var verifyScope = setupFactory.Services.CreateAsyncScope();
+        var verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var customCategoryId = await verifyDbContext.CustomCategories.Select(category => category.XtreamForgeCategoryId).SingleAsync();
+
+        using var factory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(handler);
+        using var client = factory.CreateClient();
+        var response = await client.GetAsync($"/https/example.com/443/player_api.php?action=get_series{querySuffix}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Single(handler.Requests);
+        Assert.Equal(expectedForwardedCategoryId, ParseQuery(Assert.Single(handler.Requests).RequestUri, "category_id"));
+
+        var payload = await response.Content.ReadFromJsonAsync<List<ExtendedSeriesResponse>>();
+        Assert.NotNull(payload);
+        Assert.Equal(2, payload.Count);
+        Assert.Equal(("501", "1"), (payload[0].Id, payload[0].CategoryId));
+        Assert.Equal(("503", customCategoryId.ToString()), (payload[1].Id, payload[1].CategoryId));
+        Assert.Equal([customCategoryId.ToString()], payload[1].CategoryIds);
+    }
+
     [Fact]
-    public async Task GetSeries_WithoutCategoryFilter_FiltersExcludedItems_AndRewritesCategoryIds()
+    public async Task GetVodStreams_MissingCategoryId_AndExplicitAll_ProduceEquivalentTransformedJson()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        await using (var scope = setupFactory.Services.CreateAsyncScope())
+        {
+            var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+            var ruleService = scope.ServiceProvider.GetRequiredService<CategoryRuleService>();
+
+            await mappingService.SyncCategoriesAsync(
+                new XtreamSourceDescriptor("https", "example.com", 443),
+                ContentType.Vod,
+                [
+                    new DiscoveredCategory("10", "Movies A"),
+                    new DiscoveredCategory("20", "SPORT Movies")
+                ]);
+
+            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+            var sourceId = await dbContext.XtreamSources.Select(source => source.Id).SingleAsync();
+            await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
+        }
+
+        var handler = CreateJsonHandler("""
+            [
+              {"stream_id":"101","name":"Movie A","category_id":"10","category_ids":["10","20"]},
+              {"stream_id":"102","name":"Filtered","category_id":"20","category_ids":["20"]}
+            ]
+            """);
+
+        using var factory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(handler);
+        using var client = factory.CreateClient();
+
+        var missingResponse = await client.GetAsync("/https/example.com/443/player_api.php?action=get_vod_streams");
+        var allResponse = await client.GetAsync("/https/example.com/443/player_api.php?action=get_vod_streams&category_id=ALL");
+
+        var missingJson = JsonNode.Parse(await missingResponse.Content.ReadAsStringAsync());
+        var allJson = JsonNode.Parse(await allResponse.Content.ReadAsStringAsync());
+
+        Assert.True(JsonNode.DeepEquals(missingJson, allJson));
+    }
+
+    [Fact]
+    public async Task GetSeries_MissingCategoryId_AndExplicitAll_ProduceEquivalentTransformedJson()
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
         using var setupFactory = _factory.WithSqliteDatabase(databasePath);
@@ -215,25 +409,23 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
             await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Series, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
         }
 
-        var handler = new FakeForwarderHandler((request, _) =>
-        {
-            var action = ParseQuery(request.RequestUri, "action");
-            return Task.FromResult(action switch
-            {
-                "get_series" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "[{\"series_id\":\"501\",\"name\":\"Series A\",\"category_id\":\"10\"},{\"series_id\":\"502\",\"name\":\"Series B\",\"category_id\":\"20\"}]"),
-                _ => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.BadRequest, "{}")
-            });
-        });
+        var handler = CreateJsonHandler("""
+            [
+              {"series_id":"501","name":"Series A","category_id":"10","category_ids":["10"]},
+              {"series_id":"502","name":"Filtered","category_id":"20","category_ids":["20"]}
+            ]
+            """);
 
         using var factory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(handler);
         using var client = factory.CreateClient();
-        var response = await client.GetAsync("/https/example.com/443/player_api.php?action=get_series");
-        var payload = await response.Content.ReadFromJsonAsync<List<SeriesResponse>>();
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(payload);
-        Assert.Single(payload);
-        Assert.Equal(("501", "1"), (payload[0].Id, payload[0].CategoryId));
+        var missingResponse = await client.GetAsync("/https/example.com/443/player_api.php?action=get_series");
+        var allResponse = await client.GetAsync("/https/example.com/443/player_api.php?action=get_series&category_id=ALL");
+
+        var missingJson = JsonNode.Parse(await missingResponse.Content.ReadAsStringAsync());
+        var allJson = JsonNode.Parse(await allResponse.Content.ReadAsStringAsync());
+
+        Assert.True(JsonNode.DeepEquals(missingJson, allJson));
     }
 
     [Fact]
@@ -962,7 +1154,7 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
             return null;
         }
 
-        var match = Regex.Match(requestUri.Query, $@"(?:\?|&){Regex.Escape(key)}=([^&]+)");
+        var match = Regex.Match(requestUri.Query, $@"(?:\?|&){Regex.Escape(key)}=([^&]*)");
         return match.Success ? Uri.UnescapeDataString(match.Groups[1].Value) : null;
     }
 
@@ -976,7 +1168,18 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         [property: JsonPropertyName("stream_id")] string Id,
         [property: JsonPropertyName("category_id")] string CategoryId);
 
+    private sealed record ExtendedStreamResponse(
+        [property: JsonPropertyName("stream_id")] string Id,
+        [property: JsonPropertyName("category_id")] string CategoryId,
+        [property: JsonPropertyName("category_ids")] string[] CategoryIds,
+        [property: JsonPropertyName("stream_icon")] string StreamIcon);
+
     private sealed record SeriesResponse(
         [property: JsonPropertyName("series_id")] string Id,
         [property: JsonPropertyName("category_id")] string CategoryId);
+
+    private sealed record ExtendedSeriesResponse(
+        [property: JsonPropertyName("series_id")] string Id,
+        [property: JsonPropertyName("category_id")] string CategoryId,
+        [property: JsonPropertyName("category_ids")] string[]? CategoryIds);
 }

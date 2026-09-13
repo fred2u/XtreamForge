@@ -2,13 +2,9 @@ using XtreamForge.Infrastructure.Models;
 
 namespace XtreamForge.Infrastructure.Data;
 
-public sealed class OutputCategory
+public sealed class CustomCategory
 {
     public int Id { get; set; }
-
-    public int XtreamSourceId { get; set; }
-
-    public XtreamSource XtreamSource { get; set; } = null!;
 
     public ContentType ContentType { get; set; }
 
@@ -16,11 +12,11 @@ public sealed class OutputCategory
 
     public required string DisplayName { get; set; }
 
-    public int SortOrder { get; set; }
+    public string? NormalizedDisplayName { get; set; }
 
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 
-    public ICollection<UpstreamCategory> DedicatedUpstreamCategories { get; set; } = [];
+    public ICollection<UpstreamCategory> UpstreamCategories { get; set; } = [];
 }

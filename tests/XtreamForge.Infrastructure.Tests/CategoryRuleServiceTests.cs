@@ -136,6 +136,65 @@ public sealed class CategoryRuleServiceTests
         Assert.False(disabledPreview.Evaluation.IsMatch);
     }
 
+    [Fact]
+    public async Task DeleteRuleAsync_RemovesPersistedRuleAndKeepsRemainingRuleOrderStable()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var serviceProvider = CreateServiceProvider(connection);
+        await EnsureCreatedAsync(serviceProvider);
+
+        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
+        await SeedVodCategoriesAsync(mappingService);
+        var sourceId = await GetSourceIdAsync(serviceProvider);
+
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Include, CategoryRuleOperator.Contains, "DOCUMENTAIRE", false, true));
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.StartsWith, "|XXX|", false, true));
+
+        await using (var deleteScope = serviceProvider.CreateAsyncScope())
+        {
+            var dbContext = deleteScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+            var ruleToDelete = await dbContext.CategoryRules.SingleAsync(rule => rule.Pattern == "SPORT");
+            await ruleService.DeleteRuleAsync(new CategoryRuleDeleteCommand(ruleToDelete.Id, sourceId, ContentType.Vod, true));
+        }
+
+        await using (var verifyScope = serviceProvider.CreateAsyncScope())
+        {
+            var dbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+            var persistedRules = await dbContext.CategoryRules.AsNoTracking().OrderBy(rule => rule.Sequence).ToListAsync();
+
+            Assert.Equal(2, persistedRules.Count);
+            Assert.DoesNotContain(persistedRules, rule => rule.Pattern == "SPORT");
+            Assert.Equal([10, 20], persistedRules.Select(rule => rule.Sequence).ToArray());
+        }
+
+        var preview = await ruleService.PreviewAsync(sourceId, ContentType.Vod, "|FR| SPORT");
+        Assert.NotNull(preview);
+        Assert.Equal(CategoryInclusionDecision.Include, preview.Evaluation.Decision);
+        Assert.False(preview.Evaluation.IsMatch);
+    }
+
+    [Fact]
+    public async Task DeleteRuleAsync_WhenRuleDoesNotExist_ThrowsMeaningfulError()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var serviceProvider = CreateServiceProvider(connection);
+        await EnsureCreatedAsync(serviceProvider);
+
+        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
+        await SeedVodCategoriesAsync(mappingService);
+        var sourceId = await GetSourceIdAsync(serviceProvider);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ruleService.DeleteRuleAsync(new CategoryRuleDeleteCommand(99999, sourceId, ContentType.Vod, true)));
+
+        Assert.Contains("not found", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ServiceProvider CreateServiceProvider(SqliteConnection connection)
     {
         var services = new ServiceCollection();

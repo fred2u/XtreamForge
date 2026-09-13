@@ -16,13 +16,13 @@ public sealed class UpstreamCategory
 
     public required string UpstreamCategoryName { get; set; }
 
-    public int? OutputCategoryId { get; set; }
-
-    public OutputCategory? OutputCategory { get; set; }
-
     public int DedicatedOutputCategoryId { get; set; }
 
     public OutputCategory DedicatedOutputCategory { get; set; } = null!;
+
+    public int? CustomCategoryId { get; set; }
+
+    public CustomCategory? CustomCategory { get; set; }
 
     public bool IsExcluded { get; set; }
 

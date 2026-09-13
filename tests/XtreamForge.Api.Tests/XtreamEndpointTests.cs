@@ -152,8 +152,9 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
             var category20 = categories.Single(category => category.UpstreamCategoryId == "20");
             var category30 = categories.Single(category => category.UpstreamCategoryId == "30");
 
-            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category20.Id, sourceId, ContentType.Vod, false, category10.DedicatedOutputCategoryId, "Movies"));
-            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category30.Id, sourceId, ContentType.Vod, false, category10.DedicatedOutputCategoryId, "Movies"));
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category20.Id, sourceId, ContentType.Vod, CategoryMappingSelection.Custom, null, "Movies"));
+            var customCategoryRecordId = await dbContext.CustomCategories.Select(category => category.Id).SingleAsync();
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category30.Id, sourceId, ContentType.Vod, CategoryMappingSelection.Custom, customCategoryRecordId, null));
             await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
         }
 
@@ -170,21 +171,23 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
             });
         });
 
+        await using var verifyScope = setupFactory.Services.CreateAsyncScope();
+        var verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var customCategoryId = await verifyDbContext.CustomCategories.Select(category => category.XtreamForgeCategoryId).SingleAsync();
+
         using var factory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(handler);
         using var client = factory.CreateClient();
-        var response = await client.GetAsync("/https/example.com/443/player_api.php?action=get_vod_streams&category_id=1");
+        var response = await client.GetAsync($"/https/example.com/443/player_api.php?action=get_vod_streams&category_id={customCategoryId}");
         var payload = await response.Content.ReadFromJsonAsync<List<StreamResponse>>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);
-        Assert.Collection(
-            payload,
-            first => Assert.Equal(("100", "1"), (first.Id, first.CategoryId)),
-            second => Assert.Equal(("300", "1"), (second.Id, second.CategoryId)));
-        Assert.Equal(2, handler.Requests.Count);
-        Assert.Contains(handler.Requests, request => request.RequestUri?.Query.Contains("category_id=10", StringComparison.Ordinal) == true);
+        Assert.Single(payload);
+        Assert.Equal(("300", customCategoryId.ToString()), (payload[0].Id, payload[0].CategoryId));
+        Assert.Single(handler.Requests);
         Assert.Contains(handler.Requests, request => request.RequestUri?.Query.Contains("category_id=30", StringComparison.Ordinal) == true);
         Assert.DoesNotContain(handler.Requests, request => request.RequestUri?.Query.Contains("category_id=20", StringComparison.Ordinal) == true);
+        Assert.DoesNotContain(handler.Requests, request => request.RequestUri?.Query.Contains("category_id=10", StringComparison.Ordinal) == true);
     }
 
     [Fact]
@@ -257,10 +260,9 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
             var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
             var sourceId = await dbContext.XtreamSources.Select(source => source.Id).SingleAsync();
             var categories = await dbContext.UpstreamCategories.OrderBy(category => category.UpstreamCategoryId).ToListAsync();
-            var category10 = categories.Single(category => category.UpstreamCategoryId == "10");
             var category30 = categories.Single(category => category.UpstreamCategoryId == "30");
 
-            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category30.Id, sourceId, ContentType.Vod, false, category10.DedicatedOutputCategoryId, "Movies"));
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category30.Id, sourceId, ContentType.Vod, CategoryMappingSelection.Custom, null, "Movies"));
             await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
         }
 
@@ -279,10 +281,14 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         var response = await client.GetAsync("/https/example.com/443/player_api.php?action=get_vod_info&vod_id=100");
         var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
 
+        await using var verifyScope = setupFactory.Services.CreateAsyncScope();
+        var verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var customCategoryId = await verifyDbContext.CustomCategories.Select(category => category.XtreamForgeCategoryId).SingleAsync();
+
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("1", payload.GetProperty("info").GetProperty("category_id").GetString());
-        Assert.Equal(["1"], payload.GetProperty("info").GetProperty("category_ids").EnumerateArray().Select(value => value.GetString()!).ToArray());
-        Assert.Equal("1", payload.GetProperty("movie_data").GetProperty("category_id").GetString());
+        Assert.Equal(["1", customCategoryId.ToString()], payload.GetProperty("info").GetProperty("category_ids").EnumerateArray().Select(value => value.GetString()!).ToArray());
+        Assert.Equal(customCategoryId.ToString(), payload.GetProperty("movie_data").GetProperty("category_id").GetString());
     }
 
     [Fact]
@@ -402,24 +408,24 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
                 category42.Id,
                 category42.XtreamSourceId,
                 ContentType.Vod,
-                false,
+                CategoryMappingSelection.Custom,
                 null,
                 "|FR| FILMS 4K"));
 
-            category42 = await dbContext.UpstreamCategories.AsNoTracking().SingleAsync(category => category.Id == category42.Id);
+            var customCategoryId = await dbContext.CustomCategories.Select(category => category.Id).SingleAsync();
             await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(
                 category57.Id,
                 category57.XtreamSourceId,
                 ContentType.Vod,
-                false,
-                category42.DedicatedOutputCategoryId,
-                "|FR| FILMS 4K"));
+                CategoryMappingSelection.Custom,
+                customCategoryId,
+                null));
 
             await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(
                 category94.Id,
                 category94.XtreamSourceId,
                 ContentType.Vod,
-                true,
+                CategoryMappingSelection.Disabled,
                 null,
                 null));
         }
@@ -434,15 +440,16 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);
         Assert.Single(payload);
-        Assert.Equal("1", payload[0].CategoryId);
-        Assert.Equal("|FR| FILMS 4K", payload[0].CategoryName);
-
         await using var verifyScope = rewriteFactory.Services.CreateAsyncScope();
         var verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var customCategory = await verifyDbContext.CustomCategories.SingleAsync();
+        Assert.Equal(customCategory.XtreamForgeCategoryId.ToString(), payload[0].CategoryId);
+        Assert.Equal("|FR| FILMS 4K", payload[0].CategoryName);
+
         var excludedCategory = await verifyDbContext.UpstreamCategories.SingleAsync(category => category.UpstreamCategoryId == "94");
         var mergedCategory = await verifyDbContext.UpstreamCategories.SingleAsync(category => category.UpstreamCategoryId == "57");
         Assert.True(excludedCategory.IsExcluded);
-        Assert.Equal(1, mergedCategory.OutputCategoryId);
+        Assert.Equal(customCategory.Id, mergedCategory.CustomCategoryId);
     }
 
     [Fact]
@@ -561,12 +568,12 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
             var ruleService = scope.ServiceProvider.GetRequiredService<CategoryRuleService>();
             var sourceId = await dbContext.XtreamSources.Select(source => source.Id).SingleAsync();
             var categories = await dbContext.UpstreamCategories.OrderBy(category => category.UpstreamCategoryId).ToListAsync();
-            var category10 = categories.Single(category => category.UpstreamCategoryId == "10");
             var category20 = categories.Single(category => category.UpstreamCategoryId == "20");
             var category30 = categories.Single(category => category.UpstreamCategoryId == "30");
 
-            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category20.Id, sourceId, ContentType.Vod, false, category10.DedicatedOutputCategoryId, "Movies"));
-            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category30.Id, sourceId, ContentType.Vod, false, category10.DedicatedOutputCategoryId, "Movies"));
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category20.Id, sourceId, ContentType.Vod, CategoryMappingSelection.Custom, null, "Movies"));
+            var customCategoryId = await dbContext.CustomCategories.Select(category => category.Id).SingleAsync();
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category30.Id, sourceId, ContentType.Vod, CategoryMappingSelection.Custom, customCategoryId, null));
             await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
         }
 
@@ -576,8 +583,9 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         var payload = await response.Content.ReadFromJsonAsync<List<CategoryResponse>>();
 
         Assert.NotNull(payload);
-        Assert.Single(payload);
-        Assert.Equal("Movies", payload[0].CategoryName);
+        Assert.Equal(2, payload.Count);
+        Assert.Contains(payload, category => category.CategoryName == "Movies A");
+        Assert.Contains(payload, category => category.CategoryName == "Movies");
     }
 
     [Fact]
@@ -810,52 +818,7 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
     }
 
     [Fact]
-    public async Task CategorySavePost_RedirectsUsingPersistedCategoryContext()
-    {
-        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
-        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
-        await EnsureDatabaseCreatedAsync(setupFactory);
-
-        using (var discoveryFactory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(CreateJsonHandler("[{\"category_id\":\"42\",\"category_name\":\"Alpha\"}]")))
-        using (var discoveryClient = discoveryFactory.CreateClient())
-        {
-            var discoveryResponse = await discoveryClient.GetAsync("/https/example.com/443/player_api.php?action=get_vod_categories");
-            Assert.Equal(HttpStatusCode.OK, discoveryResponse.StatusCode);
-        }
-
-        await using var scope = setupFactory.Services.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-        var source = await dbContext.XtreamSources.AsNoTracking().SingleAsync();
-        var upstreamCategory = await dbContext.UpstreamCategories.AsNoTracking().SingleAsync();
-
-        using var pageFactory = _factory.WithSqliteDatabase(databasePath);
-        using var client = pageFactory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-
-        var getResponse = await client.GetAsync($"/categories?sourceId={source.Id}&contentType=Vod");
-        var pageHtml = await getResponse.Content.ReadAsStringAsync();
-        var tokenMatch = Regex.Match(pageHtml, "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"");
-
-        Assert.True(getResponse.IsSuccessStatusCode);
-        Assert.True(tokenMatch.Success);
-
-        using var form = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["__RequestVerificationToken"] = tokenMatch.Groups[1].Value,
-            ["UpstreamCategoryRecordId"] = upstreamCategory.Id.ToString(),
-            ["SelectedSourceId"] = source.Id.ToString(),
-            ["SelectedContentType"] = ContentType.Vod.ToString(),
-            ["IsExcluded"] = "false",
-            ["OutputName"] = "Renamed"
-        });
-
-        var postResponse = await client.PostAsync("/categories?handler=Save", form);
-
-        Assert.Equal(HttpStatusCode.Redirect, postResponse.StatusCode);
-        Assert.Equal($"/categories?sourceId={source.Id}&contentType=Vod", postResponse.Headers.Location?.OriginalString);
-    }
-
-    [Fact]
-    public async Task CategoryRuleAdmin_NewRuleForm_DefaultsToEnabled()
+    public async Task CategoriesPage_ReturnsInteractiveAdminShell()
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
         using var setupFactory = _factory.WithSqliteDatabase(databasePath);
@@ -873,217 +836,47 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         using var client = pageFactory.CreateClient();
         var pageHtml = await GetCategoriesPageHtmlAsync(client, source.Id, ContentType.Vod);
 
-        Assert.True(IsCreateRuleEnabledChecked(pageHtml));
+        Assert.Contains("blazor.server.js", pageHtml, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Search", pageHtml, StringComparison.Ordinal);
+        Assert.Contains("Status", pageHtml, StringComparison.Ordinal);
+        Assert.Contains("Global custom categories", pageHtml, StringComparison.Ordinal);
+        Assert.Contains("Add rule", pageHtml, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task CategoryRuleAdmin_UiBinding_PersistsEnabledStateAcrossCreateUpdateAndReload()
+    public async Task CategoriesPage_PrerrenderedGridShowsMatchedRuleAndManualDisabledStatus()
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
         using var setupFactory = _factory.WithSqliteDatabase(databasePath);
         await EnsureDatabaseCreatedAsync(setupFactory);
 
-        using (var discoveryFactory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(CreateJsonHandler("[{\"category_id\":\"42\",\"category_name\":\"Alpha\"}]")))
-        using (var discoveryClient = discoveryFactory.CreateClient())
+        await using (var scope = setupFactory.Services.CreateAsyncScope())
         {
-            await discoveryClient.GetAsync("/https/example.com/443/player_api.php?action=get_vod_categories");
+            var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+            var ruleService = scope.ServiceProvider.GetRequiredService<CategoryRuleService>();
+
+            await mappingService.SyncCategoriesAsync(
+                new XtreamSourceDescriptor("https", "example.com", 443),
+                ContentType.Vod,
+                [new DiscoveredCategory("42", "|FR| DOCUMENTAIRE")]);
+
+            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+            var sourceId = await dbContext.XtreamSources.Select(source => source.Id).SingleAsync();
+            var category = await dbContext.UpstreamCategories.SingleAsync();
+
+            await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Include, CategoryRuleOperator.Contains, "DOCUMENTAIRE", false, true));
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category.Id, sourceId, ContentType.Vod, CategoryMappingSelection.Disabled, null, null));
         }
 
         var source = await GetSourceAsync(setupFactory);
 
         using var pageFactory = _factory.WithSqliteDatabase(databasePath);
-        using var client = pageFactory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-
-        var token = await GetAntiforgeryTokenAsync(client, source.Id, ContentType.Vod);
-        using var createRule = CreateCategoryRuleFormContent(
-            token,
-            source.Id,
-            ContentType.Vod,
-            CategoryRuleAction.Exclude,
-            CategoryRuleOperator.Contains,
-            "SPORT",
-            caseSensitive: false,
-            isEnabled: true);
-
-        var createResponse = await client.PostAsync("/categories?handler=CreateRule", createRule);
-        Assert.Equal(HttpStatusCode.Redirect, createResponse.StatusCode);
-
-        var rule = await GetRuleByPatternAsync(setupFactory, "SPORT");
-        Assert.True(rule.IsEnabled);
-        Assert.False(rule.CaseSensitive);
-
+        using var client = pageFactory.CreateClient();
         var pageHtml = await GetCategoriesPageHtmlAsync(client, source.Id, ContentType.Vod);
-        Assert.True(IsRuleCheckboxChecked(pageHtml, rule.Id, "rule-enabled"));
 
-        token = await GetAntiforgeryTokenAsync(client, source.Id, ContentType.Vod);
-        using var disableRule = CreateCategoryRuleFormContent(
-            token,
-            source.Id,
-            ContentType.Vod,
-            rule.Action,
-            rule.Operator,
-            rule.Pattern,
-            caseSensitive: rule.CaseSensitive,
-            isEnabled: false,
-            ruleId: rule.Id);
-
-        var disableResponse = await client.PostAsync("/categories?handler=UpdateRule", disableRule);
-        Assert.Equal(HttpStatusCode.Redirect, disableResponse.StatusCode);
-
-        var disabledRule = await GetRuleByIdAsync(setupFactory, rule.Id);
-        Assert.False(disabledRule.IsEnabled);
-        Assert.Equal(rule.Sequence, disabledRule.Sequence);
-        Assert.Equal(rule.Action, disabledRule.Action);
-        Assert.Equal(rule.Operator, disabledRule.Operator);
-        Assert.Equal(rule.Pattern, disabledRule.Pattern);
-        Assert.Equal(rule.CaseSensitive, disabledRule.CaseSensitive);
-
-        pageHtml = await GetCategoriesPageHtmlAsync(client, source.Id, ContentType.Vod);
-        Assert.False(IsRuleCheckboxChecked(pageHtml, rule.Id, "rule-enabled"));
-
-        token = await GetAntiforgeryTokenAsync(client, source.Id, ContentType.Vod);
-        using var enableRule = CreateCategoryRuleFormContent(
-            token,
-            source.Id,
-            ContentType.Vod,
-            rule.Action,
-            rule.Operator,
-            rule.Pattern,
-            caseSensitive: rule.CaseSensitive,
-            isEnabled: true,
-            ruleId: rule.Id);
-
-        var enableResponse = await client.PostAsync("/categories?handler=UpdateRule", enableRule);
-        Assert.Equal(HttpStatusCode.Redirect, enableResponse.StatusCode);
-
-        var reenabledRule = await GetRuleByIdAsync(setupFactory, rule.Id);
-        Assert.True(reenabledRule.IsEnabled);
-        Assert.Equal(rule.Sequence, reenabledRule.Sequence);
-        Assert.Equal(rule.Action, reenabledRule.Action);
-        Assert.Equal(rule.Operator, reenabledRule.Operator);
-        Assert.Equal(rule.Pattern, reenabledRule.Pattern);
-        Assert.Equal(rule.CaseSensitive, reenabledRule.CaseSensitive);
-
-        pageHtml = await GetCategoriesPageHtmlAsync(client, source.Id, ContentType.Vod);
-        Assert.True(IsRuleCheckboxChecked(pageHtml, rule.Id, "rule-enabled"));
-    }
-
-    [Fact]
-    public async Task CategoryRuleAdmin_PostHandlers_CreateEditMoveAndDeleteRules()
-    {
-        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
-        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
-        await EnsureDatabaseCreatedAsync(setupFactory);
-
-        using (var discoveryFactory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(CreateJsonHandler("[{\"category_id\":\"42\",\"category_name\":\"Alpha\"}]")))
-        using (var discoveryClient = discoveryFactory.CreateClient())
-        {
-            await discoveryClient.GetAsync("/https/example.com/443/player_api.php?action=get_vod_categories");
-        }
-
-        await using var scope = setupFactory.Services.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-        var source = await dbContext.XtreamSources.AsNoTracking().SingleAsync();
-
-        using var pageFactory = _factory.WithSqliteDatabase(databasePath);
-        using var client = pageFactory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-        var token = await GetAntiforgeryTokenAsync(client, source.Id, ContentType.Vod);
-
-        using var createFirst = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["__RequestVerificationToken"] = token,
-            ["SelectedSourceId"] = source.Id.ToString(),
-            ["SelectedContentType"] = ContentType.Vod.ToString(),
-            ["Action"] = CategoryRuleAction.Exclude.ToString(),
-            ["Operator"] = CategoryRuleOperator.Contains.ToString(),
-            ["Pattern"] = "SPORT",
-            ["CaseSensitive"] = "false",
-            ["IsEnabled"] = "true"
-        });
-
-        var createResponse = await client.PostAsync("/categories?handler=CreateRule", createFirst);
-        Assert.Equal(HttpStatusCode.Redirect, createResponse.StatusCode);
-
-        token = await GetAntiforgeryTokenAsync(client, source.Id, ContentType.Vod);
-        using var createSecond = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["__RequestVerificationToken"] = token,
-            ["SelectedSourceId"] = source.Id.ToString(),
-            ["SelectedContentType"] = ContentType.Vod.ToString(),
-            ["Action"] = CategoryRuleAction.Include.ToString(),
-            ["Operator"] = CategoryRuleOperator.Contains.ToString(),
-            ["Pattern"] = "DOCUMENTAIRE",
-            ["CaseSensitive"] = "false",
-            ["IsEnabled"] = "true"
-        });
-
-        await client.PostAsync("/categories?handler=CreateRule", createSecond);
-
-        var rulesAfterCreate = await dbContext.CategoryRules.AsNoTracking().OrderBy(rule => rule.Sequence).ToListAsync();
-        Assert.Equal([10, 20], rulesAfterCreate.Select(rule => rule.Sequence).ToArray());
-
-        var firstRule = rulesAfterCreate.Single(rule => rule.Pattern == "SPORT");
-        token = await GetAntiforgeryTokenAsync(client, source.Id, ContentType.Vod);
-        using var editRule = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["__RequestVerificationToken"] = token,
-            ["RuleId"] = firstRule.Id.ToString(),
-            ["SelectedSourceId"] = source.Id.ToString(),
-            ["SelectedContentType"] = ContentType.Vod.ToString(),
-            ["Action"] = CategoryRuleAction.Exclude.ToString(),
-            ["Operator"] = CategoryRuleOperator.StartsWith.ToString(),
-            ["Pattern"] = "|XXX|",
-            ["CaseSensitive"] = "false",
-            ["IsEnabled"] = "false"
-        });
-
-        await client.PostAsync("/categories?handler=UpdateRule", editRule);
-        firstRule = await dbContext.CategoryRules.AsNoTracking().SingleAsync(rule => rule.Id == firstRule.Id);
-        Assert.Equal(CategoryRuleOperator.StartsWith, firstRule.Operator);
-        Assert.Equal("|XXX|", firstRule.Pattern);
-        Assert.False(firstRule.IsEnabled);
-
-        var secondRule = await dbContext.CategoryRules.AsNoTracking().SingleAsync(rule => rule.Pattern == "DOCUMENTAIRE");
-        token = await GetAntiforgeryTokenAsync(client, source.Id, ContentType.Vod);
-        using var moveRule = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["__RequestVerificationToken"] = token,
-            ["RuleId"] = secondRule.Id.ToString(),
-            ["SelectedSourceId"] = source.Id.ToString(),
-            ["SelectedContentType"] = ContentType.Vod.ToString(),
-            ["Action"] = secondRule.Action.ToString(),
-            ["Operator"] = secondRule.Operator.ToString(),
-            ["Pattern"] = secondRule.Pattern,
-            ["CaseSensitive"] = secondRule.CaseSensitive ? "true" : "false",
-            ["IsEnabled"] = secondRule.IsEnabled ? "true" : "false"
-        });
-
-        await client.PostAsync("/categories?handler=MoveRuleUp", moveRule);
-
-        var rulesAfterMove = await dbContext.CategoryRules.AsNoTracking().OrderBy(rule => rule.Sequence).ToListAsync();
-        Assert.Equal("DOCUMENTAIRE", rulesAfterMove[0].Pattern);
-        Assert.Equal([10, 20], rulesAfterMove.Select(rule => rule.Sequence).ToArray());
-
-        token = await GetAntiforgeryTokenAsync(client, source.Id, ContentType.Vod);
-        using var deleteRule = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["__RequestVerificationToken"] = token,
-            ["RuleId"] = firstRule.Id.ToString(),
-            ["SelectedSourceId"] = source.Id.ToString(),
-            ["SelectedContentType"] = ContentType.Vod.ToString(),
-            ["ConfirmDelete"] = "true",
-            ["Action"] = firstRule.Action.ToString(),
-            ["Operator"] = firstRule.Operator.ToString(),
-            ["Pattern"] = firstRule.Pattern,
-            ["CaseSensitive"] = firstRule.CaseSensitive ? "true" : "false",
-            ["IsEnabled"] = firstRule.IsEnabled ? "true" : "false"
-        });
-
-        await client.PostAsync("/categories?handler=DeleteRule", deleteRule);
-
-        var finalRules = await dbContext.CategoryRules.AsNoTracking().OrderBy(rule => rule.Sequence).ToListAsync();
-        Assert.Single(finalRules);
-        Assert.Equal(10, finalRules[0].Sequence);
+        Assert.Contains("Disabled (manual)", pageHtml, StringComparison.Ordinal);
+        Assert.Contains("#10 Include", pageHtml, StringComparison.Ordinal);
+        Assert.Contains("Confirm delete", pageHtml, StringComparison.Ordinal);
     }
 
     private static FakeForwarderHandler CreateForwardingHandler() =>
@@ -1107,83 +900,11 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         await dbContext.Database.EnsureCreatedAsync();
     }
 
-    private static async Task<string> GetAntiforgeryTokenAsync(HttpClient client, int sourceId, ContentType contentType)
-    {
-        var pageHtml = await GetCategoriesPageHtmlAsync(client, sourceId, contentType);
-        var tokenMatch = Regex.Match(pageHtml, "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"");
-        Assert.True(tokenMatch.Success);
-        return tokenMatch.Groups[1].Value;
-    }
-
     private static async Task<string> GetCategoriesPageHtmlAsync(HttpClient client, int sourceId, ContentType contentType)
     {
         var response = await client.GetAsync($"/categories?sourceId={sourceId}&contentType={contentType}");
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();
-    }
-
-    private static bool IsCreateRuleEnabledChecked(string pageHtml)
-    {
-        var match = Regex.Match(
-            pageHtml,
-            "<form method=\"post\"[^>]*class=\"rule-editor-grid\"[\\s\\S]*?<input[^>]*type=\"checkbox\"[^>]*name=\"IsEnabled\"[^>]*>",
-            RegexOptions.CultureInvariant);
-
-        Assert.True(match.Success);
-        return match.Value.Contains("checked=\"checked\"", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsRuleCheckboxChecked(string pageHtml, int ruleId, string prefix)
-    {
-        var match = Regex.Match(
-            pageHtml,
-            $@"<input[^>]*id=""{Regex.Escape($"{prefix}-{ruleId}")}""[^>]*>",
-            RegexOptions.CultureInvariant);
-
-        Assert.True(match.Success);
-        return match.Value.Contains("checked=\"checked\"", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static FormUrlEncodedContent CreateCategoryRuleFormContent(
-        string antiforgeryToken,
-        int sourceId,
-        ContentType contentType,
-        CategoryRuleAction action,
-        CategoryRuleOperator @operator,
-        string pattern,
-        bool caseSensitive,
-        bool isEnabled,
-        int? ruleId = null)
-    {
-        var formFields = new List<KeyValuePair<string, string>>
-        {
-            new("__RequestVerificationToken", antiforgeryToken),
-            new("SelectedSourceId", sourceId.ToString()),
-            new("SelectedContentType", contentType.ToString()),
-            new("Action", action.ToString()),
-            new("Operator", @operator.ToString()),
-            new("Pattern", pattern)
-        };
-
-        if (ruleId is not null)
-        {
-            formFields.Add(new KeyValuePair<string, string>("RuleId", ruleId.Value.ToString()));
-        }
-
-        AddCheckboxField(formFields, "CaseSensitive", caseSensitive);
-        AddCheckboxField(formFields, "IsEnabled", isEnabled);
-
-        return new FormUrlEncodedContent(formFields);
-    }
-
-    private static void AddCheckboxField(List<KeyValuePair<string, string>> formFields, string fieldName, bool isChecked)
-    {
-        if (isChecked)
-        {
-            formFields.Add(new KeyValuePair<string, string>(fieldName, "true"));
-        }
-
-        formFields.Add(new KeyValuePair<string, string>(fieldName, "false"));
     }
 
     private static async Task<XtreamSource> GetSourceAsync(WebApplicationFactory<Program> factory)

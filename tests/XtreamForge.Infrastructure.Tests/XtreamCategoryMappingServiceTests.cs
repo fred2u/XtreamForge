@@ -10,7 +10,7 @@ namespace XtreamForge.Infrastructure.Tests;
 public sealed class XtreamCategoryMappingServiceTests
 {
     [Fact]
-    public async Task SyncCategoriesAsync_CreatesStableSourceAndOutputMappings()
+    public async Task SyncCategoriesAsync_CreatesStableSourceAndDedicatedMappings()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -51,11 +51,12 @@ public sealed class XtreamCategoryMappingServiceTests
         var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
         Assert.Equal(1, await dbContext.XtreamSources.CountAsync());
         Assert.Equal(3, await dbContext.OutputCategories.CountAsync());
+        Assert.Equal(0, await dbContext.CustomCategories.CountAsync());
         Assert.Equal(3, await dbContext.UpstreamCategories.CountAsync());
     }
 
     [Fact]
-    public async Task SaveCategoryConfigurationAsync_SupportsRenameMergeAndExclude()
+    public async Task SaveCategoryConfigurationAsync_CanCreateAndReuseGlobalCustomCategoriesAcrossSources()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -63,188 +64,131 @@ public sealed class XtreamCategoryMappingServiceTests
         await EnsureCreatedAsync(serviceProvider);
 
         var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
-        await SeedVodCategoriesAsync(mappingService);
+        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-a.example", 443), ContentType.Vod, [new DiscoveredCategory("10", "|FR| 4K UHD")]);
+        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-b.example", 443), ContentType.Vod, [new DiscoveredCategory("500", "|FR| UHD")]);
 
-        await using (var scope = serviceProvider.CreateAsyncScope())
-        {
-            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-            var categories = await dbContext.UpstreamCategories.OrderBy(category => category.UpstreamCategoryId).ToListAsync();
-            var category42 = categories.Single(category => category.UpstreamCategoryId == "42");
-            var category57 = categories.Single(category => category.UpstreamCategoryId == "57");
-            var category94 = categories.Single(category => category.UpstreamCategoryId == "94");
+        var sourceAId = await GetSourceIdAsync(serviceProvider, "source-a.example");
+        var sourceBId = await GetSourceIdAsync(serviceProvider, "source-b.example");
+        var sourceACategory = await GetUpstreamCategoryAsync(serviceProvider, sourceAId, "10");
+        var sourceBCategory = await GetUpstreamCategoryAsync(serviceProvider, sourceBId, "500");
 
-            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category42.Id, category42.XtreamSourceId, ContentType.Vod, false, null, "|FR| FILMS 4K"));
-            category42 = await dbContext.UpstreamCategories.AsNoTracking().SingleAsync(category => category.Id == category42.Id);
-            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category57.Id, category57.XtreamSourceId, ContentType.Vod, false, category42.DedicatedOutputCategoryId, "|FR| FILMS 4K"));
-            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category94.Id, category94.XtreamSourceId, ContentType.Vod, true, null, null));
-            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category57.Id, category57.XtreamSourceId, ContentType.Vod, false, category42.DedicatedOutputCategoryId, null));
-        }
-
-        var result = await mappingService.SyncCategoriesAsync(
-            new XtreamSourceDescriptor("https", "example.com", 443),
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(
+            sourceACategory.Id,
+            sourceAId,
             ContentType.Vod,
-            [
-                new DiscoveredCategory("42", "|FR| 4K ⁴ᴷ"),
-                new DiscoveredCategory("57", "|FR| FILMS 4K UHD"),
-                new DiscoveredCategory("94", "|xxx| Something")
-            ]);
+            CategoryMappingSelection.Custom,
+            null,
+            "Movies 4K"));
 
-        Assert.Single(result);
-        Assert.Equal(("1", "|FR| FILMS 4K"), (result[0].CategoryId, result[0].CategoryName));
-    }
+        var customCategory = await GetSingleCustomCategoryAsync(serviceProvider, ContentType.Vod);
 
-    [Fact]
-    public async Task CreateRuleAsync_RejectsEmptyOrWhitespacePatterns()
-    {
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
-        await using var serviceProvider = CreateServiceProvider(connection);
-        await EnsureCreatedAsync(serviceProvider);
-
-        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
-        var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
-        await SeedVodCategoriesAsync(mappingService);
-        var sourceId = await GetSourceIdAsync(serviceProvider);
-
-        await Assert.ThrowsAsync<ArgumentException>(() => ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, string.Empty, false, true)));
-        await Assert.ThrowsAsync<ArgumentException>(() => ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "   ", false, true)));
-    }
-
-    [Fact]
-    public async Task Rules_AreScopedBySourceAndContentType()
-    {
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
-        await using var serviceProvider = CreateServiceProvider(connection);
-        await EnsureCreatedAsync(serviceProvider);
-
-        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
-        var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
-
-        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-a.example", 443), ContentType.Vod, [new DiscoveredCategory("10", "SPORT")]);
-        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-a.example", 443), ContentType.Series, [new DiscoveredCategory("20", "SPORT")]);
-        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-b.example", 443), ContentType.Vod, [new DiscoveredCategory("30", "SPORT")]);
-
-        await using (var scope = serviceProvider.CreateAsyncScope())
-        {
-            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-            var sourceA = await dbContext.XtreamSources.SingleAsync(source => source.Host == "source-a.example");
-            await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceA.Id, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
-        }
-
-        var sourceAVod = await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-a.example", 443), ContentType.Vod, [new DiscoveredCategory("10", "SPORT")]);
-        var sourceASeries = await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-a.example", 443), ContentType.Series, [new DiscoveredCategory("20", "SPORT")]);
-        var sourceBVod = await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-b.example", 443), ContentType.Vod, [new DiscoveredCategory("30", "SPORT")]);
-
-        Assert.Empty(sourceAVod);
-        Assert.Single(sourceASeries);
-        Assert.Single(sourceBVod);
-    }
-
-    [Fact]
-    public async Task RuleChanges_AffectNextEvaluation_AndExcludedCategoriesRemainPersisted()
-    {
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
-        await using var serviceProvider = CreateServiceProvider(connection);
-        await EnsureCreatedAsync(serviceProvider);
-
-        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
-        var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
-        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Vod, [new DiscoveredCategory("42", "SPORT")]);
-        var sourceId = await GetSourceIdAsync(serviceProvider);
-
-        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
-        Assert.Empty(await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Vod, [new DiscoveredCategory("42", "SPORT") ]));
-
-        await using (var scope = serviceProvider.CreateAsyncScope())
-        {
-            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-            Assert.Equal(1, await dbContext.UpstreamCategories.CountAsync());
-            var rule = await dbContext.CategoryRules.SingleAsync();
-            rule.Pattern = "MOVIES";
-            rule.UpdatedAtUtc = DateTimeOffset.UtcNow;
-            await dbContext.SaveChangesAsync();
-        }
-
-        Assert.Single(await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Vod, [new DiscoveredCategory("42", "SPORT") ]));
-
-        await using (var scope = serviceProvider.CreateAsyncScope())
-        {
-            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-            var rule = await dbContext.CategoryRules.SingleAsync();
-            rule.Pattern = "sport";
-            rule.CaseSensitive = true;
-            rule.UpdatedAtUtc = DateTimeOffset.UtcNow;
-            await dbContext.SaveChangesAsync();
-        }
-
-        Assert.Single(await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Vod, [new DiscoveredCategory("42", "SPORT") ]));
-
-        await using (var scope = serviceProvider.CreateAsyncScope())
-        {
-            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-            var rule = await dbContext.CategoryRules.SingleAsync();
-            rule.IsEnabled = false;
-            rule.UpdatedAtUtc = DateTimeOffset.UtcNow;
-            await dbContext.SaveChangesAsync();
-        }
-
-        Assert.Single(await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Vod, [new DiscoveredCategory("42", "SPORT") ]));
-
-        await using (var scope = serviceProvider.CreateAsyncScope())
-        {
-            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-            dbContext.CategoryRules.Remove(await dbContext.CategoryRules.SingleAsync());
-            await dbContext.SaveChangesAsync();
-        }
-
-        Assert.Single(await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Vod, [new DiscoveredCategory("42", "SPORT") ]));
-    }
-
-    [Fact]
-    public async Task MoveRuleAsync_PersistsDeterministicOrderingWithoutDuplicateSequences()
-    {
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
-        await using var serviceProvider = CreateServiceProvider(connection);
-        await EnsureCreatedAsync(serviceProvider);
-
-        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
-        var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
-        await SeedVodCategoriesAsync(mappingService);
-        var sourceId = await GetSourceIdAsync(serviceProvider);
-
-        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
-        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Include, CategoryRuleOperator.Contains, "DOCUMENTAIRE", false, true));
-        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.StartsWith, "|XXX|", false, true));
-
-        await using (var scope = serviceProvider.CreateAsyncScope())
-        {
-            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-            var includeRule = await dbContext.CategoryRules.SingleAsync(rule => rule.Pattern == "DOCUMENTAIRE");
-            await ruleService.MoveRuleAsync(new CategoryRuleIdentityCommand(includeRule.Id, sourceId, ContentType.Vod), CategoryRuleMoveDirection.Up);
-        }
-
-        var preview = await ruleService.PreviewAsync(sourceId, ContentType.Vod, "|FR| DOCUMENTAIRE SPORT");
-        Assert.NotNull(preview);
-        Assert.Equal(CategoryInclusionDecision.Include, preview.Evaluation.Decision);
-        Assert.Equal(10, preview.Evaluation.MatchedRuleSequence);
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(
+            sourceBCategory.Id,
+            sourceBId,
+            ContentType.Vod,
+            CategoryMappingSelection.Custom,
+            customCategory.Id,
+            null));
 
         await using var verifyScope = serviceProvider.CreateAsyncScope();
-        var verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-        var sequences = await verifyDbContext.CategoryRules
-            .Where(rule => rule.XtreamSourceId == sourceId && rule.ContentType == ContentType.Vod)
-            .OrderBy(rule => rule.Sequence)
-            .Select(rule => rule.Sequence)
+        var dbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var persistedCategories = await dbContext.UpstreamCategories
+            .Where(category => category.ContentType == ContentType.Vod)
+            .OrderBy(category => category.XtreamSourceId)
+            .ThenBy(category => category.UpstreamCategoryId)
             .ToListAsync();
 
-        Assert.Equal([10, 20, 30], sequences);
-        Assert.Equal(sequences.Count, sequences.Distinct().Count());
+        Assert.Equal(1, await dbContext.CustomCategories.CountAsync());
+        Assert.All(persistedCategories, category => Assert.Equal(customCategory.Id, category.CustomCategoryId));
+
+        var sourceAResult = await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-a.example", 443), ContentType.Vod, [new DiscoveredCategory("10", "|FR| 4K UHD")]);
+        var sourceBResult = await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-b.example", 443), ContentType.Vod, [new DiscoveredCategory("500", "|FR| UHD")]);
+
+        Assert.Equal("Movies 4K", Assert.Single(sourceAResult).CategoryName);
+        Assert.Equal("Movies 4K", Assert.Single(sourceBResult).CategoryName);
+        Assert.Equal(customCategory.XtreamForgeCategoryId.ToString(), Assert.Single(sourceAResult).CategoryId);
+        Assert.Equal(customCategory.XtreamForgeCategoryId.ToString(), Assert.Single(sourceBResult).CategoryId);
     }
 
     [Fact]
-    public async Task ManualExclusion_TakesPrecedenceOverIncludeRule_AndDoesNotDestroyMapping()
+    public async Task SaveCategoryConfigurationAsync_DisabledAndOriginalSelectionsPersistWithoutDeletingDiscoveryData()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var serviceProvider = CreateServiceProvider(connection);
+        await EnsureCreatedAsync(serviceProvider);
+
+        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        await SeedVodCategoriesAsync(mappingService);
+        var sourceId = await GetSourceIdAsync(serviceProvider, "example.com");
+        var category = await GetUpstreamCategoryAsync(serviceProvider, sourceId, "42");
+
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(
+            category.Id,
+            sourceId,
+            ContentType.Vod,
+            CategoryMappingSelection.Custom,
+            null,
+            "Movies"));
+
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(
+            category.Id,
+            sourceId,
+            ContentType.Vod,
+            CategoryMappingSelection.Disabled,
+            null,
+            null));
+
+        var disabledView = await mappingService.GetAdministrationViewAsync(sourceId, ContentType.Vod);
+        var disabledCategory = Assert.Single(disabledView.UpstreamCategories, item => item.Id == category.Id);
+        Assert.True(disabledCategory.IsManuallyExcluded);
+        Assert.Equal(CategoryInclusionDecision.Exclude, disabledCategory.EffectiveDecision);
+        Assert.Equal(CategoryMappingSelection.Disabled, disabledCategory.CurrentMappingSelection);
+        Assert.NotNull(disabledCategory.CustomCategoryId);
+
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(
+            category.Id,
+            sourceId,
+            ContentType.Vod,
+            CategoryMappingSelection.Original,
+            null,
+            null));
+
+        var restoredCategory = await GetUpstreamCategoryAsync(serviceProvider, sourceId, "42");
+        Assert.False(restoredCategory.IsExcluded);
+        Assert.Null(restoredCategory.CustomCategoryId);
+        Assert.NotEqual(0, restoredCategory.DedicatedOutputCategoryId);
+    }
+
+    [Fact]
+    public async Task GetAdministrationViewAsync_ReturnsMatchedRuleDetailsAndEffectiveStatus()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var serviceProvider = CreateServiceProvider(connection);
+        await EnsureCreatedAsync(serviceProvider);
+
+        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
+        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Vod, [new DiscoveredCategory("42", "|FR| DOCUMENTAIRE SPORT")]);
+        var sourceId = await GetSourceIdAsync(serviceProvider, "example.com");
+
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Include, CategoryRuleOperator.Contains, "DOCUMENTAIRE", false, true));
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
+
+        var view = await mappingService.GetAdministrationViewAsync(sourceId, ContentType.Vod);
+        var category = Assert.Single(view.UpstreamCategories);
+
+        Assert.Equal(CategoryInclusionDecision.Include, category.EffectiveDecision);
+        Assert.Equal(CategoryInclusionDecision.Include, category.RuleDecision);
+        Assert.Equal(10, category.MatchedRuleSequence);
+        Assert.Equal(CategoryRuleAction.Include, category.MatchedRuleAction);
+        Assert.Equal(CategoryRuleOperator.Contains, category.MatchedRuleOperator);
+        Assert.Equal("DOCUMENTAIRE", category.MatchedPattern);
+    }
+
+    [Fact]
+    public async Task ManualDisabledCategory_StillReportsMatchedRuleWhileManualOverrideTakesPrecedence()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -254,32 +198,23 @@ public sealed class XtreamCategoryMappingServiceTests
         var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
         var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
         await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Vod, [new DiscoveredCategory("42", "DOCUMENTAIRE")]);
-        var sourceId = await GetSourceIdAsync(serviceProvider);
+        var sourceId = await GetSourceIdAsync(serviceProvider, "example.com");
+        var category = await GetUpstreamCategoryAsync(serviceProvider, sourceId, "42");
 
         await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Include, CategoryRuleOperator.Contains, "DOCUMENTAIRE", false, true));
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category.Id, sourceId, ContentType.Vod, CategoryMappingSelection.Disabled, null, null));
 
-        await using (var scope = serviceProvider.CreateAsyncScope())
-        {
-            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-            var category = await dbContext.UpstreamCategories.SingleAsync();
-            var originalOutputCategoryId = category.OutputCategoryId;
-            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category.Id, sourceId, ContentType.Vod, true, null, null));
-            category = await dbContext.UpstreamCategories.AsNoTracking().SingleAsync();
-            Assert.Equal(originalOutputCategoryId, category.DedicatedOutputCategoryId);
-        }
+        var view = await mappingService.GetAdministrationViewAsync(sourceId, ContentType.Vod);
+        var summary = Assert.Single(view.UpstreamCategories);
 
-        var result = await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Vod, [new DiscoveredCategory("42", "DOCUMENTAIRE")]);
-        Assert.Empty(result);
-
-        await using var verifyScope = serviceProvider.CreateAsyncScope();
-        var verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-        var persistedCategory = await verifyDbContext.UpstreamCategories.SingleAsync();
-        Assert.True(persistedCategory.IsExcluded);
-        Assert.NotEqual(0, persistedCategory.DedicatedOutputCategoryId);
+        Assert.True(summary.IsManuallyExcluded);
+        Assert.Equal(CategoryInclusionDecision.Exclude, summary.EffectiveDecision);
+        Assert.Equal(CategoryInclusionDecision.Include, summary.RuleDecision);
+        Assert.Equal(10, summary.MatchedRuleSequence);
     }
 
     [Fact]
-    public async Task EffectiveReverseMapping_ExcludesRuleFilteredUpstreamCategoriesButKeepsMergedOutputVisible()
+    public async Task EffectiveReverseMapping_ExcludesRuleFilteredCategoriesButKeepsGlobalCustomCategoryVisible()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -297,19 +232,13 @@ public sealed class XtreamCategoryMappingServiceTests
                 new DiscoveredCategory("30", "Movies B")
             ]);
 
-        var sourceId = await GetSourceIdAsync(serviceProvider);
-        await using (var scope = serviceProvider.CreateAsyncScope())
-        {
-            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-            var categories = await dbContext.UpstreamCategories.OrderBy(category => category.UpstreamCategoryId).ToListAsync();
-            var category10 = categories.Single(category => category.UpstreamCategoryId == "10");
-            var category20 = categories.Single(category => category.UpstreamCategoryId == "20");
-            var category30 = categories.Single(category => category.UpstreamCategoryId == "30");
+        var sourceId = await GetSourceIdAsync(serviceProvider, "example.com");
+        var category20 = await GetUpstreamCategoryAsync(serviceProvider, sourceId, "20");
+        var category30 = await GetUpstreamCategoryAsync(serviceProvider, sourceId, "30");
 
-            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category20.Id, sourceId, ContentType.Vod, false, category10.DedicatedOutputCategoryId, "Movies"));
-            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category30.Id, sourceId, ContentType.Vod, false, category10.DedicatedOutputCategoryId, "Movies"));
-        }
-
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category20.Id, sourceId, ContentType.Vod, CategoryMappingSelection.Custom, null, "Movies"));
+        var customCategory = await GetSingleCustomCategoryAsync(serviceProvider, ContentType.Vod);
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category30.Id, sourceId, ContentType.Vod, CategoryMappingSelection.Custom, customCategory.Id, null));
         await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
 
         var result = await mappingService.SyncCategoriesAsync(
@@ -320,13 +249,78 @@ public sealed class XtreamCategoryMappingServiceTests
                 new DiscoveredCategory("20", "SPORT Movies"),
                 new DiscoveredCategory("30", "Movies B")
             ]);
+
         var mappings = await mappingService.GetEffectiveOutputCategoryMappingsAsync(sourceId, ContentType.Vod);
 
-        Assert.Single(result);
-        Assert.Equal("Movies", result[0].CategoryName);
-        Assert.Equal(["10", "30"], result[0].IncludedUpstreamCategoryIds.OrderBy(value => value).ToList());
-        Assert.Single(mappings);
-        Assert.Equal(["10", "30"], mappings[0].IncludedUpstreamCategoryIds.OrderBy(value => value).ToList());
+        Assert.Equal(2, result.Count);
+        Assert.Contains(result, category => category.CategoryName == "Movies A");
+        Assert.Contains(result, category => category.CategoryName == "Movies" && category.IncludedUpstreamCategoryIds.OrderBy(value => value).SequenceEqual(["30"]));
+        Assert.Equal(2, mappings.Count);
+    }
+
+    [Fact]
+    public async Task CustomCategory_RenameAppliesAcrossSources_AndDeleteHonorsUsage()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var serviceProvider = CreateServiceProvider(connection);
+        await EnsureCreatedAsync(serviceProvider);
+
+        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-a.example", 443), ContentType.Vod, [new DiscoveredCategory("10", "One")]);
+        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-b.example", 443), ContentType.Vod, [new DiscoveredCategory("11", "Two")]);
+
+        var sourceAId = await GetSourceIdAsync(serviceProvider, "source-a.example");
+        var sourceBId = await GetSourceIdAsync(serviceProvider, "source-b.example");
+        var categoryA = await GetUpstreamCategoryAsync(serviceProvider, sourceAId, "10");
+        var categoryB = await GetUpstreamCategoryAsync(serviceProvider, sourceBId, "11");
+
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(categoryA.Id, sourceAId, ContentType.Vod, CategoryMappingSelection.Custom, null, "Shared"));
+        var customCategory = await GetSingleCustomCategoryAsync(serviceProvider, ContentType.Vod);
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(categoryB.Id, sourceBId, ContentType.Vod, CategoryMappingSelection.Custom, customCategory.Id, null));
+
+        await mappingService.UpdateCustomCategoryAsync(new CustomCategoryUpdateCommand(customCategory.Id, ContentType.Vod, "Renamed Shared"));
+
+        var sourceAResult = await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-a.example", 443), ContentType.Vod, [new DiscoveredCategory("10", "One")]);
+        var sourceBResult = await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-b.example", 443), ContentType.Vod, [new DiscoveredCategory("11", "Two")]);
+        Assert.Equal("Renamed Shared", Assert.Single(sourceAResult).CategoryName);
+        Assert.Equal("Renamed Shared", Assert.Single(sourceBResult).CategoryName);
+
+        var deleteInUse = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            mappingService.DeleteCustomCategoryAsync(new CustomCategoryDeleteCommand(customCategory.Id, ContentType.Vod)));
+        Assert.Contains("still referenced", deleteInUse.Message, StringComparison.OrdinalIgnoreCase);
+
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(categoryA.Id, sourceAId, ContentType.Vod, CategoryMappingSelection.Original, null, null));
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(categoryB.Id, sourceBId, ContentType.Vod, CategoryMappingSelection.Original, null, null));
+        await mappingService.DeleteCustomCategoryAsync(new CustomCategoryDeleteCommand(customCategory.Id, ContentType.Vod));
+
+        await using var verifyScope = serviceProvider.CreateAsyncScope();
+        var dbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        Assert.Equal(0, await dbContext.CustomCategories.CountAsync());
+    }
+
+    [Fact]
+    public async Task SaveCategoryConfigurationAsync_RejectsCrossContentTypeCustomCategoryMappings()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var serviceProvider = CreateServiceProvider(connection);
+        await EnsureCreatedAsync(serviceProvider);
+
+        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "vod.example", 443), ContentType.Vod, [new DiscoveredCategory("10", "Movies")]);
+        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "series.example", 443), ContentType.Series, [new DiscoveredCategory("20", "Series")]);
+
+        var vodSourceId = await GetSourceIdAsync(serviceProvider, "vod.example");
+        var seriesSourceId = await GetSourceIdAsync(serviceProvider, "series.example");
+        var vodCategory = await GetUpstreamCategoryAsync(serviceProvider, vodSourceId, "10");
+        var seriesCategory = await GetUpstreamCategoryAsync(serviceProvider, seriesSourceId, "20");
+
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(vodCategory.Id, vodSourceId, ContentType.Vod, CategoryMappingSelection.Custom, null, "Movies 4K"));
+        var customCategory = await GetSingleCustomCategoryAsync(serviceProvider, ContentType.Vod);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(seriesCategory.Id, seriesSourceId, ContentType.Series, CategoryMappingSelection.Custom, customCategory.Id, null)));
     }
 
     private static ServiceProvider CreateServiceProvider(SqliteConnection connection)
@@ -358,10 +352,24 @@ public sealed class XtreamCategoryMappingServiceTests
             ]);
     }
 
-    private static async Task<int> GetSourceIdAsync(ServiceProvider serviceProvider)
+    private static async Task<int> GetSourceIdAsync(ServiceProvider serviceProvider, string host)
     {
         await using var scope = serviceProvider.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-        return await dbContext.XtreamSources.Select(source => source.Id).SingleAsync();
+        return await dbContext.XtreamSources.Where(source => source.Host == host).Select(source => source.Id).SingleAsync();
+    }
+
+    private static async Task<UpstreamCategory> GetUpstreamCategoryAsync(ServiceProvider serviceProvider, int sourceId, string upstreamCategoryId)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        return await dbContext.UpstreamCategories.AsNoTracking().SingleAsync(category => category.XtreamSourceId == sourceId && category.UpstreamCategoryId == upstreamCategoryId);
+    }
+
+    private static async Task<CustomCategory> GetSingleCustomCategoryAsync(ServiceProvider serviceProvider, ContentType contentType)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        return await dbContext.CustomCategories.AsNoTracking().SingleAsync(category => category.ContentType == contentType);
     }
 }

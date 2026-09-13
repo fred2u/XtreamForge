@@ -8,6 +8,7 @@ public sealed class XtreamForgeDbContext(DbContextOptions<XtreamForgeDbContext> 
     public DbSet<XtreamSource> XtreamSources => Set<XtreamSource>();
     public DbSet<UpstreamCategory> UpstreamCategories => Set<UpstreamCategory>();
     public DbSet<OutputCategory> OutputCategories => Set<OutputCategory>();
+    public DbSet<CustomCategory> CustomCategories => Set<CustomCategory>();
     public DbSet<CategoryRule> CategoryRules => Set<CategoryRule>();
     public DbSet<Setting> Settings => Set<Setting>();
 
@@ -35,8 +36,6 @@ public sealed class XtreamForgeDbContext(DbContextOptions<XtreamForgeDbContext> 
         outputCategories.Property(category => category.XtreamForgeCategoryId).HasColumnName("xtreamforge_category_id");
         outputCategories.Property(category => category.DisplayName).HasColumnName("display_name").HasMaxLength(255).IsRequired();
         outputCategories.Property(category => category.SortOrder).HasColumnName("sort_order");
-        outputCategories.Property(category => category.IsNameCustomized).HasColumnName("is_name_customized");
-        outputCategories.Property(category => category.IsEnabled).HasColumnName("is_enabled");
         outputCategories.Property(category => category.CreatedAtUtc).HasColumnName("created_at_utc");
         outputCategories.Property(category => category.UpdatedAtUtc).HasColumnName("updated_at_utc");
         outputCategories.HasOne(category => category.XtreamSource)
@@ -44,18 +43,31 @@ public sealed class XtreamForgeDbContext(DbContextOptions<XtreamForgeDbContext> 
             .HasForeignKey(category => category.XtreamSourceId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        var customCategories = modelBuilder.Entity<CustomCategory>();
+        customCategories.ToTable("custom_categories");
+        customCategories.HasKey(category => category.Id);
+        customCategories.HasIndex(category => new { category.ContentType, category.XtreamForgeCategoryId }).IsUnique();
+        customCategories.HasIndex(category => new { category.ContentType, category.NormalizedDisplayName });
+        customCategories.Property(category => category.Id).HasColumnName("id");
+        customCategories.Property(category => category.ContentType).HasColumnName("content_type").HasConversion<string>().HasMaxLength(20);
+        customCategories.Property(category => category.XtreamForgeCategoryId).HasColumnName("xtreamforge_category_id");
+        customCategories.Property(category => category.DisplayName).HasColumnName("display_name").HasMaxLength(255).IsRequired();
+        customCategories.Property(category => category.NormalizedDisplayName).HasColumnName("normalized_display_name").HasMaxLength(255);
+        customCategories.Property(category => category.CreatedAtUtc).HasColumnName("created_at_utc");
+        customCategories.Property(category => category.UpdatedAtUtc).HasColumnName("updated_at_utc");
+
         var upstreamCategories = modelBuilder.Entity<UpstreamCategory>();
         upstreamCategories.ToTable("upstream_categories");
         upstreamCategories.HasKey(category => category.Id);
         upstreamCategories.HasIndex(category => new { category.XtreamSourceId, category.ContentType, category.UpstreamCategoryId }).IsUnique();
-        upstreamCategories.HasIndex(category => new { category.XtreamSourceId, category.ContentType, category.OutputCategoryId });
+        upstreamCategories.HasIndex(category => new { category.XtreamSourceId, category.ContentType, category.CustomCategoryId });
         upstreamCategories.Property(category => category.Id).HasColumnName("id");
         upstreamCategories.Property(category => category.XtreamSourceId).HasColumnName("xtream_source_id");
         upstreamCategories.Property(category => category.ContentType).HasColumnName("content_type").HasConversion<string>().HasMaxLength(20);
         upstreamCategories.Property(category => category.UpstreamCategoryId).HasColumnName("upstream_category_id").HasMaxLength(64).IsRequired();
         upstreamCategories.Property(category => category.UpstreamCategoryName).HasColumnName("upstream_category_name").HasMaxLength(255).IsRequired();
-        upstreamCategories.Property(category => category.OutputCategoryId).HasColumnName("output_category_id");
         upstreamCategories.Property(category => category.DedicatedOutputCategoryId).HasColumnName("dedicated_output_category_id");
+        upstreamCategories.Property(category => category.CustomCategoryId).HasColumnName("custom_category_id");
         upstreamCategories.Property(category => category.IsExcluded).HasColumnName("is_excluded");
         upstreamCategories.Property(category => category.FirstDiscoveredAtUtc).HasColumnName("first_discovered_at_utc");
         upstreamCategories.Property(category => category.LastDiscoveredAtUtc).HasColumnName("last_discovered_at_utc");
@@ -63,13 +75,13 @@ public sealed class XtreamForgeDbContext(DbContextOptions<XtreamForgeDbContext> 
             .WithMany(source => source.UpstreamCategories)
             .HasForeignKey(category => category.XtreamSourceId)
             .OnDelete(DeleteBehavior.Cascade);
-        upstreamCategories.HasOne(category => category.OutputCategory)
-            .WithMany(category => category.MappedUpstreamCategories)
-            .HasForeignKey(category => category.OutputCategoryId)
-            .OnDelete(DeleteBehavior.SetNull);
         upstreamCategories.HasOne(category => category.DedicatedOutputCategory)
             .WithMany(category => category.DedicatedUpstreamCategories)
             .HasForeignKey(category => category.DedicatedOutputCategoryId)
+            .OnDelete(DeleteBehavior.Restrict);
+        upstreamCategories.HasOne(category => category.CustomCategory)
+            .WithMany(category => category.UpstreamCategories)
+            .HasForeignKey(category => category.CustomCategoryId)
             .OnDelete(DeleteBehavior.Restrict);
 
         var categoryRules = modelBuilder.Entity<CategoryRule>();

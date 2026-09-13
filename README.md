@@ -8,7 +8,7 @@ XtreamForge is an early-stage, self-hosted .NET application that will sit in fro
 
 This repository currently provides the initial foundation plus the first category-management feature:
 
-- ASP.NET Core application combining Minimal APIs and integrated Razor Pages administration UI
+- ASP.NET Core application combining Minimal APIs and integrated server-side interactive administration UI
 - Initial Xtream request routing, classification, and transparent forwarding foundation
 - Database-backed VOD/Series category discovery and category rewriting
 - .NET Aspire orchestration
@@ -30,7 +30,7 @@ flowchart LR
 
 ### Projects
 
-- `src/XtreamForge.Api` - Minimal APIs plus integrated Razor Pages admin UI with health and status endpoints
+- `src/XtreamForge.Api` - Minimal APIs plus integrated admin UI with health and status endpoints
 - `src/XtreamForge.Infrastructure` - EF Core, PostgreSQL wiring, options, migrations
 - `src/XtreamForge.ServiceDefaults` - Aspire service defaults (OpenTelemetry, health checks, service discovery, resilience)
 - `src/XtreamForge.AppHost` - Aspire orchestration for local development
@@ -161,36 +161,59 @@ Security notes:
 
 ## Category management
 
-XtreamForge now persists category discovery, category mappings, and category rules in PostgreSQL, scoped by upstream destination (`protocol` + `host` + `port`) and content type (`Vod` / `Series`).
+XtreamForge persists category discovery, category mappings, and category rules in PostgreSQL.
+
+Category model:
+
+- upstream categories are source-specific and scoped by upstream destination (`protocol` + `host` + `port`) plus content type (`Vod` / `Series`)
+- custom categories are global across sources and scoped by content type only
+- VOD and Series custom-category namespaces are separate
+- rule scope remains source + content type
+
+Mapping choices in the admin grid:
+
+- `Disabled` - manual disable override; the upstream category stays discovered but is not exposed
+- `Original` - expose the upstream category with its source-specific original name and stable XtreamForge ID
+- `New category` - create one new global custom category and map the row to it
+- `Existing custom category` - map the upstream category to an existing global custom category
+
+Effective precedence:
+
+1. Manual Disabled
+2. Rules (first enabled matching rule wins)
+3. If still enabled, apply the current mapping (`Original` or `Custom Category`)
 
 Current category capabilities:
 
 - discover upstream VOD and Series categories on the first matching `player_api.php` request
-- keep categories unchanged by default
-- rename categories
-- exclude categories
-- merge multiple upstream categories into one XtreamForge output category
+- keep categories unchanged by default through `Original`
+- manually disable categories without deleting discovery data
+- map multiple source categories to one shared global custom category
+- show the first matched rule for each source category
 - persist stable XtreamForge category IDs across refreshes and restarts
+- edit category mappings and rules interactively without full browser page reloads
 
 How it works today:
 
 1. Request `get_vod_categories` or `get_series_categories` through the Xtream proxy route.
 2. XtreamForge fetches the upstream categories and stores the discovered source/category records.
 3. Open the integrated admin UI and go to `Categories`.
-4. Select the upstream source and content type, then update rename/exclude/merge rules.
-5. Repeat the category request to receive the rewritten category list with stable XtreamForge IDs.
+4. Select the upstream source and content type.
+5. Use the category grid to search/filter rows, then choose `Disabled`, `Original`, `New category`, or an existing custom category.
+6. Manage rules and global custom categories in the same screen with inline save/delete feedback.
+7. Repeat the category request to receive the rewritten category list with stable XtreamForge IDs.
 
 Notes:
 
 - Source identity is based on upstream destination only; credentials are not used as the source key and are not stored with category records.
-- VOD and Series mappings are independent.
-- `get_vod_streams` and `get_series` now translate XtreamForge output category IDs back to the currently effective upstream category IDs before querying/filtering results.
+- `get_vod_streams` and `get_series` translate XtreamForge output category IDs back to the currently effective upstream category IDs before querying/filtering results.
 - returned stream and detail payloads expose XtreamForge category IDs instead of upstream category IDs.
-- effective reverse mappings exclude upstream categories removed by manual exclusion or category rules.
+- effective reverse mappings exclude upstream categories removed by manual disable or category rules.
+- legacy source-local renamed/merged outputs are migrated into global custom-category records as safely as practical; identical legacy names are preserved rather than silently merged across sources.
 
 ## Category Rules
 
-Category rules decide whether an upstream category participates in the effective XtreamForge catalogue before rename/merge mapping is applied.
+Category rules decide whether an upstream category participates in the effective XtreamForge catalogue before original/custom mapping is applied.
 
 Rule behavior:
 
@@ -203,9 +226,10 @@ Rule behavior:
 - `Include` and `Exclude` actions are supported
 - no matching rule means `Include`
 - excluded categories remain discovered in PostgreSQL and are not deleted
-- administrators can reorder rules from the Categories admin page
+- the Categories grid shows the first matched rule for each category
+- administrators can edit, reorder, enable/disable, and delete rules inline from the Categories admin page
 
-Manual category exclusion still takes precedence over rule evaluation.
+Manual category disable still takes precedence over rule evaluation.
 
 Example:
 

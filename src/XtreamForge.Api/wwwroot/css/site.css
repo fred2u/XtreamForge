@@ -100,6 +100,7 @@ body {
 }
 
 .filters-panel select,
+.filters-panel input[type="search"],
 .category-rule-form select,
 .category-rule-form input[type="text"] {
     width: 100%;
@@ -214,6 +215,8 @@ body {
 .rule-editor-grid select,
 .rule-editor-grid input[type="text"],
 .rule-preview-form input[type="text"],
+.category-table select,
+.category-table input[type="text"],
 .rule-row-form select,
 .rule-row-form input[type="text"] {
     width: 100%;
@@ -225,6 +228,7 @@ body {
 
 .rule-editor-grid button,
 .rule-preview-form button,
+.category-table button,
 .rule-row-form button {
     width: fit-content;
     padding: 0.7rem 1rem;
@@ -246,6 +250,18 @@ body {
 .rule-actions {
     display: flex;
     gap: 0.5rem;
+}
+
+.inline-editor-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.5rem;
+}
+
+.compact-rule-actions {
+    margin-top: 0.75rem;
 }
 
 .compact-checkbox-label {

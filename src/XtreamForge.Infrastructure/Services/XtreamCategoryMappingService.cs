@@ -11,6 +11,7 @@ public sealed class XtreamCategoryMappingService(
     CategoryRuleEvaluator ruleEvaluator)
 {
     private const int MaxSyncAttempts = 3;
+    public const int MaxCustomCategoryNameLength = 255;
 
     public async Task<IReadOnlyList<RewrittenCategory>> SyncCategoriesAsync(
         XtreamSourceDescriptor sourceDescriptor,
@@ -38,7 +39,13 @@ public sealed class XtreamCategoryMappingService(
                 await dbContext.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
 
-                var effectiveCategories = await GetEffectiveOutputCategoriesAsync(dbContext, source.Id, contentType, normalizedCategories.Select(category => category.UpstreamCategoryId).ToHashSet(StringComparer.Ordinal), cancellationToken);
+                var effectiveCategories = await GetEffectiveOutputCategoriesAsync(
+                    dbContext,
+                    source.Id,
+                    contentType,
+                    normalizedCategories.Select(category => category.UpstreamCategoryId).ToHashSet(StringComparer.Ordinal),
+                    cancellationToken);
+
                 return effectiveCategories
                     .Select(category => new RewrittenCategory(category.XtreamForgeCategoryId.ToString(), category.DisplayName, category.IncludedUpstreamCategoryIds))
                     .ToList();
@@ -68,71 +75,57 @@ public sealed class XtreamCategoryMappingService(
         var effectiveSourceId = selectedSourceId ?? sources.FirstOrDefault()?.Id;
         if (effectiveSourceId is null)
         {
-            return new CategoryAdministrationView(sources, null, selectedContentType, [], []);
+            return new CategoryAdministrationView(sources, null, selectedContentType, [], [], []);
         }
 
         var rules = await LoadRuleDefinitionsAsync(dbContext, effectiveSourceId.Value, selectedContentType, cancellationToken);
 
-        var outputCategories = await dbContext.OutputCategories
-            .Where(outputCategory => outputCategory.XtreamSourceId == effectiveSourceId.Value && outputCategory.ContentType == selectedContentType)
-            .OrderBy(outputCategory => outputCategory.SortOrder)
-            .ThenBy(outputCategory => outputCategory.XtreamForgeCategoryId)
-            .Select(outputCategory => new OutputCategorySummary(
-                outputCategory.Id,
-                outputCategory.XtreamForgeCategoryId,
-                outputCategory.DisplayName,
-                outputCategory.IsNameCustomized,
-                outputCategory.IsEnabled))
+        var customCategories = await dbContext.CustomCategories
+            .Where(category => category.ContentType == selectedContentType)
+            .OrderBy(category => category.DisplayName)
+            .ThenBy(category => category.Id)
+            .Select(category => new CustomCategorySummary(
+                category.Id,
+                category.XtreamForgeCategoryId,
+                category.DisplayName,
+                category.UpstreamCategories.Count()))
             .ToListAsync(cancellationToken);
 
-        var upstreamCategoryData = await dbContext.UpstreamCategories
-            .Where(upstreamCategory => upstreamCategory.XtreamSourceId == effectiveSourceId.Value && upstreamCategory.ContentType == selectedContentType)
-            .Include(upstreamCategory => upstreamCategory.OutputCategory)
-            .Include(upstreamCategory => upstreamCategory.DedicatedOutputCategory)
-            .OrderBy(upstreamCategory => upstreamCategory.UpstreamCategoryName)
-            .Select(upstreamCategory => new
-            {
-                upstreamCategory.Id,
-                upstreamCategory.UpstreamCategoryId,
-                upstreamCategory.UpstreamCategoryName,
-                upstreamCategory.IsExcluded,
-                upstreamCategory.OutputCategoryId,
-                upstreamCategory.DedicatedOutputCategoryId,
-                ActiveXtreamForgeCategoryId = upstreamCategory.OutputCategory == null ? (int?)null : upstreamCategory.OutputCategory.XtreamForgeCategoryId,
-                ActiveOutputName = upstreamCategory.OutputCategory == null ? null : upstreamCategory.OutputCategory.DisplayName,
-                DedicatedXtreamForgeCategoryId = upstreamCategory.DedicatedOutputCategory.XtreamForgeCategoryId,
-                DedicatedOutputName = upstreamCategory.DedicatedOutputCategory.DisplayName
-            })
+        var upstreamCategories = await dbContext.UpstreamCategories
+            .Where(category => category.XtreamSourceId == effectiveSourceId.Value && category.ContentType == selectedContentType)
+            .Include(category => category.DedicatedOutputCategory)
+            .Include(category => category.CustomCategory)
+            .OrderBy(category => category.UpstreamCategoryName)
+            .ThenBy(category => category.UpstreamCategoryId)
             .ToListAsync(cancellationToken);
 
-        var upstreamCategories = upstreamCategoryData
+        var categorySummaries = upstreamCategories
             .Select(category =>
             {
-                var evaluation = EvaluateEffectiveInclusion(category.IsExcluded, category.UpstreamCategoryName, rules);
-
+                var effectiveState = EvaluateEffectiveState(category.IsExcluded, category.UpstreamCategoryName, rules);
                 return new UpstreamCategorySummary(
                     category.Id,
                     category.UpstreamCategoryId,
                     category.UpstreamCategoryName,
                     category.IsExcluded,
-                    category.OutputCategoryId,
-                    category.DedicatedOutputCategoryId,
-                    category.ActiveXtreamForgeCategoryId,
-                    category.ActiveOutputName,
-                    category.DedicatedXtreamForgeCategoryId,
-                    category.DedicatedOutputName,
-                    evaluation.Decision,
-                    evaluation.MatchedRuleId,
-                    evaluation.MatchedRuleSequence,
-                    evaluation.MatchedRuleAction,
-                    evaluation.MatchedRuleOperator,
-                    evaluation.MatchedPattern,
-                    evaluation.MatchedRuleCaseSensitive,
-                    evaluation.Decision == CategoryInclusionDecision.Include);
+                    category.CustomCategoryId,
+                    category.CustomCategory?.DisplayName,
+                    category.DedicatedOutputCategory.XtreamForgeCategoryId,
+                    category.DedicatedOutputCategory.DisplayName,
+                    effectiveState.EffectiveDecision,
+                    effectiveState.RuleDecision,
+                    effectiveState.MatchedRuleId,
+                    effectiveState.MatchedRuleSequence,
+                    effectiveState.MatchedRuleAction,
+                    effectiveState.MatchedRuleOperator,
+                    effectiveState.MatchedPattern,
+                    effectiveState.MatchedRuleCaseSensitive,
+                    effectiveState.EffectiveDecision == CategoryInclusionDecision.Include,
+                    category.IsExcluded ? CategoryMappingSelection.Disabled : category.CustomCategoryId is null ? CategoryMappingSelection.Original : CategoryMappingSelection.Custom);
             })
             .ToList();
 
-        return new CategoryAdministrationView(sources, effectiveSourceId, selectedContentType, outputCategories, upstreamCategories);
+        return new CategoryAdministrationView(sources, effectiveSourceId, selectedContentType, customCategories, categorySummaries, rules);
     }
 
     public async Task<CategoryConfigurationResult> SaveCategoryConfigurationAsync(CategoryConfigurationCommand command, CancellationToken cancellationToken = default)
@@ -141,8 +134,8 @@ public sealed class XtreamCategoryMappingService(
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var upstreamCategory = await dbContext.UpstreamCategories
-            .Include(category => category.OutputCategory)
             .Include(category => category.DedicatedOutputCategory)
+            .Include(category => category.CustomCategory)
             .SingleOrDefaultAsync(
                 category => category.Id == command.UpstreamCategoryRecordId
                     && category.XtreamSourceId == command.SelectedSourceId
@@ -154,51 +147,84 @@ public sealed class XtreamCategoryMappingService(
             throw new InvalidOperationException("The category does not belong to the selected source or content type.");
         }
 
-        var outputCategories = await dbContext.OutputCategories
-            .Where(outputCategory => outputCategory.XtreamSourceId == upstreamCategory.XtreamSourceId && outputCategory.ContentType == upstreamCategory.ContentType)
-            .ToListAsync(cancellationToken);
-
-        var updatedAt = DateTimeOffset.UtcNow;
-        if (command.IsExcluded)
+        switch (command.MappingSelection)
         {
-            upstreamCategory.IsExcluded = true;
-            upstreamCategory.OutputCategory = null;
-            upstreamCategory.OutputCategoryId = null;
-            await dbContext.SaveChangesAsync(cancellationToken);
-            return new CategoryConfigurationResult(upstreamCategory.XtreamSourceId, upstreamCategory.ContentType);
-        }
-
-        upstreamCategory.IsExcluded = false;
-
-        var targetOutputCategory = command.MergeToOutputCategoryRecordId is int mergeTargetId
-            ? outputCategories.Single(outputCategory => outputCategory.Id == mergeTargetId)
-            : upstreamCategory.DedicatedOutputCategory;
-
-        var desiredOutputName = string.IsNullOrWhiteSpace(command.OutputName)
-            ? (targetOutputCategory.Id == upstreamCategory.DedicatedOutputCategoryId
-                ? upstreamCategory.UpstreamCategoryName
-                : targetOutputCategory.DisplayName)
-            : command.OutputName.Trim();
-
-        var isNameCustomized = targetOutputCategory.Id == upstreamCategory.DedicatedOutputCategoryId
-            ? !desiredOutputName.Equals(upstreamCategory.UpstreamCategoryName, StringComparison.Ordinal)
-            : targetOutputCategory.IsNameCustomized || !desiredOutputName.Equals(targetOutputCategory.DisplayName, StringComparison.Ordinal);
-
-        targetOutputCategory.DisplayName = desiredOutputName;
-        targetOutputCategory.IsNameCustomized = isNameCustomized;
-        targetOutputCategory.IsEnabled = true;
-        targetOutputCategory.UpdatedAtUtc = updatedAt;
-
-        upstreamCategory.OutputCategory = targetOutputCategory;
-        upstreamCategory.OutputCategoryId = targetOutputCategory.Id;
-
-        if (upstreamCategory.DedicatedOutputCategoryId == targetOutputCategory.Id && !targetOutputCategory.IsNameCustomized)
-        {
-            targetOutputCategory.DisplayName = upstreamCategory.UpstreamCategoryName;
+            case CategoryMappingSelection.Disabled:
+                upstreamCategory.IsExcluded = true;
+                break;
+            case CategoryMappingSelection.Original:
+                upstreamCategory.IsExcluded = false;
+                upstreamCategory.CustomCategoryId = null;
+                break;
+            case CategoryMappingSelection.Custom:
+                upstreamCategory.IsExcluded = false;
+                upstreamCategory.CustomCategory = await ResolveCustomCategoryAsync(dbContext, upstreamCategory.ContentType, command.CustomCategoryId, command.NewCustomCategoryName, cancellationToken);
+                upstreamCategory.CustomCategoryId = upstreamCategory.CustomCategory.Id;
+                break;
+            default:
+                throw new InvalidOperationException("Invalid category mapping selection.");
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return new CategoryConfigurationResult(upstreamCategory.XtreamSourceId, upstreamCategory.ContentType);
+    }
+
+    public async Task<CustomCategoryMutationResult> UpdateCustomCategoryAsync(CustomCategoryUpdateCommand command, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var customCategory = await dbContext.CustomCategories.SingleOrDefaultAsync(
+            category => category.Id == command.CustomCategoryId && category.ContentType == command.ContentType,
+            cancellationToken);
+
+        if (customCategory is null)
+        {
+            throw new InvalidOperationException("Custom category was not found.");
+        }
+
+        var normalizedName = NormalizeCustomCategoryName(command.DisplayName);
+        var existingCategory = await dbContext.CustomCategories
+            .Where(category => category.ContentType == command.ContentType && category.Id != command.CustomCategoryId)
+            .OrderBy(category => category.Id)
+            .FirstOrDefaultAsync(category => category.NormalizedDisplayName == normalizedName, cancellationToken);
+
+        if (existingCategory is not null)
+        {
+            throw new InvalidOperationException("A custom category with the same name already exists for this content type.");
+        }
+
+        customCategory.DisplayName = command.DisplayName.Trim();
+        customCategory.NormalizedDisplayName = normalizedName;
+        customCategory.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new CustomCategoryMutationResult(customCategory.ContentType);
+    }
+
+    public async Task<CustomCategoryMutationResult> DeleteCustomCategoryAsync(CustomCategoryDeleteCommand command, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var customCategory = await dbContext.CustomCategories
+            .Include(category => category.UpstreamCategories)
+            .SingleOrDefaultAsync(category => category.Id == command.CustomCategoryId && category.ContentType == command.ContentType, cancellationToken);
+
+        if (customCategory is null)
+        {
+            throw new InvalidOperationException("Custom category was not found.");
+        }
+
+        var usageCount = customCategory.UpstreamCategories.Count;
+        if (usageCount > 0)
+        {
+            throw new InvalidOperationException($"Custom category is still referenced by {usageCount} mapping(s) and cannot be deleted.");
+        }
+
+        dbContext.CustomCategories.Remove(customCategory);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new CustomCategoryMutationResult(command.ContentType);
     }
 
     public async Task<IReadOnlyList<EffectiveOutputCategoryMapping>> GetEffectiveOutputCategoryMappingsAsync(
@@ -260,28 +286,22 @@ public sealed class XtreamCategoryMappingService(
         DateTimeOffset discoveredAt,
         CancellationToken cancellationToken)
     {
-        var outputCategories = await dbContext.OutputCategories
-            .Where(outputCategory => outputCategory.XtreamSourceId == sourceId && outputCategory.ContentType == contentType)
-            .ToListAsync(cancellationToken);
-
         var upstreamCategories = await dbContext.UpstreamCategories
-            .Where(upstreamCategory => upstreamCategory.XtreamSourceId == sourceId && upstreamCategory.ContentType == contentType)
-            .Include(upstreamCategory => upstreamCategory.OutputCategory)
-            .Include(upstreamCategory => upstreamCategory.DedicatedOutputCategory)
-            .ToDictionaryAsync(upstreamCategory => upstreamCategory.UpstreamCategoryId, StringComparer.Ordinal, cancellationToken);
+            .Where(category => category.XtreamSourceId == sourceId && category.ContentType == contentType)
+            .Include(category => category.DedicatedOutputCategory)
+            .ToDictionaryAsync(category => category.UpstreamCategoryId, StringComparer.Ordinal, cancellationToken);
 
-        var nextOutputId = outputCategories.Count == 0
-            ? 1
-            : outputCategories.Max(outputCategory => outputCategory.XtreamForgeCategoryId) + 1;
-        var nextSortOrder = outputCategories.Count == 0
-            ? 1
-            : outputCategories.Max(outputCategory => outputCategory.SortOrder) + 1;
+        var nextXtreamForgeCategoryId = await GetNextXtreamForgeCategoryIdAsync(dbContext, contentType, cancellationToken);
+        var nextSortOrder = await dbContext.OutputCategories
+            .Where(category => category.XtreamSourceId == sourceId && category.ContentType == contentType)
+            .Select(category => (int?)category.SortOrder)
+            .MaxAsync(cancellationToken) ?? 0;
 
         foreach (var discoveredCategory in normalizedCategories)
         {
             if (!upstreamCategories.TryGetValue(discoveredCategory.UpstreamCategoryId, out var upstreamCategory))
             {
-                var outputCategory = CreateOutputCategory(sourceId, contentType, nextOutputId++, nextSortOrder++, discoveredCategory.UpstreamCategoryName, false, discoveredAt);
+                var outputCategory = CreateOutputCategory(sourceId, contentType, nextXtreamForgeCategoryId++, ++nextSortOrder, discoveredCategory.UpstreamCategoryName, discoveredAt);
                 dbContext.OutputCategories.Add(outputCategory);
 
                 upstreamCategory = new UpstreamCategory
@@ -290,7 +310,6 @@ public sealed class XtreamCategoryMappingService(
                     ContentType = contentType,
                     UpstreamCategoryId = discoveredCategory.UpstreamCategoryId,
                     UpstreamCategoryName = discoveredCategory.UpstreamCategoryName,
-                    OutputCategory = outputCategory,
                     DedicatedOutputCategory = outputCategory,
                     IsExcluded = false,
                     FirstDiscoveredAtUtc = discoveredAt,
@@ -299,7 +318,6 @@ public sealed class XtreamCategoryMappingService(
 
                 dbContext.UpstreamCategories.Add(upstreamCategory);
                 upstreamCategories.Add(upstreamCategory.UpstreamCategoryId, upstreamCategory);
-                outputCategories.Add(outputCategory);
                 continue;
             }
 
@@ -308,20 +326,11 @@ public sealed class XtreamCategoryMappingService(
 
             if (upstreamCategory.DedicatedOutputCategory is null)
             {
-                var dedicatedOutputCategory = CreateOutputCategory(sourceId, contentType, nextOutputId++, nextSortOrder++, discoveredCategory.UpstreamCategoryName, false, discoveredAt);
-                dbContext.OutputCategories.Add(dedicatedOutputCategory);
-                upstreamCategory.DedicatedOutputCategory = dedicatedOutputCategory;
-                upstreamCategory.OutputCategory ??= dedicatedOutputCategory;
-                outputCategories.Add(dedicatedOutputCategory);
+                var outputCategory = CreateOutputCategory(sourceId, contentType, nextXtreamForgeCategoryId++, ++nextSortOrder, discoveredCategory.UpstreamCategoryName, discoveredAt);
+                dbContext.OutputCategories.Add(outputCategory);
+                upstreamCategory.DedicatedOutputCategory = outputCategory;
             }
-
-            if (!upstreamCategory.IsExcluded && upstreamCategory.OutputCategoryId is null)
-            {
-                upstreamCategory.OutputCategory = upstreamCategory.DedicatedOutputCategory;
-            }
-
-            if (upstreamCategory.OutputCategoryId == upstreamCategory.DedicatedOutputCategoryId
-                && !upstreamCategory.DedicatedOutputCategory.IsNameCustomized)
+            else
             {
                 upstreamCategory.DedicatedOutputCategory.DisplayName = discoveredCategory.UpstreamCategoryName;
                 upstreamCategory.DedicatedOutputCategory.UpdatedAtUtc = discoveredAt;
@@ -339,59 +348,59 @@ public sealed class XtreamCategoryMappingService(
         var rules = await LoadRuleDefinitionsAsync(dbContext, sourceId, contentType, cancellationToken);
 
         var upstreamCategories = await dbContext.UpstreamCategories
-            .Where(upstreamCategory => upstreamCategory.XtreamSourceId == sourceId && upstreamCategory.ContentType == contentType)
-            .Include(upstreamCategory => upstreamCategory.OutputCategory)
-            .Where(upstreamCategory => upstreamCategory.OutputCategoryId != null)
-            .OrderBy(upstreamCategory => upstreamCategory.OutputCategory!.SortOrder)
-            .ThenBy(upstreamCategory => upstreamCategory.OutputCategory!.XtreamForgeCategoryId)
-            .ThenBy(upstreamCategory => upstreamCategory.UpstreamCategoryName)
+            .Where(category => category.XtreamSourceId == sourceId && category.ContentType == contentType)
+            .Include(category => category.DedicatedOutputCategory)
+            .Include(category => category.CustomCategory)
+            .OrderBy(category => category.DedicatedOutputCategory.SortOrder)
+            .ThenBy(category => category.UpstreamCategoryName)
             .ToListAsync(cancellationToken);
 
-        var includedUpstreamCategories = upstreamCategories
-            .Where(upstreamCategory => restrictToUpstreamCategoryIds is null || restrictToUpstreamCategoryIds.Contains(upstreamCategory.UpstreamCategoryId))
-            .Select(upstreamCategory => new
+        return upstreamCategories
+            .Where(category => restrictToUpstreamCategoryIds is null || restrictToUpstreamCategoryIds.Contains(category.UpstreamCategoryId))
+            .Select(category => new
             {
-                Category = upstreamCategory,
-                Evaluation = EvaluateEffectiveInclusion(upstreamCategory.IsExcluded, upstreamCategory.UpstreamCategoryName, rules)
+                Category = category,
+                State = EvaluateEffectiveState(category.IsExcluded, category.UpstreamCategoryName, rules)
             })
-            .Where(result => result.Evaluation.Decision == CategoryInclusionDecision.Include && result.Category.OutputCategory is not null)
-            .ToList();
-
-        return includedUpstreamCategories
-            .GroupBy(result => result.Category.OutputCategory!.Id)
+            .Where(result => result.State.EffectiveDecision == CategoryInclusionDecision.Include)
+            .GroupBy(
+                result => result.Category.CustomCategoryId is int customCategoryId ? $"custom:{customCategoryId}" : $"original:{result.Category.DedicatedOutputCategoryId}",
+                StringComparer.Ordinal)
             .Select(group =>
             {
-                var outputCategory = group.First().Category.OutputCategory!;
+                var first = group.First().Category;
+                var outputId = first.CustomCategory?.XtreamForgeCategoryId ?? first.DedicatedOutputCategory.XtreamForgeCategoryId;
+                var displayName = first.CustomCategory?.DisplayName ?? first.DedicatedOutputCategory.DisplayName;
+                var sortOrder = group.Min(entry => entry.Category.DedicatedOutputCategory.SortOrder);
+
                 return new EffectiveOutputCategoryMapping(
-                    outputCategory.Id,
-                    outputCategory.XtreamForgeCategoryId,
-                    outputCategory.SortOrder,
-                    outputCategory.DisplayName,
-                    group.Select(result => result.Category.UpstreamCategoryId).Distinct(StringComparer.Ordinal).ToList());
+                    outputId,
+                    sortOrder,
+                    displayName,
+                    group.Select(entry => entry.Category.UpstreamCategoryId).Distinct(StringComparer.Ordinal).ToList());
             })
             .OrderBy(category => category.SortOrder)
             .ThenBy(category => category.XtreamForgeCategoryId)
             .ToList();
     }
 
-    private CategoryRuleEvaluationResult EvaluateEffectiveInclusion(
+    private EffectiveCategoryState EvaluateEffectiveState(
         bool isManuallyExcluded,
         string categoryName,
         IReadOnlyList<CategoryRuleDefinition> rules)
     {
-        if (isManuallyExcluded)
-        {
-            return new CategoryRuleEvaluationResult(
-                CategoryInclusionDecision.Exclude,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null);
-        }
+        var ruleResult = ruleEvaluator.Evaluate(categoryName, rules);
+        var effectiveDecision = isManuallyExcluded ? CategoryInclusionDecision.Exclude : ruleResult.Decision;
 
-        return ruleEvaluator.Evaluate(categoryName, rules);
+        return new EffectiveCategoryState(
+            effectiveDecision,
+            ruleResult.Decision,
+            ruleResult.MatchedRuleId,
+            ruleResult.MatchedRuleSequence,
+            ruleResult.MatchedRuleAction,
+            ruleResult.MatchedRuleOperator,
+            ruleResult.MatchedPattern,
+            ruleResult.MatchedRuleCaseSensitive);
     }
 
     private static OutputCategory CreateOutputCategory(
@@ -400,7 +409,6 @@ public sealed class XtreamCategoryMappingService(
         int xtreamForgeCategoryId,
         int sortOrder,
         string displayName,
-        bool isNameCustomized,
         DateTimeOffset createdAtUtc) =>
         new()
         {
@@ -409,10 +417,87 @@ public sealed class XtreamCategoryMappingService(
             XtreamForgeCategoryId = xtreamForgeCategoryId,
             DisplayName = displayName,
             SortOrder = sortOrder,
-            IsNameCustomized = isNameCustomized,
             CreatedAtUtc = createdAtUtc,
             UpdatedAtUtc = createdAtUtc
         };
+
+    private async Task<CustomCategory> ResolveCustomCategoryAsync(
+        XtreamForgeDbContext dbContext,
+        ContentType contentType,
+        int? customCategoryId,
+        string? newCustomCategoryName,
+        CancellationToken cancellationToken)
+    {
+        if (customCategoryId is int existingCategoryId)
+        {
+            var existingCategory = await dbContext.CustomCategories.SingleOrDefaultAsync(
+                category => category.Id == existingCategoryId && category.ContentType == contentType,
+                cancellationToken);
+
+            return existingCategory ?? throw new InvalidOperationException("The selected custom category does not belong to the chosen content type.");
+        }
+
+        var normalizedName = NormalizeCustomCategoryName(newCustomCategoryName);
+        var existingByName = await dbContext.CustomCategories
+            .Where(category => category.ContentType == contentType)
+            .OrderBy(category => category.Id)
+            .FirstOrDefaultAsync(category => category.NormalizedDisplayName == normalizedName, cancellationToken);
+
+        if (existingByName is not null)
+        {
+            return existingByName;
+        }
+
+        var nextCategoryId = await GetNextXtreamForgeCategoryIdAsync(dbContext, contentType, cancellationToken);
+        var timestamp = DateTimeOffset.UtcNow;
+        var customCategory = new CustomCategory
+        {
+            ContentType = contentType,
+            XtreamForgeCategoryId = nextCategoryId,
+            DisplayName = newCustomCategoryName!.Trim(),
+            NormalizedDisplayName = normalizedName,
+            CreatedAtUtc = timestamp,
+            UpdatedAtUtc = timestamp
+        };
+
+        dbContext.CustomCategories.Add(customCategory);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return customCategory;
+    }
+
+    private async Task<int> GetNextXtreamForgeCategoryIdAsync(
+        XtreamForgeDbContext dbContext,
+        ContentType contentType,
+        CancellationToken cancellationToken)
+    {
+        var maxOutputCategoryId = await dbContext.OutputCategories
+            .Where(category => category.ContentType == contentType)
+            .Select(category => (int?)category.XtreamForgeCategoryId)
+            .MaxAsync(cancellationToken) ?? 0;
+
+        var maxCustomCategoryId = await dbContext.CustomCategories
+            .Where(category => category.ContentType == contentType)
+            .Select(category => (int?)category.XtreamForgeCategoryId)
+            .MaxAsync(cancellationToken) ?? 0;
+
+        return Math.Max(maxOutputCategoryId, maxCustomCategoryId) + 1;
+    }
+
+    private static string NormalizeCustomCategoryName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new InvalidOperationException("Custom category name is required.");
+        }
+
+        var trimmedName = name.Trim();
+        if (trimmedName.Length > MaxCustomCategoryNameLength)
+        {
+            throw new InvalidOperationException($"Custom category name must be {MaxCustomCategoryNameLength} characters or fewer.");
+        }
+
+        return trimmedName.ToUpperInvariant();
+    }
 
     private static async Task<XtreamSource> GetOrCreateSourceAsync(
         XtreamForgeDbContext dbContext,
@@ -480,7 +565,6 @@ public sealed record DiscoveredCategory(string UpstreamCategoryId, string Upstre
 public sealed record RewrittenCategory(string CategoryId, string CategoryName, IReadOnlyList<string> IncludedUpstreamCategoryIds);
 
 public sealed record EffectiveOutputCategoryMapping(
-    int OutputCategoryRecordId,
     int XtreamForgeCategoryId,
     int SortOrder,
     string DisplayName,
@@ -488,43 +572,65 @@ public sealed record EffectiveOutputCategoryMapping(
 
 public sealed record XtreamSourceSummary(int Id, string Protocol, string Host, int Port, DateTimeOffset LastSeenAtUtc);
 
-public sealed record OutputCategorySummary(int Id, int XtreamForgeCategoryId, string DisplayName, bool IsNameCustomized, bool IsEnabled);
+public sealed record CustomCategorySummary(int Id, int XtreamForgeCategoryId, string DisplayName, int UsageCount);
 
 public sealed record UpstreamCategorySummary(
     int Id,
     string UpstreamCategoryId,
     string UpstreamCategoryName,
     bool IsManuallyExcluded,
-    int? OutputCategoryId,
-    int DedicatedOutputCategoryId,
-    int? ActiveXtreamForgeCategoryId,
-    string? ActiveOutputName,
+    int? CustomCategoryId,
+    string? CustomCategoryName,
     int DedicatedXtreamForgeCategoryId,
     string DedicatedOutputName,
     CategoryInclusionDecision EffectiveDecision,
+    CategoryInclusionDecision RuleDecision,
     int? MatchedRuleId,
     int? MatchedRuleSequence,
     CategoryRuleAction? MatchedRuleAction,
     CategoryRuleOperator? MatchedRuleOperator,
     string? MatchedPattern,
     bool? MatchedRuleCaseSensitive,
-    bool IsEffectivelyIncluded);
+    bool IsEffectivelyIncluded,
+    CategoryMappingSelection CurrentMappingSelection);
 
 public sealed record CategoryAdministrationView(
     IReadOnlyList<XtreamSourceSummary> Sources,
     int? SelectedSourceId,
     ContentType SelectedContentType,
-    IReadOnlyList<OutputCategorySummary> OutputCategories,
-    IReadOnlyList<UpstreamCategorySummary> UpstreamCategories);
+    IReadOnlyList<CustomCategorySummary> CustomCategories,
+    IReadOnlyList<UpstreamCategorySummary> UpstreamCategories,
+    IReadOnlyList<CategoryRuleDefinition> Rules);
 
 public sealed record CategoryConfigurationCommand(
     int UpstreamCategoryRecordId,
     int SelectedSourceId,
     ContentType SelectedContentType,
-    bool IsExcluded,
-    int? MergeToOutputCategoryRecordId,
-    string? OutputName);
+    CategoryMappingSelection MappingSelection,
+    int? CustomCategoryId,
+    string? NewCustomCategoryName);
 
-public sealed record CategoryConfigurationResult(
-    int SourceId,
-    ContentType ContentType);
+public sealed record CategoryConfigurationResult(int SourceId, ContentType ContentType);
+
+public sealed record CustomCategoryUpdateCommand(int CustomCategoryId, ContentType ContentType, string DisplayName);
+
+public sealed record CustomCategoryDeleteCommand(int CustomCategoryId, ContentType ContentType);
+
+public sealed record CustomCategoryMutationResult(ContentType ContentType);
+
+public sealed record EffectiveCategoryState(
+    CategoryInclusionDecision EffectiveDecision,
+    CategoryInclusionDecision RuleDecision,
+    int? MatchedRuleId,
+    int? MatchedRuleSequence,
+    CategoryRuleAction? MatchedRuleAction,
+    CategoryRuleOperator? MatchedRuleOperator,
+    string? MatchedPattern,
+    bool? MatchedRuleCaseSensitive);
+
+public enum CategoryMappingSelection
+{
+    Disabled = 1,
+    Original = 2,
+    Custom = 3
+}

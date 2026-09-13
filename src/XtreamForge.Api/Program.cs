@@ -13,6 +13,7 @@ builder.Services.AddRazorPages(options =>
 {
     options.Conventions.ConfigureFilter(new AutoValidateAntiforgeryTokenAttribute());
 });
+builder.Services.AddServerSideBlazor();
 builder.Services.AddXtreamEndpoints();
 builder.Services.AddHostedService<DatabaseMigrationBackgroundService>();
 
@@ -27,6 +28,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapStaticAssets();
+app.MapBlazorHub();
 app.MapRazorPages();
 app.MapStatusEndpoints();
 app.MapXtreamEndpoints();

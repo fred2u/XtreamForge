@@ -129,9 +129,14 @@ public sealed class CategoryRuleService(
         return new CategoryRuleMutationResult(rule.XtreamSourceId, rule.ContentType);
     }
 
-    public async Task<CategoryRuleMutationResult> DeleteRuleAsync(CategoryRuleIdentityCommand command, CancellationToken cancellationToken = default)
+    public async Task<CategoryRuleMutationResult> DeleteRuleAsync(CategoryRuleDeleteCommand command, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
+
+        if (!command.ConfirmDelete)
+        {
+            throw new InvalidOperationException("Confirm delete before removing a rule.");
+        }
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -150,6 +155,7 @@ public sealed class CategoryRuleService(
 
         dbContext.CategoryRules.Remove(rule);
         rules.Remove(rule);
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         await ReassignSequencesAsync(dbContext, rules, cancellationToken);
         await transaction.CommitAsync(cancellationToken);

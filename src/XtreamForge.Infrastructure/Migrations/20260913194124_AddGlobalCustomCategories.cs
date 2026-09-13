@@ -51,7 +51,8 @@ namespace XtreamForge.Infrastructure.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_custom_categories_content_type_normalized_display_name",
                 table: "custom_categories",
-                columns: new[] { "content_type", "normalized_display_name" });
+                columns: new[] { "content_type", "normalized_display_name" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_custom_categories_content_type_xtreamforge_category_id",
@@ -63,27 +64,53 @@ namespace XtreamForge.Infrastructure.Migrations
             {
                 migrationBuilder.Sql(
                     """
+                    WITH candidate_categories AS (
+                        SELECT DISTINCT
+                            oc.id,
+                            oc.content_type,
+                            oc.xtreamforge_category_id,
+                            oc.display_name,
+                            UPPER(BTRIM(oc.display_name)) AS normalized_name,
+                            oc.created_at_utc,
+                            oc.updated_at_utc
+                        FROM output_categories oc
+                        WHERE EXISTS (
+                            SELECT 1
+                            FROM upstream_categories uc
+                            WHERE uc.output_category_id = oc.id
+                              AND uc.output_category_id <> uc.dedicated_output_category_id)
+                           OR EXISTS (
+                            SELECT 1
+                            FROM upstream_categories uc
+                            WHERE uc.dedicated_output_category_id = oc.id
+                              AND uc.output_category_id = uc.dedicated_output_category_id
+                              AND oc.is_name_customized = TRUE)
+                    ),
+                    ranked_categories AS (
+                        SELECT
+                            id,
+                            content_type,
+                            xtreamforge_category_id,
+                            display_name,
+                            normalized_name,
+                            created_at_utc,
+                            updated_at_utc,
+                            ROW_NUMBER() OVER (PARTITION BY content_type, normalized_name ORDER BY id) AS duplicate_rank
+                        FROM candidate_categories
+                    )
                     INSERT INTO custom_categories (id, content_type, xtreamforge_category_id, display_name, normalized_display_name, created_at_utc, updated_at_utc)
-                    SELECT DISTINCT
-                        oc.id,
-                        oc.content_type,
-                        oc.xtreamforge_category_id,
-                        oc.display_name,
-                        UPPER(BTRIM(oc.display_name)),
-                        oc.created_at_utc,
-                        oc.updated_at_utc
-                    FROM output_categories oc
-                    WHERE EXISTS (
-                        SELECT 1
-                        FROM upstream_categories uc
-                        WHERE uc.output_category_id = oc.id
-                          AND uc.output_category_id <> uc.dedicated_output_category_id)
-                       OR EXISTS (
-                        SELECT 1
-                        FROM upstream_categories uc
-                        WHERE uc.dedicated_output_category_id = oc.id
-                          AND uc.output_category_id = uc.dedicated_output_category_id
-                          AND oc.is_name_customized = TRUE);
+                    SELECT
+                        id,
+                        content_type,
+                        xtreamforge_category_id,
+                        display_name,
+                        CASE
+                            WHEN duplicate_rank = 1 THEN normalized_name
+                            ELSE normalized_name || '__LEGACY_' || id::text
+                        END,
+                        created_at_utc,
+                        updated_at_utc
+                    FROM ranked_categories;
 
                     UPDATE upstream_categories uc
                     SET custom_category_id = uc.output_category_id
@@ -113,26 +140,42 @@ namespace XtreamForge.Infrastructure.Migrations
                 migrationBuilder.Sql(
                     """
                     INSERT INTO custom_categories (id, content_type, xtreamforge_category_id, display_name, normalized_display_name, created_at_utc, updated_at_utc)
-                    SELECT DISTINCT
-                        oc.id,
-                        oc.content_type,
-                        oc.xtreamforge_category_id,
-                        oc.display_name,
-                        UPPER(TRIM(oc.display_name)),
-                        oc.created_at_utc,
-                        oc.updated_at_utc
-                    FROM output_categories oc
-                    WHERE EXISTS (
-                        SELECT 1
-                        FROM upstream_categories uc
-                        WHERE uc.output_category_id = oc.id
-                          AND uc.output_category_id <> uc.dedicated_output_category_id)
-                       OR EXISTS (
-                        SELECT 1
-                        FROM upstream_categories uc
-                        WHERE uc.dedicated_output_category_id = oc.id
-                          AND uc.output_category_id = uc.dedicated_output_category_id
-                          AND oc.is_name_customized = 1);
+                    SELECT
+                        candidate.id,
+                        candidate.content_type,
+                        candidate.xtreamforge_category_id,
+                        candidate.display_name,
+                        CASE
+                            WHEN candidate.duplicate_rank = 1 THEN candidate.normalized_name
+                            ELSE candidate.normalized_name || '__LEGACY_' || CAST(candidate.id AS TEXT)
+                        END,
+                        candidate.created_at_utc,
+                        candidate.updated_at_utc
+                    FROM (
+                        SELECT
+                            oc.id,
+                            oc.content_type,
+                            oc.xtreamforge_category_id,
+                            oc.display_name,
+                            UPPER(TRIM(oc.display_name)) AS normalized_name,
+                            oc.created_at_utc,
+                            oc.updated_at_utc,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY oc.content_type, UPPER(TRIM(oc.display_name))
+                                ORDER BY oc.id) AS duplicate_rank
+                        FROM output_categories oc
+                        WHERE EXISTS (
+                            SELECT 1
+                            FROM upstream_categories uc
+                            WHERE uc.output_category_id = oc.id
+                              AND uc.output_category_id <> uc.dedicated_output_category_id)
+                           OR EXISTS (
+                            SELECT 1
+                            FROM upstream_categories uc
+                            WHERE uc.dedicated_output_category_id = oc.id
+                              AND uc.output_category_id = uc.dedicated_output_category_id
+                              AND oc.is_name_customized = 1)
+                    ) AS candidate;
 
                     UPDATE upstream_categories
                     SET custom_category_id = output_category_id
@@ -197,9 +240,6 @@ namespace XtreamForge.Infrastructure.Migrations
                 name: "FK_upstream_categories_custom_categories_custom_category_id",
                 table: "upstream_categories");
 
-            migrationBuilder.DropTable(
-                name: "custom_categories");
-
             migrationBuilder.DropIndex(
                 name: "IX_upstream_categories_custom_category_id",
                 table: "upstream_categories");
@@ -231,6 +271,65 @@ namespace XtreamForge.Infrastructure.Migrations
                 type: "boolean",
                 nullable: false,
                 defaultValue: false);
+
+            if (ActiveProvider.Contains("Npgsql", StringComparison.OrdinalIgnoreCase))
+            {
+                migrationBuilder.Sql(
+                    """
+                    UPDATE output_categories
+                    SET is_enabled = TRUE;
+
+                    UPDATE upstream_categories
+                    SET output_category_id = CASE
+                        WHEN custom_category_id IS NOT NULL THEN custom_category_id
+                        WHEN is_excluded = FALSE THEN dedicated_output_category_id
+                        ELSE NULL
+                    END;
+
+                    UPDATE output_categories oc
+                    SET display_name = cc.display_name,
+                        is_name_customized = TRUE,
+                        updated_at_utc = CURRENT_TIMESTAMP
+                    FROM custom_categories cc
+                    WHERE cc.id = oc.id;
+                    """);
+            }
+            else
+            {
+                migrationBuilder.Sql(
+                    """
+                    UPDATE output_categories
+                    SET is_enabled = 1;
+
+                    UPDATE upstream_categories
+                    SET output_category_id = CASE
+                        WHEN custom_category_id IS NOT NULL THEN custom_category_id
+                        WHEN is_excluded = 0 THEN dedicated_output_category_id
+                        ELSE NULL
+                    END;
+
+                    UPDATE output_categories
+                    SET display_name = (
+                            SELECT cc.display_name
+                            FROM custom_categories cc
+                            WHERE cc.id = output_categories.id),
+                        is_name_customized = CASE
+                            WHEN EXISTS (
+                                SELECT 1
+                                FROM custom_categories cc
+                                WHERE cc.id = output_categories.id) THEN 1
+                            ELSE is_name_customized
+                        END,
+                        updated_at_utc = CURRENT_TIMESTAMP
+                    WHERE EXISTS (
+                        SELECT 1
+                        FROM custom_categories cc
+                        WHERE cc.id = output_categories.id);
+                    """);
+            }
+
+            migrationBuilder.DropTable(
+                name: "custom_categories");
 
             migrationBuilder.CreateIndex(
                 name: "IX_upstream_categories_output_category_id",

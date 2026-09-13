@@ -132,7 +132,8 @@ namespace XtreamForge.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ContentType", "NormalizedDisplayName");
+                    b.HasIndex("ContentType", "NormalizedDisplayName")
+                        .IsUnique();
 
                     b.HasIndex("ContentType", "XtreamForgeCategoryId")
                         .IsUnique();

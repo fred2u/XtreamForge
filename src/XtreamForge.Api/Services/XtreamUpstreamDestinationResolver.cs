@@ -121,16 +121,18 @@ public sealed class XtreamUpstreamDestinationResolver(IOptions<XtreamProxyOption
 
         if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
         {
+            var ipv6Bytes = address.GetAddressBytes();
             if (address.Equals(IPAddress.IPv6None)
                 || address.Equals(IPAddress.IPv6Loopback)
                 || address.IsIPv6LinkLocal
                 || address.IsIPv6Multicast
-                || address.IsIPv6SiteLocal)
+                || address.IsIPv6SiteLocal
+                || address.IsIPv6Teredo
+                || IsReservedIpv6Range(ipv6Bytes))
             {
                 return false;
             }
 
-            var ipv6Bytes = address.GetAddressBytes();
             return (ipv6Bytes[0] & 0xfe) != 0xfc;
         }
 
@@ -152,6 +154,24 @@ public sealed class XtreamUpstreamDestinationResolver(IOptions<XtreamProxyOption
             _ => true
         };
     }
+
+    private static bool IsReservedIpv6Range(byte[] bytes) =>
+        bytes is
+        [
+            0x00, 0x64, 0xff, 0x9b, .. // 64:ff9b::/96
+        ]
+        or
+        [
+            0x01, 0x00, .. // 100::/64 discard-only
+        ]
+        or
+        [
+            0x20, 0x01, 0x0d, 0xb8, .. // 2001:db8::/32 documentation
+        ]
+        or
+        [
+            0x20, 0x02, .. // 2002::/16 6to4
+        ];
 
     private static string NormalizeRestPath(string? rest) => (rest ?? string.Empty).Trim('/');
 

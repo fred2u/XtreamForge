@@ -47,7 +47,7 @@ public sealed class XtreamForgeDbContext(DbContextOptions<XtreamForgeDbContext> 
         customCategories.ToTable("custom_categories");
         customCategories.HasKey(category => category.Id);
         customCategories.HasIndex(category => new { category.ContentType, category.XtreamForgeCategoryId }).IsUnique();
-        customCategories.HasIndex(category => new { category.ContentType, category.NormalizedDisplayName });
+        customCategories.HasIndex(category => new { category.ContentType, category.NormalizedDisplayName }).IsUnique();
         customCategories.Property(category => category.Id).HasColumnName("id");
         customCategories.Property(category => category.ContentType).HasColumnName("content_type").HasConversion<string>().HasMaxLength(20);
         customCategories.Property(category => category.XtreamForgeCategoryId).HasColumnName("xtreamforge_category_id");

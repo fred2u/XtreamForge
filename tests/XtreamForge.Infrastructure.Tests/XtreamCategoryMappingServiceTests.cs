@@ -188,6 +188,42 @@ public sealed class XtreamCategoryMappingServiceTests
     }
 
     [Fact]
+    public async Task GetAdministrationViewAsync_ReturnsOnlySelectedContentTypeData()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var serviceProvider = CreateServiceProvider(connection);
+        await EnsureCreatedAsync(serviceProvider);
+
+        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Vod, [new DiscoveredCategory("10", "VOD Sport")]);
+        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Series, [new DiscoveredCategory("20", "Series Drama")]);
+
+        var sourceId = await GetSourceIdAsync(serviceProvider, "example.com");
+        var vodCategory = await GetUpstreamCategoryAsync(serviceProvider, sourceId, "10");
+
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(
+            vodCategory.Id,
+            sourceId,
+            ContentType.Vod,
+            CategoryMappingSelection.Custom,
+            null,
+            "Movies 4K"));
+
+        var vodView = await mappingService.GetAdministrationViewAsync(sourceId, ContentType.Vod);
+        var seriesView = await mappingService.GetAdministrationViewAsync(sourceId, ContentType.Series);
+
+        Assert.Single(vodView.UpstreamCategories);
+        Assert.Equal("VOD Sport", Assert.Single(vodView.UpstreamCategories).UpstreamCategoryName);
+        Assert.Single(vodView.CustomCategories);
+        Assert.Equal("Movies 4K", Assert.Single(vodView.CustomCategories).DisplayName);
+
+        Assert.Single(seriesView.UpstreamCategories);
+        Assert.Equal("Series Drama", Assert.Single(seriesView.UpstreamCategories).UpstreamCategoryName);
+        Assert.Empty(seriesView.CustomCategories);
+    }
+
+    [Fact]
     public async Task ManualDisabledCategory_StillReportsMatchedRuleWhileManualOverrideTakesPrecedence()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

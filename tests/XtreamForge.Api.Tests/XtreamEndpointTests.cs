@@ -844,6 +844,18 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
     }
 
     [Fact]
+    public async Task BlazorServerScript_IsServedForCategoriesInteractivity()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/_framework/blazor.server.js");
+
+        response.EnsureSuccessStatusCode();
+        var script = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Blazor", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CategoriesPage_PrerrenderedGridShowsMatchedRuleAndManualDisabledStatus()
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");

@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Hosting;
 using XtreamForge.Api.Services;
 using Microsoft.Extensions.Hosting;
 using XtreamForge.Api.Endpoints;
 using XtreamForge.Infrastructure.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.UseStaticWebAssets();
 
 builder.AddServiceDefaults();
 builder.AddXtreamForgeInfrastructure();

@@ -137,6 +137,49 @@ public sealed class CategoryRuleServiceTests
     }
 
     [Fact]
+    public async Task UpdateRuleAsync_PersistsEditedPatternActionOperatorAndCaseSensitivity()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var serviceProvider = CreateServiceProvider(connection);
+        await EnsureCreatedAsync(serviceProvider);
+
+        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
+        await SeedVodCategoriesAsync(mappingService);
+        var sourceId = await GetSourceIdAsync(serviceProvider);
+
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(
+            null,
+            sourceId,
+            ContentType.Vod,
+            CategoryRuleAction.Include,
+            CategoryRuleOperator.Contains,
+            "DOCUMENTAIRE",
+            false,
+            true));
+
+        var rule = await GetRuleAsync(serviceProvider);
+
+        await ruleService.UpdateRuleAsync(new CategoryRuleEditorCommand(
+            rule.Id,
+            sourceId,
+            ContentType.Vod,
+            CategoryRuleAction.Exclude,
+            CategoryRuleOperator.StartsWith,
+            "SPORT",
+            true,
+            false));
+
+        var updatedRule = await GetRuleAsync(serviceProvider);
+        Assert.Equal(CategoryRuleAction.Exclude, updatedRule.Action);
+        Assert.Equal(CategoryRuleOperator.StartsWith, updatedRule.Operator);
+        Assert.Equal("SPORT", updatedRule.Pattern);
+        Assert.True(updatedRule.CaseSensitive);
+        Assert.False(updatedRule.IsEnabled);
+    }
+
+    [Fact]
     public async Task DeleteRuleAsync_RemovesPersistedRuleAndKeepsRemainingRuleOrderStable()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

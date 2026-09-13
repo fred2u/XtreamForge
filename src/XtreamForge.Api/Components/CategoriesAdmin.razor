@@ -36,34 +36,34 @@ else
     <form class="filters-panel" @onsubmit:preventDefault>
         <label>
             Source
-            <select value="@(_selectedSourceId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty)" @onchange="OnSourceChangedAsync">
+            <InputSelect @bind-Value="_selectedSourceId" @bind-Value:after="OnSourceChangedAsync">
                 @foreach (var source in _categoryView.Sources)
                 {
                     <option value="@source.Id">@source.Protocol://@source.Host:@source.Port</option>
                 }
-            </select>
+            </InputSelect>
         </label>
 
         <label>
             Content type
-            <select value="@_selectedContentType.ToString()" @onchange="OnContentTypeChangedAsync">
+            <InputSelect @bind-Value="_selectedContentType" @bind-Value:after="OnContentTypeChangedAsync">
                 <option value="@ContentType.Vod">VOD</option>
                 <option value="@ContentType.Series">Series</option>
-            </select>
+            </InputSelect>
         </label>
 
         <label>
             Search
-            <input type="search" @bind="_searchText" @bind:event="oninput" placeholder="Search categories" />
+            <InputTextOnInput Value="@_searchText" ValueChanged="OnSearchChangedAsync" type="search" placeholder="Search categories" />
         </label>
 
         <label>
             Status
-            <select @bind="_statusFilter">
+            <InputSelect @bind-Value="_statusFilter">
                 <option value="@CategoryStatusFilter.All">All</option>
                 <option value="@CategoryStatusFilter.Enabled">Enabled</option>
                 <option value="@CategoryStatusFilter.Disabled">Disabled</option>
-            </select>
+            </InputSelect>
         </label>
     </form>
 
@@ -112,20 +112,20 @@ else
                                 <div class="category-meta">Upstream ID: @row.Summary.UpstreamCategoryId · Original output: @row.Summary.DedicatedXtreamForgeCategoryId</div>
                             </td>
                             <td>
-                                <select value="@row.MappingValue" @onchange="async args => await OnMappingSelectionChangedAsync(row, args.Value?.ToString())" disabled="@(_busyCategoryId == row.Summary.Id)">
+                                <InputSelect @bind-Value="row.MappingValue" @bind-Value:after="() => OnMappingSelectionChangedAsync(row)" disabled="@(_busyCategoryId == row.Summary.Id)">
                                     <option value="disabled">Disabled</option>
                                     <option value="original">@row.Summary.UpstreamCategoryName</option>
                                     <option value="new">New category</option>
                                     @foreach (var customCategory in _customCategoryRows)
                                     {
-                                        <option value="@GetCustomMappingValue(customCategory.Summary.Id)">@customCategory.Summary.DisplayName</option>
+                                        <option value="@CategoryRowState.GetCustomMappingValue(customCategory.Summary.Id)">@customCategory.Summary.DisplayName</option>
                                     }
-                                </select>
+                                </InputSelect>
 
                                 @if (row.MappingValue == "new")
                                 {
                                     <div class="inline-editor-row">
-                                        <input type="text" @bind="row.NewCustomCategoryName" maxlength="255" placeholder="New category name" disabled="@(_busyCategoryId == row.Summary.Id)" />
+                                        <InputText @bind-Value="row.NewCustomCategoryName" maxlength="255" placeholder="New category name" disabled="@(_busyCategoryId == row.Summary.Id)" />
                                         <button type="button" @onclick="async () => await CreateCustomCategoryAsync(row)" disabled="@(_busyCategoryId == row.Summary.Id)">Create</button>
                                     </div>
                                 }
@@ -173,23 +173,23 @@ else
         <div class="rule-editor-grid">
             <label>
                 Action
-                <select @bind="_newRule.Action" disabled="@_isRuleCreating">
+                <InputSelect @bind-Value="_newRule.Action" disabled="@_isRuleCreating">
                     <option value="@CategoryRuleAction.Include">Include</option>
                     <option value="@CategoryRuleAction.Exclude">Exclude</option>
-                </select>
+                </InputSelect>
             </label>
 
             <label>
                 Operator
-                <select @bind="_newRule.Operator" disabled="@_isRuleCreating">
+                <InputSelect @bind-Value="_newRule.Operator" disabled="@_isRuleCreating">
                     <option value="@CategoryRuleOperator.Contains">Contains</option>
                     <option value="@CategoryRuleOperator.StartsWith">StartsWith</option>
-                </select>
+                </InputSelect>
             </label>
 
             <label>
                 Pattern
-                <input type="text" @bind="_newRule.Pattern" maxlength="255" disabled="@_isRuleCreating" />
+                <InputText @bind-Value="_newRule.Pattern" maxlength="255" disabled="@_isRuleCreating" />
             </label>
 
             <label class="checkbox-label">
@@ -243,18 +243,18 @@ else
                         <tr id="rule-@rule.RuleId">
                             <td>@rule.Sequence</td>
                             <td>
-                                <select @bind="rule.Action" disabled="@(_busyRuleId == rule.RuleId)">
+                                <InputSelect @bind-Value="rule.Action" disabled="@(_busyRuleId == rule.RuleId)">
                                     <option value="@CategoryRuleAction.Include">Include</option>
                                     <option value="@CategoryRuleAction.Exclude">Exclude</option>
-                                </select>
+                                </InputSelect>
                             </td>
                             <td>
-                                <select @bind="rule.Operator" disabled="@(_busyRuleId == rule.RuleId)">
+                                <InputSelect @bind-Value="rule.Operator" disabled="@(_busyRuleId == rule.RuleId)">
                                     <option value="@CategoryRuleOperator.Contains">Contains</option>
                                     <option value="@CategoryRuleOperator.StartsWith">StartsWith</option>
-                                </select>
+                                </InputSelect>
                             </td>
-                            <td><input type="text" @bind="rule.Pattern" maxlength="255" disabled="@(_busyRuleId == rule.RuleId)" /></td>
+                            <td><InputText @bind-Value="rule.Pattern" maxlength="255" disabled="@(_busyRuleId == rule.RuleId)" /></td>
                             <td><InputCheckbox @bind-Value="rule.CaseSensitive" disabled="@(_busyRuleId == rule.RuleId)" /></td>
                             <td><InputCheckbox @bind-Value="rule.IsEnabled" disabled="@(_busyRuleId == rule.RuleId)" /></td>
                             <td>
@@ -320,7 +320,7 @@ else
                     {
                         <tr>
                             <td>@customCategory.Summary.XtreamForgeCategoryId</td>
-                            <td><input type="text" @bind="customCategory.DisplayName" maxlength="255" disabled="@(_busyCustomCategoryId == customCategory.Summary.Id)" /></td>
+                            <td><InputText @bind-Value="customCategory.DisplayName" maxlength="255" disabled="@(_busyCustomCategoryId == customCategory.Summary.Id)" /></td>
                             <td>@customCategory.Summary.UsageCount mapping(s)</td>
                             <td>
                                 <div class="inline-editor-row">
@@ -363,17 +363,7 @@ else
     private string? _customCategoryMessage;
     private string? _customCategoryErrorMessage;
 
-    private List<CategoryRowState> FilteredCategoryRows => _categoryRows
-        .Where(row => string.IsNullOrWhiteSpace(_searchText)
-            || row.Summary.UpstreamCategoryName.Contains(_searchText, StringComparison.OrdinalIgnoreCase)
-            || row.Summary.UpstreamCategoryId.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
-        .Where(row => _statusFilter switch
-        {
-            CategoryStatusFilter.Enabled => row.Summary.EffectiveDecision == CategoryInclusionDecision.Include,
-            CategoryStatusFilter.Disabled => row.Summary.EffectiveDecision == CategoryInclusionDecision.Exclude,
-            _ => true
-        })
-        .ToList();
+    private IReadOnlyList<CategoryRowState> FilteredCategoryRows => CategoriesAdminState.FilterCategoryRows(_categoryRows, _searchText, _statusFilter);
 
     protected override async Task OnInitializedAsync()
     {
@@ -384,6 +374,12 @@ else
     private async Task ReloadAsync()
     {
         _isLoading = true;
+        _statusMessage = null;
+        _errorMessage = null;
+        _ruleMessage = null;
+        _ruleErrorMessage = null;
+        _customCategoryMessage = null;
+        _customCategoryErrorMessage = null;
         StateHasChanged();
 
         try
@@ -427,40 +423,28 @@ else
         }
     }
 
-    private async Task OnSourceChangedAsync(ChangeEventArgs args)
+    private async Task OnSourceChangedAsync()
     {
-        if (int.TryParse(args.Value?.ToString(), NumberStyles.None, CultureInfo.InvariantCulture, out var parsedSourceId))
+        if (_selectedSourceId is not null)
         {
-            _selectedSourceId = parsedSourceId;
-            UpdateNavigation();
             await ReloadAsync();
         }
     }
 
-    private async Task OnContentTypeChangedAsync(ChangeEventArgs args)
+    private async Task OnContentTypeChangedAsync()
     {
-        if (Enum.TryParse<ContentType>(args.Value?.ToString(), true, out var parsedContentType))
-        {
-            _selectedContentType = parsedContentType;
-            UpdateNavigation();
-            await ReloadAsync();
-        }
+        await ReloadAsync();
     }
 
-    private void UpdateNavigation()
+    private Task OnSearchChangedAsync(string value)
     {
-        var targetUri = NavigationManager.GetUriWithQueryParameters(new Dictionary<string, object?>
-        {
-            ["sourceId"] = _selectedSourceId,
-            ["contentType"] = _selectedContentType.ToString()
-        });
-
-        NavigationManager.NavigateTo(targetUri, replace: true);
+        _searchText = value;
+        StateHasChanged();
+        return Task.CompletedTask;
     }
 
-    private async Task OnMappingSelectionChangedAsync(CategoryRowState row, string? newValue)
+    private async Task OnMappingSelectionChangedAsync(CategoryRowState row)
     {
-        row.MappingValue = newValue ?? "original";
         row.Message = null;
         _statusMessage = null;
         _errorMessage = null;
@@ -695,54 +679,4 @@ else
         }
     }
 
-    private static string GetCustomMappingValue(int customCategoryId) => $"custom:{customCategoryId}";
-
-    private sealed class CategoryRowState(UpstreamCategorySummary summary)
-    {
-        public UpstreamCategorySummary Summary { get; } = summary;
-        public string MappingValue { get; set; } = summary.CurrentMappingSelection switch
-        {
-            CategoryMappingSelection.Disabled => "disabled",
-            CategoryMappingSelection.Original => "original",
-            CategoryMappingSelection.Custom when summary.CustomCategoryId is int customCategoryId => GetCustomMappingValue(customCategoryId),
-            _ => "original"
-        };
-        public string? NewCustomCategoryName { get; set; }
-        public string? Message { get; set; }
-    }
-
-    private sealed class RuleRowState(CategoryRuleSummary summary)
-    {
-        public int RuleId { get; } = summary.Id;
-        public int Sequence { get; set; } = summary.Sequence;
-        public CategoryRuleAction Action { get; set; } = summary.Action;
-        public CategoryRuleOperator Operator { get; set; } = summary.Operator;
-        public string Pattern { get; set; } = summary.Pattern;
-        public bool CaseSensitive { get; set; } = summary.CaseSensitive;
-        public bool IsEnabled { get; set; } = summary.IsEnabled;
-        public bool ConfirmDelete { get; set; }
-        public string? Message { get; set; }
-    }
-
-    private sealed class RuleEditorState
-    {
-        public CategoryRuleAction Action { get; set; } = CategoryRuleAction.Include;
-        public CategoryRuleOperator Operator { get; set; } = CategoryRuleOperator.Contains;
-        public string? Pattern { get; set; }
-        public bool CaseSensitive { get; set; }
-        public bool IsEnabled { get; set; } = true;
-    }
-
-    private sealed class CustomCategoryRowState(CustomCategorySummary summary)
-    {
-        public CustomCategorySummary Summary { get; } = summary;
-        public string DisplayName { get; set; } = summary.DisplayName;
-    }
-
-    private enum CategoryStatusFilter
-    {
-        All = 1,
-        Enabled = 2,
-        Disabled = 3
-    }
 }

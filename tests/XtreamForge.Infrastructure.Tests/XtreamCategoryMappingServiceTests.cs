@@ -336,6 +336,28 @@ public sealed class XtreamCategoryMappingServiceTests
     }
 
     [Fact]
+    public async Task CreateCustomCategoryAsync_CreatesStandaloneCategory_AndReusesExistingName()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var serviceProvider = CreateServiceProvider(connection);
+        await EnsureCreatedAsync(serviceProvider);
+
+        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+
+        var created = await mappingService.CreateCustomCategoryAsync(new CustomCategoryCreateCommand(ContentType.Vod, "Movies 4K"));
+        var reused = await mappingService.CreateCustomCategoryAsync(new CustomCategoryCreateCommand(ContentType.Vod, "  movies 4k  "));
+
+        Assert.Equal(created.Id, reused.Id);
+        Assert.Equal("Movies 4K", reused.DisplayName);
+        Assert.Equal(0, reused.UsageCount);
+
+        await using var verifyScope = serviceProvider.CreateAsyncScope();
+        var dbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        Assert.Equal(1, await dbContext.CustomCategories.CountAsync());
+    }
+
+    [Fact]
     public async Task SaveCategoryConfigurationAsync_RejectsCrossContentTypeCustomCategoryMappings()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

@@ -111,4 +111,39 @@ public sealed class CategoriesAdminStateTests
 
         Assert.Equal("custom:9", row.MappingValue);
     }
+
+    [Fact]
+    public void CategoryRowState_CancelNewCustomCategoryRestoresPreviousSelection()
+    {
+        var summary = new UpstreamCategorySummary(
+            4,
+            "50",
+            "|FR| 4K UHD",
+            false,
+            9,
+            "Movies 4K",
+            500,
+            "|FR| 4K UHD",
+            CategoryInclusionDecision.Include,
+            CategoryInclusionDecision.Include,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            true,
+            CategoryMappingSelection.Custom);
+
+        var row = new CategoryRowState(summary);
+        row.MappingValue = "new";
+
+        row.BeginCustomCategoryCreate();
+        row.NewCustomCategoryName = "Fresh 4K";
+        row.CancelCustomCategoryCreate();
+
+        Assert.False(row.IsCreatingCustomCategory);
+        Assert.Equal("custom:9", row.MappingValue);
+        Assert.Null(row.NewCustomCategoryName);
+    }
 }

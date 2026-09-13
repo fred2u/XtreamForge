@@ -214,6 +214,37 @@ public sealed class XtreamCategoryMappingService(
         return new CustomCategoryMutationResult(customCategory.ContentType);
     }
 
+    public async Task<CustomCategorySummary> CreateCustomCategoryAsync(CustomCategoryCreateCommand command, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        for (var attempt = 1; attempt <= MaxSyncAttempts; attempt++)
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+            try
+            {
+                var customCategory = await ResolveCustomCategoryAsync(dbContext, command.ContentType, null, command.DisplayName, cancellationToken);
+                await dbContext.SaveChangesAsync(cancellationToken);
+
+                var usageCount = await dbContext.UpstreamCategories.CountAsync(
+                    category => category.CustomCategoryId == customCategory.Id,
+                    cancellationToken);
+
+                return new CustomCategorySummary(
+                    customCategory.Id,
+                    customCategory.XtreamForgeCategoryId,
+                    customCategory.DisplayName,
+                    usageCount);
+            }
+            catch (DbUpdateException exception) when (attempt < MaxSyncAttempts && IsUniqueConstraintViolation(exception))
+            {
+            }
+        }
+
+        throw new InvalidOperationException("Unable to create the custom category after multiple attempts.");
+    }
+
     public async Task<CustomCategoryMutationResult> DeleteCustomCategoryAsync(CustomCategoryDeleteCommand command, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -626,7 +657,7 @@ public sealed record CategoryConfigurationCommand(
     string? NewCustomCategoryName);
 
 public sealed record CategoryConfigurationResult(int SourceId, ContentType ContentType);
-
+public sealed record CustomCategoryCreateCommand(ContentType ContentType, string? DisplayName);
 public sealed record CustomCategoryUpdateCommand(int CustomCategoryId, ContentType ContentType, string DisplayName);
 
 public sealed record CustomCategoryDeleteCommand(int CustomCategoryId, ContentType ContentType);

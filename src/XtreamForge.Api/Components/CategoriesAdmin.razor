@@ -54,7 +54,7 @@ else
 
         <label>
             Search
-            <InputTextOnInput Value="@_searchText" ValueChanged="OnSearchChangedAsync" type="search" placeholder="Search categories" />
+            <input @bind="_searchText" @bind:event="oninput" type="search" placeholder="Search categories" />
         </label>
 
         <label>
@@ -122,11 +122,12 @@ else
                                     }
                                 </InputSelect>
 
-                                @if (row.MappingValue == "new")
+                                @if (row.IsCreatingCustomCategory)
                                 {
                                     <div class="inline-editor-row">
                                         <InputText @bind-Value="row.NewCustomCategoryName" maxlength="255" placeholder="New category name" disabled="@(_busyCategoryId == row.Summary.Id)" />
                                         <button type="button" @onclick="async () => await CreateCustomCategoryAsync(row)" disabled="@(_busyCategoryId == row.Summary.Id)">Create</button>
+                                        <button type="button" @onclick="() => CancelCustomCategoryCreate(row)" disabled="@(_busyCategoryId == row.Summary.Id)">Cancel</button>
                                     </div>
                                 }
 
@@ -286,6 +287,11 @@ else
         <h2>Global custom categories</h2>
         <p class="category-meta">Custom categories are shared across all sources for the selected content type.</p>
 
+        <div class="inline-editor-row">
+            <InputText @bind-Value="_newCustomCategory.DisplayName" maxlength="255" placeholder="New custom category name" disabled="@_isCustomCategoryCreating" />
+            <button type="button" @onclick="CreateStandaloneCustomCategoryAsync" disabled="@_isCustomCategoryCreating">@(_isCustomCategoryCreating ? "Saving…" : "Create")</button>
+        </div>
+
         @if (!string.IsNullOrWhiteSpace(_customCategoryMessage) || !string.IsNullOrWhiteSpace(_customCategoryErrorMessage))
         {
             <div class="category-meta">
@@ -347,6 +353,7 @@ else
     private List<RuleRowState> _ruleRows = [];
     private List<CustomCategoryRowState> _customCategoryRows = [];
     private RuleEditorState _newRule = new();
+    private CustomCategoryEditorState _newCustomCategory = new();
     private bool _isLoading = true;
     private int? _selectedSourceId;
     private ContentType _selectedContentType = ContentType.Vod;
@@ -356,6 +363,7 @@ else
     private int? _busyRuleId;
     private int? _busyCustomCategoryId;
     private bool _isRuleCreating;
+    private bool _isCustomCategoryCreating;
     private string? _statusMessage;
     private string? _errorMessage;
     private string? _ruleMessage;
@@ -394,6 +402,7 @@ else
             _ruleRows = _rulesView.Rules.Select(summary => new RuleRowState(summary)).ToList();
             _customCategoryRows = _categoryView.CustomCategories.Select(summary => new CustomCategoryRowState(summary)).ToList();
             _newRule = new RuleEditorState { IsEnabled = true };
+            _newCustomCategory = new CustomCategoryEditorState();
         }
         catch (Exception exception)
         {
@@ -436,13 +445,6 @@ else
         await ReloadAsync();
     }
 
-    private Task OnSearchChangedAsync(string value)
-    {
-        _searchText = value;
-        StateHasChanged();
-        return Task.CompletedTask;
-    }
-
     private async Task OnMappingSelectionChangedAsync(CategoryRowState row)
     {
         row.Message = null;
@@ -451,11 +453,15 @@ else
 
         if (row.MappingValue == "new")
         {
+            row.BeginCustomCategoryCreate();
             return;
         }
 
         await SaveCategoryMappingAsync(row, row.MappingValue, null);
     }
+
+    private void CancelCustomCategoryCreate(CategoryRowState row) =>
+        row.CancelCustomCategoryCreate();
 
     private async Task CreateCustomCategoryAsync(CategoryRowState row)
     {
@@ -487,6 +493,11 @@ else
             };
 
             await CategoryMappingService.SaveCategoryConfigurationAsync(command);
+            row.CommitMapping(mappingValue switch
+            {
+                "new" when !string.IsNullOrWhiteSpace(newCustomCategoryName) => row.MappingValue,
+                _ => mappingValue
+            });
             _statusMessage = "Saved.";
             await ReloadAsync();
         }
@@ -655,6 +666,27 @@ else
         finally
         {
             _busyCustomCategoryId = null;
+        }
+    }
+
+    private async Task CreateStandaloneCustomCategoryAsync()
+    {
+        try
+        {
+            _isCustomCategoryCreating = true;
+            _customCategoryMessage = null;
+            _customCategoryErrorMessage = null;
+            await CategoryMappingService.CreateCustomCategoryAsync(new CustomCategoryCreateCommand(_selectedContentType, _newCustomCategory.DisplayName));
+            _customCategoryMessage = "Custom category created.";
+            await ReloadAsync();
+        }
+        catch (Exception exception)
+        {
+            _customCategoryErrorMessage = exception.Message;
+        }
+        finally
+        {
+            _isCustomCategoryCreating = false;
         }
     }
 

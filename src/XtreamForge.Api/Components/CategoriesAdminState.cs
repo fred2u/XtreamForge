@@ -31,17 +31,45 @@ internal sealed class CategoryRowState(UpstreamCategorySummary summary)
 {
     public UpstreamCategorySummary Summary { get; } = summary;
 
-    public string MappingValue { get; set; } = summary.CurrentMappingSelection switch
+    public string MappingValue { get; set; } = GetMappingValue(summary);
+
+    public string SavedMappingValue { get; private set; } = GetMappingValue(summary);
+
+    public bool IsCreatingCustomCategory { get; private set; }
+
+    public string? NewCustomCategoryName { get; set; }
+
+    public string? Message { get; set; }
+
+    public void BeginCustomCategoryCreate()
+    {
+        IsCreatingCustomCategory = true;
+        NewCustomCategoryName ??= Summary.UpstreamCategoryName;
+    }
+
+    public void CancelCustomCategoryCreate()
+    {
+        IsCreatingCustomCategory = false;
+        MappingValue = SavedMappingValue;
+        NewCustomCategoryName = null;
+        Message = null;
+    }
+
+    public void CommitMapping(string mappingValue)
+    {
+        SavedMappingValue = mappingValue;
+        MappingValue = mappingValue;
+        IsCreatingCustomCategory = false;
+        NewCustomCategoryName = null;
+    }
+
+    private static string GetMappingValue(UpstreamCategorySummary summary) => summary.CurrentMappingSelection switch
     {
         CategoryMappingSelection.Disabled => "disabled",
         CategoryMappingSelection.Original => "original",
         CategoryMappingSelection.Custom when summary.CustomCategoryId is int customCategoryId => GetCustomMappingValue(customCategoryId),
         _ => "original"
     };
-
-    public string? NewCustomCategoryName { get; set; }
-
-    public string? Message { get; set; }
 
     public static string GetCustomMappingValue(int customCategoryId) => $"custom:{customCategoryId}";
 }
@@ -85,6 +113,11 @@ internal sealed class CustomCategoryRowState(CustomCategorySummary summary)
     public CustomCategorySummary Summary { get; } = summary;
 
     public string DisplayName { get; set; } = summary.DisplayName;
+}
+
+internal sealed class CustomCategoryEditorState
+{
+    public string? DisplayName { get; set; }
 }
 
 internal enum CategoryStatusFilter

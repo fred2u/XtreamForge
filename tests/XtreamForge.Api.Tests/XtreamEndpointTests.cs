@@ -338,7 +338,7 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.Equal(("501", "1"), (payload[0].Id, payload[0].CategoryId));
         Assert.Equal(("503", customCategoryId.ToString()), (payload[1].Id, payload[1].CategoryId));
         Assert.NotNull(payload[1].CategoryIds);
-        Assert.Equal([customCategoryId.ToString()], payload[1].CategoryIds);
+        Assert.Equal([customCategoryId.ToString()], payload[1].CategoryIds!);
     }
 
     [Fact]

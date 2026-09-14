@@ -1,7 +1,7 @@
 <Project Sdk="Aspire.AppHost.Sdk/13.5.3">
 
   <ItemGroup>
-    <ProjectReference Include="..\XtreamForge.Api\XtreamForge.Api.csproj" />
+    <ProjectReference Include="..\XtreamForge\XtreamForge.csproj" />
   </ItemGroup>
 
   <ItemGroup>

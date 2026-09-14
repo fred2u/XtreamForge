@@ -8,11 +8,11 @@ XtreamForge is an early-stage, self-hosted .NET application that will sit in fro
 
 This repository currently provides the initial foundation plus the first category-management feature:
 
-- ASP.NET Core application combining Minimal APIs and integrated server-side interactive administration UI
+- One ASP.NET Core web application combining Minimal APIs, Xtream proxy endpoints, and an Interactive Server Blazor administration UI
 - Initial Xtream request routing, classification, and transparent forwarding foundation
 - Database-backed VOD/Series category discovery and category rewriting
 - .NET Aspire orchestration
-- PostgreSQL + EF Core infrastructure
+- PostgreSQL + EF Core persistence
 - Docker Compose development setup
 - xUnit test foundation
 
@@ -30,12 +30,10 @@ flowchart LR
 
 ### Projects
 
-- `src/XtreamForge.Api` - Minimal APIs plus integrated admin UI with health and status endpoints
-- `src/XtreamForge.Infrastructure` - EF Core, PostgreSQL wiring, options, migrations
+- `src/XtreamForge` - the primary ASP.NET Core web app containing the Blazor UI, Minimal APIs, Xtream proxy logic, EF Core models, migrations, and category/rule business logic
 - `src/XtreamForge.ServiceDefaults` - Aspire service defaults (OpenTelemetry, health checks, service discovery, resilience)
 - `src/XtreamForge.AppHost` - Aspire orchestration for local development
-- `tests/XtreamForge.Api.Tests` - API integration tests
-- `tests/XtreamForge.Infrastructure.Tests` - Infrastructure-focused tests
+- `tests/XtreamForge.Tests` - integration and unit tests across UI state, Xtream processing, and category/data behavior
 
 ## Prerequisites
 
@@ -60,10 +58,10 @@ Do not commit credentials.
 For local secrets, prefer user-secrets or environment variables:
 
 ```bash
-dotnet user-secrets --project src/XtreamForge.Api set "Xtream:BaseUrl" "https://example.test"
-dotnet user-secrets --project src/XtreamForge.Api set "Xtream:Username" "your-user"
-dotnet user-secrets --project src/XtreamForge.Api set "Xtream:Password" "your-password"
-dotnet user-secrets --project src/XtreamForge.Api set "Tmdb:ApiKey" "your-tmdb-key"
+dotnet user-secrets --project src/XtreamForge set "Xtream:BaseUrl" "https://example.test"
+dotnet user-secrets --project src/XtreamForge set "Xtream:Username" "your-user"
+dotnet user-secrets --project src/XtreamForge set "Xtream:Password" "your-password"
+dotnet user-secrets --project src/XtreamForge set "Tmdb:ApiKey" "your-tmdb-key"
 ```
 
 Database connections are supplied through the standard `ConnectionStrings__database` setting.
@@ -85,7 +83,7 @@ dotnet run --project src/XtreamForge.AppHost
 The AppHost starts:
 
 - PostgreSQL with persistent storage
-- `XtreamForge.Api` (serving both API and administration UI)
+- `XtreamForge` (serving the Blazor admin UI, Minimal APIs, Xtream proxy, and health endpoints)
 - the Aspire dashboard
 
 ## Run with Docker Compose
@@ -108,7 +106,7 @@ Override them for any non-local usage.
 
 - Aspire injects the database connection into the application.
 - Docker Compose supplies the same connection via environment variables.
-- The API attempts EF Core migrations in the background on startup by default.
+- The web app applies EF Core migrations during startup by default.
 
 ## Xtream proxy
 

@@ -1,0 +1,16 @@
+@inherits LayoutComponentBase
+
+<div class="layout-shell">
+    <aside class="sidebar">
+        <div class="brand">XtreamForge</div>
+        <nav class="navigation" aria-label="Primary administration navigation">
+            <NavLink href="/" Match="NavLinkMatch.All">Dashboard</NavLink>
+            <NavLink href="/categories">Categories</NavLink>
+            <NavLink href="/settings">Settings</NavLink>
+        </nav>
+    </aside>
+
+    <main class="content">
+        @Body
+    </main>
+</div>

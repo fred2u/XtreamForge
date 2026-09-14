@@ -15,10 +15,10 @@ services:
       timeout: 5s
       retries: 5
 
-  api:
+  xtreamforge:
     build:
       context: .
-      dockerfile: src/XtreamForge.Api/Dockerfile
+      dockerfile: src/XtreamForge/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080

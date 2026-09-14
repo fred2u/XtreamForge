@@ -5,7 +5,7 @@ var postgres = builder.AddPostgres("postgres")
 
 var database = postgres.AddDatabase("database", "xtreamforge");
 
-builder.AddProject<Projects.XtreamForge_Api>("api")
+builder.AddProject<Projects.XtreamForge>("xtreamforge")
     .WithReference(database)
     .WaitFor(database);
 

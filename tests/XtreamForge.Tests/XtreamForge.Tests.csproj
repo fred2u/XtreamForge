@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\XtreamForge.Blazor\XtreamForge.Blazor.csproj" />
     <ProjectReference Include="..\..\src\XtreamForge\XtreamForge.csproj" />
   </ItemGroup>
 

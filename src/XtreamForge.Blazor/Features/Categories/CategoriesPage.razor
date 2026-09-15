@@ -1,9 +1,6 @@
 @page "/categories"
-@using System.Globalization
-@using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.AspNetCore.WebUtilities
-@inject XtreamCategoryMappingService CategoryMappingService
-@inject CategoryRuleService CategoryRuleService
+@inject CategoriesClient CategoriesClient
 @inject NavigationManager NavigationManager
 
 <PageTitle>Categories - XtreamForge</PageTitle>
@@ -42,7 +39,7 @@ else
             <InputSelect @bind-Value="_selectedSourceId" @bind-Value:after="OnSourceChangedAsync">
                 @foreach (var source in _categoryView.Sources)
                 {
-                    <option value="@source.Id">@source.Protocol://@source.Host:@source.Port</option>
+                    <option value="@source.Id">@source.DisplayName</option>
                 }
             </InputSelect>
         </label>
@@ -50,8 +47,8 @@ else
         <label>
             Content type
             <InputSelect @bind-Value="_selectedContentType" @bind-Value:after="OnContentTypeChangedAsync">
-                <option value="@ContentType.Vod">VOD</option>
-                <option value="@ContentType.Series">Series</option>
+                <option value="@AdminContentType.Vod">VOD</option>
+                <option value="@AdminContentType.Series">Series</option>
             </InputSelect>
         </label>
 
@@ -107,7 +104,9 @@ else
                 <tbody>
                     @foreach (var row in FilteredCategoryRows)
                     {
-                        var statusCssClass = row.Summary.EffectiveDecision == CategoryInclusionDecision.Include ? "category-pill-include" : "category-pill-exclude";
+                        var statusCssClass = string.Equals(row.Summary.EffectiveDecision, "Include", StringComparison.OrdinalIgnoreCase)
+                            ? "category-pill-include"
+                            : "category-pill-exclude";
 
                         <tr>
                             <td>
@@ -178,16 +177,16 @@ else
             <label>
                 Action
                 <InputSelect @bind-Value="_newRule.Action" disabled="@_isRuleCreating">
-                    <option value="@CategoryRuleAction.Include">Include</option>
-                    <option value="@CategoryRuleAction.Exclude">Exclude</option>
+                    <option value="@CategoryRuleActionOption.Include">Include</option>
+                    <option value="@CategoryRuleActionOption.Exclude">Exclude</option>
                 </InputSelect>
             </label>
 
             <label>
                 Operator
                 <InputSelect @bind-Value="_newRule.Operator" disabled="@_isRuleCreating">
-                    <option value="@CategoryRuleOperator.Contains">Contains</option>
-                    <option value="@CategoryRuleOperator.StartsWith">StartsWith</option>
+                    <option value="@CategoryRuleOperatorOption.Contains">Contains</option>
+                    <option value="@CategoryRuleOperatorOption.StartsWith">StartsWith</option>
                 </InputSelect>
             </label>
 
@@ -248,14 +247,14 @@ else
                             <td>@rule.Sequence</td>
                             <td>
                                 <InputSelect @bind-Value="rule.Action" disabled="@(_busyRuleId == rule.RuleId)">
-                                    <option value="@CategoryRuleAction.Include">Include</option>
-                                    <option value="@CategoryRuleAction.Exclude">Exclude</option>
+                                    <option value="@CategoryRuleActionOption.Include">Include</option>
+                                    <option value="@CategoryRuleActionOption.Exclude">Exclude</option>
                                 </InputSelect>
                             </td>
                             <td>
                                 <InputSelect @bind-Value="rule.Operator" disabled="@(_busyRuleId == rule.RuleId)">
-                                    <option value="@CategoryRuleOperator.Contains">Contains</option>
-                                    <option value="@CategoryRuleOperator.StartsWith">StartsWith</option>
+                                    <option value="@CategoryRuleOperatorOption.Contains">Contains</option>
+                                    <option value="@CategoryRuleOperatorOption.StartsWith">StartsWith</option>
                                 </InputSelect>
                             </td>
                             <td><InputText @bind-Value="rule.Pattern" maxlength="255" disabled="@(_busyRuleId == rule.RuleId)" /></td>
@@ -263,8 +262,8 @@ else
                             <td><InputCheckbox @bind-Value="rule.IsEnabled" disabled="@(_busyRuleId == rule.RuleId)" /></td>
                             <td>
                                 <div class="inline-editor-row">
-                                    <button type="button" @onclick="async () => await MoveRuleAsync(rule, CategoryRuleMoveDirection.Up)" disabled="@(_busyRuleId == rule.RuleId)">↑</button>
-                                    <button type="button" @onclick="async () => await MoveRuleAsync(rule, CategoryRuleMoveDirection.Down)" disabled="@(_busyRuleId == rule.RuleId)">↓</button>
+                                    <button type="button" @onclick="async () => await MoveRuleAsync(rule, true)" disabled="@(_busyRuleId == rule.RuleId)">↑</button>
+                                    <button type="button" @onclick="async () => await MoveRuleAsync(rule, false)" disabled="@(_busyRuleId == rule.RuleId)">↓</button>
                                     <button type="button" @onclick="async () => await SaveRuleAsync(rule)" disabled="@(_busyRuleId == rule.RuleId)">@(_busyRuleId == rule.RuleId ? "Saving…" : "Save")</button>
                                 </div>
                                 <div class="inline-editor-row compact-rule-actions">
@@ -350,8 +349,8 @@ else
 }
 
 @code {
-    private CategoryAdministrationView? _categoryView;
-    private CategoryRulesAdministrationView? _rulesView;
+    private AdminCategoriesPayload? _categoryView;
+    private AdminCategoryRulesPayload? _rulesView;
     private List<CategoryRowState> _categoryRows = [];
     private List<RuleRowState> _ruleRows = [];
     private List<CustomCategoryRowState> _customCategoryRows = [];
@@ -359,7 +358,7 @@ else
     private CustomCategoryEditorState _newCustomCategory = new();
     private bool _isLoading = true;
     private int? _selectedSourceId;
-    private ContentType _selectedContentType = ContentType.Vod;
+    private AdminContentType _selectedContentType = AdminContentType.Vod;
     private string _searchText = string.Empty;
     private CategoryStatusFilter _statusFilter = CategoryStatusFilter.All;
     private int? _busyCategoryId;
@@ -374,7 +373,7 @@ else
     private string? _customCategoryMessage;
     private string? _customCategoryErrorMessage;
 
-    private IReadOnlyList<CategoryRowState> FilteredCategoryRows => CategoriesAdminState.FilterCategoryRows(_categoryRows, _searchText, _statusFilter);
+    private IReadOnlyList<CategoryRowState> FilteredCategoryRows => CategoriesPageState.FilterCategoryRows(_categoryRows, _searchText, _statusFilter);
 
     protected override async Task OnInitializedAsync()
     {
@@ -395,11 +394,12 @@ else
 
         try
         {
-            _categoryView = await CategoryMappingService.GetAdministrationViewAsync(_selectedSourceId, _selectedContentType);
+            _categoryView = await CategoriesClient.GetCategoriesAsync(_selectedSourceId, _selectedContentType);
             _selectedSourceId = _categoryView.SelectedSourceId;
-            _rulesView = _selectedSourceId is int sourceId
-                ? await CategoryRuleService.GetAdministrationViewAsync(sourceId, _selectedContentType, null)
-                : new CategoryRulesAdministrationView([], null, null);
+            _selectedContentType = Enum.TryParse<AdminContentType>(_categoryView.SelectedContentType, true, out var parsedContentType)
+                ? parsedContentType
+                : _selectedContentType;
+            _rulesView = await CategoriesClient.GetRulesAsync(_selectedSourceId, _selectedContentType);
 
             _categoryRows = _categoryView.UpstreamCategories.Select(summary => new CategoryRowState(summary)).ToList();
             _ruleRows = _rulesView.Rules.Select(summary => new RuleRowState(summary)).ToList();
@@ -429,7 +429,7 @@ else
         }
 
         if (query.TryGetValue("contentType", out var contentTypeValues)
-            && Enum.TryParse<ContentType>(contentTypeValues[0], true, out var parsedContentType))
+            && Enum.TryParse<AdminContentType>(contentTypeValues[0], true, out var parsedContentType))
         {
             _selectedContentType = parsedContentType;
         }
@@ -443,10 +443,8 @@ else
         }
     }
 
-    private async Task OnContentTypeChangedAsync()
-    {
+    private async Task OnContentTypeChangedAsync() =>
         await ReloadAsync();
-    }
 
     private async Task OnMappingSelectionChangedAsync(CategoryRowState row)
     {
@@ -463,8 +461,7 @@ else
         await SaveCategoryMappingAsync(row, row.MappingValue, null);
     }
 
-    private void CancelCustomCategoryCreate(CategoryRowState row) =>
-        row.CancelCustomCategoryCreate();
+    private void CancelCustomCategoryCreate(CategoryRowState row) => row.CancelCustomCategoryCreate();
 
     private async Task CreateCustomCategoryAsync(CategoryRowState row)
     {
@@ -485,22 +482,18 @@ else
         try
         {
             _busyCategoryId = row.Summary.Id;
-            var command = mappingValue switch
+            var request = mappingValue switch
             {
-                "disabled" => new CategoryConfigurationCommand(row.Summary.Id, _selectedSourceId.Value, _selectedContentType, CategoryMappingSelection.Disabled, null, null),
-                "original" => new CategoryConfigurationCommand(row.Summary.Id, _selectedSourceId.Value, _selectedContentType, CategoryMappingSelection.Original, null, null),
-                "new" => new CategoryConfigurationCommand(row.Summary.Id, _selectedSourceId.Value, _selectedContentType, CategoryMappingSelection.Custom, null, newCustomCategoryName),
+                "disabled" => new AdminCategoryMappingUpdate(_selectedSourceId.Value, _selectedContentType.ToString(), "Disabled", null, null),
+                "original" => new AdminCategoryMappingUpdate(_selectedSourceId.Value, _selectedContentType.ToString(), "Original", null, null),
+                "new" => new AdminCategoryMappingUpdate(_selectedSourceId.Value, _selectedContentType.ToString(), "Custom", null, newCustomCategoryName),
                 _ when mappingValue.StartsWith("custom:", StringComparison.Ordinal) && int.TryParse(mappingValue[7..], NumberStyles.None, CultureInfo.InvariantCulture, out var customCategoryId)
-                    => new CategoryConfigurationCommand(row.Summary.Id, _selectedSourceId.Value, _selectedContentType, CategoryMappingSelection.Custom, customCategoryId, null),
+                    => new AdminCategoryMappingUpdate(_selectedSourceId.Value, _selectedContentType.ToString(), "Custom", customCategoryId, null),
                 _ => throw new InvalidOperationException("Invalid category mapping selection.")
             };
 
-            await CategoryMappingService.SaveCategoryConfigurationAsync(command);
-            row.CommitMapping(mappingValue switch
-            {
-                "new" when !string.IsNullOrWhiteSpace(newCustomCategoryName) => row.MappingValue,
-                _ => mappingValue
-            });
+            await CategoriesClient.UpdateCategoryMappingAsync(row.Summary.Id, request);
+            row.CommitMapping(mappingValue);
             _statusMessage = "Saved.";
             await ReloadAsync();
         }
@@ -528,12 +521,11 @@ else
             _isRuleCreating = true;
             _ruleMessage = null;
             _ruleErrorMessage = null;
-            await CategoryRuleService.CreateRuleAsync(new CategoryRuleEditorCommand(
-                null,
+            await CategoriesClient.CreateRuleAsync(new AdminCategoryRuleUpdate(
                 _selectedSourceId.Value,
-                _selectedContentType,
-                _newRule.Action,
-                _newRule.Operator,
+                _selectedContentType.ToString(),
+                _newRule.Action.ToString(),
+                _newRule.Operator.ToString(),
                 _newRule.Pattern,
                 _newRule.CaseSensitive,
                 _newRule.IsEnabled));
@@ -565,12 +557,11 @@ else
             _ruleMessage = null;
             _ruleErrorMessage = null;
             rule.Message = null;
-            await CategoryRuleService.UpdateRuleAsync(new CategoryRuleEditorCommand(
-                rule.RuleId,
+            await CategoriesClient.UpdateRuleAsync(rule.RuleId, new AdminCategoryRuleUpdate(
                 _selectedSourceId.Value,
-                _selectedContentType,
-                rule.Action,
-                rule.Operator,
+                _selectedContentType.ToString(),
+                rule.Action.ToString(),
+                rule.Operator.ToString(),
                 rule.Pattern,
                 rule.CaseSensitive,
                 rule.IsEnabled));
@@ -589,7 +580,7 @@ else
         }
     }
 
-    private async Task MoveRuleAsync(RuleRowState rule, CategoryRuleMoveDirection direction)
+    private async Task MoveRuleAsync(RuleRowState rule, bool moveUp)
     {
         if (_selectedSourceId is null)
         {
@@ -602,7 +593,7 @@ else
             _busyRuleId = rule.RuleId;
             _ruleMessage = null;
             _ruleErrorMessage = null;
-            await CategoryRuleService.MoveRuleAsync(new CategoryRuleIdentityCommand(rule.RuleId, _selectedSourceId.Value, _selectedContentType), direction);
+            await CategoriesClient.MoveRuleAsync(rule.RuleId, _selectedSourceId.Value, _selectedContentType, moveUp);
             _ruleMessage = "Rule order updated.";
             await ReloadAsync();
         }
@@ -636,7 +627,7 @@ else
             _busyRuleId = rule.RuleId;
             _ruleMessage = null;
             _ruleErrorMessage = null;
-            await CategoryRuleService.DeleteRuleAsync(new CategoryRuleDeleteCommand(rule.RuleId, _selectedSourceId.Value, _selectedContentType, true));
+            await CategoriesClient.DeleteRuleAsync(rule.RuleId, _selectedSourceId.Value, _selectedContentType);
             _ruleMessage = "Rule deleted.";
             await ReloadAsync();
         }
@@ -658,7 +649,7 @@ else
             _busyCustomCategoryId = row.Summary.Id;
             _customCategoryMessage = null;
             _customCategoryErrorMessage = null;
-            await CategoryMappingService.UpdateCustomCategoryAsync(new CustomCategoryUpdateCommand(row.Summary.Id, _selectedContentType, row.DisplayName));
+            await CategoriesClient.UpdateCustomCategoryAsync(row.Summary.Id, new AdminCustomCategoryUpdate(_selectedContentType.ToString(), row.DisplayName));
             _customCategoryMessage = "Custom category saved.";
             await ReloadAsync();
         }
@@ -679,7 +670,7 @@ else
             _isCustomCategoryCreating = true;
             _customCategoryMessage = null;
             _customCategoryErrorMessage = null;
-            await CategoryMappingService.CreateCustomCategoryAsync(new CustomCategoryCreateCommand(_selectedContentType, _newCustomCategory.DisplayName));
+            await CategoriesClient.CreateCustomCategoryAsync(new AdminCustomCategoryCreate(_selectedContentType.ToString(), _newCustomCategory.DisplayName));
             _customCategoryMessage = "Custom category created.";
             await ReloadAsync();
         }
@@ -700,7 +691,7 @@ else
             _busyCustomCategoryId = row.Summary.Id;
             _customCategoryMessage = null;
             _customCategoryErrorMessage = null;
-            await CategoryMappingService.DeleteCustomCategoryAsync(new CustomCategoryDeleteCommand(row.Summary.Id, _selectedContentType));
+            await CategoriesClient.DeleteCustomCategoryAsync(row.Summary.Id, _selectedContentType);
             _customCategoryMessage = "Custom category deleted.";
             await ReloadAsync();
         }
@@ -713,5 +704,4 @@ else
             _busyCustomCategoryId = null;
         }
     }
-
 }

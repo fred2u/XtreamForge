@@ -1,4 +1,4 @@
-using XtreamForge.Categories;
+using XtreamForge.Blazor.Features.Categories;
 
 namespace XtreamForge.Tests;
 
@@ -9,7 +9,7 @@ public sealed class CategoriesAdminStateTests
     {
         var rows = new List<CategoryRowState>
         {
-            new(new UpstreamCategorySummary(
+            new(new AdminUpstreamCategory(
                 1,
                 "10",
                 "|FR| SPORT",
@@ -18,17 +18,17 @@ public sealed class CategoriesAdminStateTests
                 null,
                 100,
                 "|FR| SPORT",
-                CategoryInclusionDecision.Exclude,
-                CategoryInclusionDecision.Exclude,
+                "Exclude",
+                "Exclude",
                 10,
                 10,
-                CategoryRuleAction.Exclude,
-                CategoryRuleOperator.Contains,
+                "Exclude",
+                "Contains",
                 "SPORT",
                 false,
                 false,
-                CategoryMappingSelection.Original)),
-            new(new UpstreamCategorySummary(
+                "Original")),
+            new(new AdminUpstreamCategory(
                 2,
                 "20",
                 "|FR| MOVIES",
@@ -37,8 +37,8 @@ public sealed class CategoriesAdminStateTests
                 null,
                 101,
                 "|FR| MOVIES",
-                CategoryInclusionDecision.Include,
-                CategoryInclusionDecision.Include,
+                "Include",
+                "Include",
                 null,
                 null,
                 null,
@@ -46,10 +46,10 @@ public sealed class CategoriesAdminStateTests
                 null,
                 null,
                 true,
-                CategoryMappingSelection.Original))
+                "Original"))
         };
 
-        var filteredRows = CategoriesAdminState.FilterCategoryRows(rows, "sport", CategoryStatusFilter.Disabled);
+        var filteredRows = CategoriesPageState.FilterCategoryRows(rows, "sport", CategoryStatusFilter.Disabled);
 
         var filteredRow = Assert.Single(filteredRows);
         Assert.Equal("|FR| SPORT", filteredRow.Summary.UpstreamCategoryName);
@@ -59,14 +59,14 @@ public sealed class CategoriesAdminStateTests
     [Fact]
     public void RuleRowState_PopulatesEditorValuesFromPersistedSummary()
     {
-        var summary = new CategoryRuleSummary(7, 20, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true);
+        var summary = new AdminCategoryRule(7, 20, "Exclude", "Contains", "SPORT", false, true);
 
         var row = new RuleRowState(summary);
 
         Assert.Equal(summary.Id, row.RuleId);
         Assert.Equal(summary.Sequence, row.Sequence);
-        Assert.Equal(summary.Action, row.Action);
-        Assert.Equal(summary.Operator, row.Operator);
+        Assert.Equal(summary.Action, row.Action.ToString());
+        Assert.Equal(summary.Operator, row.Operator.ToString());
         Assert.Equal(summary.Pattern, row.Pattern);
         Assert.Equal(summary.CaseSensitive, row.CaseSensitive);
         Assert.Equal(summary.IsEnabled, row.IsEnabled);
@@ -75,7 +75,7 @@ public sealed class CategoriesAdminStateTests
     [Fact]
     public void CustomCategoryRowState_PopulatesDisplayNameFromPersistedSummary()
     {
-        var summary = new CustomCategorySummary(3, 4000, "Movies 4K", 2);
+        var summary = new AdminCustomCategory(3, 4000, "Movies 4K", 2);
 
         var row = new CustomCategoryRowState(summary);
 
@@ -85,7 +85,7 @@ public sealed class CategoriesAdminStateTests
     [Fact]
     public void CategoryRowState_UsesExistingCustomCategorySelection()
     {
-        var summary = new UpstreamCategorySummary(
+        var summary = new AdminUpstreamCategory(
             4,
             "50",
             "|FR| 4K UHD",
@@ -94,8 +94,8 @@ public sealed class CategoriesAdminStateTests
             "Movies 4K",
             500,
             "|FR| 4K UHD",
-            CategoryInclusionDecision.Include,
-            CategoryInclusionDecision.Include,
+            "Include",
+            "Include",
             null,
             null,
             null,
@@ -103,7 +103,7 @@ public sealed class CategoriesAdminStateTests
             null,
             null,
             true,
-            CategoryMappingSelection.Custom);
+            "Custom");
 
         var row = new CategoryRowState(summary);
 
@@ -113,7 +113,7 @@ public sealed class CategoriesAdminStateTests
     [Fact]
     public void CategoryRowState_CancelNewCustomCategoryRestoresPreviousSelection()
     {
-        var summary = new UpstreamCategorySummary(
+        var summary = new AdminUpstreamCategory(
             4,
             "50",
             "|FR| 4K UHD",
@@ -122,8 +122,8 @@ public sealed class CategoriesAdminStateTests
             "Movies 4K",
             500,
             "|FR| 4K UHD",
-            CategoryInclusionDecision.Include,
-            CategoryInclusionDecision.Include,
+            "Include",
+            "Include",
             null,
             null,
             null,
@@ -131,7 +131,7 @@ public sealed class CategoriesAdminStateTests
             null,
             null,
             true,
-            CategoryMappingSelection.Custom);
+            "Custom");
 
         var row = new CategoryRowState(summary);
         row.MappingValue = "new";

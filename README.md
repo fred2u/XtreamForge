@@ -1,39 +1,49 @@
 # XtreamForge
 
-XtreamForge is an early-stage, self-hosted .NET application that will sit in front of an Xtream-compatible API and act as a transformation and enrichment layer.
+XtreamForge is an early-stage, self-hosted .NET application that sits in front of an Xtream-compatible API and acts as a transformation and enrichment layer.
 
 > XtreamForge is an independent project and is not affiliated with Xtream Codes or TMDB.
 
 ## Current status
 
-This repository currently provides the initial foundation plus the first category-management feature:
+This repository currently provides the first backend and administration foundation:
 
-- One ASP.NET Core web application combining Minimal APIs, Xtream proxy endpoints, and an Interactive Server Blazor administration UI
-- Initial Xtream request routing, classification, and transparent forwarding foundation
-- Database-backed VOD/Series category discovery and category rewriting
+- `XtreamForge` backend for Minimal APIs, Xtream proxying, category processing, and EF Core persistence
+- `XtreamForge.Blazor` administration UI built as a Blazor Web App with Interactive Server rendering
+- PostgreSQL persistence with EF Core and Npgsql
 - .NET Aspire orchestration
-- PostgreSQL + EF Core persistence
 - Docker Compose development setup
-- xUnit test foundation
+- xUnit test coverage for backend behavior and admin API endpoints
 
-TMDB lookup, metadata rewriting, and authentication are intentionally out of scope for the current implementation.
+TMDB lookup, metadata rewriting beyond category translation, and authentication are intentionally out of scope for the current implementation.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    Client[Xtream Client] --> Api[XtreamForge API]
-    Api --> Upstream[Xtream upstream API]
-    Api --> Tmdb[TMDB API]
-    Api --> Db[(PostgreSQL)]
+    Client[Xtream Client] --> Backend[XtreamForge Backend]
+    Backend --> Db[(PostgreSQL)]
+    Backend --> Upstream[Xtream Provider]
+
+    Admin[Administrator] --> Blazor[XtreamForge.Blazor]
+    Blazor --> Backend
 ```
+
+### Design principles
+
+- **Blazor Interactive Server** for the administration UI
+- **Backend-owned business logic** for category discovery, rules, mappings, and Xtream transformations
+- **Vertical Slice organization** inside `XtreamForge.Blazor` so each feature keeps its UI and HTTP client code together
+- **KISS** over ceremony
+- **Pragmatic SOLID** without repository layers, MediatR, CQRS infrastructure, AutoMapper, or interface-plus-implementation pairs that add no value
 
 ### Projects
 
-- `src/XtreamForge` - the primary ASP.NET Core web app containing the Blazor UI, Minimal APIs, Xtream proxy logic, EF Core models, migrations, and category/rule business logic
+- `src/XtreamForge` - backend ASP.NET Core application containing Minimal APIs, Xtream proxy behavior, EF Core models, migrations, and category/rule logic
+- `src/XtreamForge.Blazor` - dedicated Blazor Web App for the administration UI using Interactive Server
 - `src/XtreamForge.ServiceDefaults` - Aspire service defaults (OpenTelemetry, health checks, service discovery, resilience)
 - `src/XtreamForge.AppHost` - Aspire orchestration for local development
-- `tests/XtreamForge.Tests` - integration and unit tests across UI state, Xtream processing, and category/data behavior
+- `tests/XtreamForge.Tests` - backend integration and unit tests, including admin API coverage and UI state helpers
 
 ## Prerequisites
 
@@ -44,7 +54,7 @@ flowchart LR
 
 XtreamForge uses standard .NET configuration.
 
-Placeholder configuration sections are present for future integrations:
+Backend placeholders are present for future integrations:
 
 - `Xtream:BaseUrl`
 - `Xtream:Username`
@@ -52,6 +62,10 @@ Placeholder configuration sections are present for future integrations:
 - `Tmdb:ApiKey`
 - `XtreamProxy:AllowAnyDestination`
 - `XtreamProxy:AllowedHosts`
+
+Blazor uses:
+
+- `Backend:BaseUrl`
 
 Do not commit credentials.
 
@@ -64,7 +78,7 @@ dotnet user-secrets --project src/XtreamForge set "Xtream:Password" "your-passwo
 dotnet user-secrets --project src/XtreamForge set "Tmdb:ApiKey" "your-tmdb-key"
 ```
 
-Database connections are supplied through the standard `ConnectionStrings__database` setting.
+Database connections are supplied through `ConnectionStrings__database`.
 
 Proxy destination control is configured through `XtreamProxy`:
 
@@ -83,8 +97,11 @@ dotnet run --project src/XtreamForge.AppHost
 The AppHost starts:
 
 - PostgreSQL with persistent storage
-- `XtreamForge` (serving the Blazor admin UI, Minimal APIs, Xtream proxy, and health endpoints)
+- `XtreamForge` backend
+- `XtreamForge.Blazor` admin UI
 - the Aspire dashboard
+
+Within Aspire, the Blazor app reaches the backend through service discovery rather than a hard-coded localhost dependency.
 
 ## Run with Docker Compose
 
@@ -92,7 +109,11 @@ The AppHost starts:
 docker compose up --build
 ```
 
-This starts PostgreSQL and the single XtreamForge web service, which serves both the API and the administration UI.
+This starts:
+
+- PostgreSQL
+- `XtreamForge` backend on `http://localhost:8080`
+- `XtreamForge.Blazor` admin UI on `http://localhost:8081`
 
 Development-only defaults are used in `docker-compose.yml`:
 
@@ -104,9 +125,10 @@ Override them for any non-local usage.
 
 ## PostgreSQL notes
 
-- Aspire injects the database connection into the application.
+- Aspire injects the database connection into the backend application.
 - Docker Compose supplies the same connection via environment variables.
-- The web app applies EF Core migrations during startup by default.
+- The backend applies EF Core migrations during startup by default.
+- The Blazor project does **not** access PostgreSQL directly.
 
 ## Xtream proxy
 
@@ -151,11 +173,28 @@ Transparent fallback behavior:
 
 Security notes:
 
-- Xtream credentials in the query string are preserved for upstream forwarding but are not intentionally logged or persisted by this proxy layer.
-- The proxy route allows a client to choose the upstream destination, which has SSRF implications. XtreamForge currently enforces an explicit destination validation policy for protocol, host, port, and configured upstream host authorization.
-- IPv4 addresses and DNS hostnames are supported in the route format today.
-- IPv6 literals are not currently supported by this path-based route format.
-- The generic Xtream proxy route is excluded from generated OpenAPI documentation to avoid misleading native API descriptions.
+- Xtream credentials in the query string are preserved for upstream forwarding but are not intentionally logged or persisted by this proxy layer
+- the proxy route has SSRF implications, so XtreamForge enforces protocol, host, port, and configured host authorization checks
+- IPv4 addresses and DNS hostnames are supported in the route format today
+- IPv6 literals are not currently supported by this path-based route format
+- the generic Xtream proxy route is excluded from generated OpenAPI documentation
+
+## Administration UI
+
+`XtreamForge.Blazor` is a dedicated Blazor Web App using Interactive Server rendering.
+
+Important boundaries:
+
+- the Blazor project owns UI state and event handling
+- the backend owns persistence and category business rules
+- Blazor reaches the backend through small Minimal Admin APIs
+- normal administration operations do not require browser document reloads
+
+The Blazor project is organized by feature slices, for example:
+
+- `Features/Dashboard`
+- `Features/Categories`
+- `Features/Settings`
 
 ## Category management
 
@@ -187,29 +226,28 @@ Current category capabilities:
 - keep categories unchanged by default through `Original`
 - manually disable categories without deleting discovery data
 - map multiple source categories to one shared global custom category
-- show the first matched rule for each source category
+- show the first matched rule for each category
 - persist stable XtreamForge category IDs across refreshes and restarts
-- edit category mappings and rules interactively without full browser page reloads
+- edit category mappings, rules, and custom categories interactively from Blazor without full page reloads
 
 How it works today:
 
 1. Request `get_vod_categories` or `get_series_categories` through the Xtream proxy route.
 2. XtreamForge fetches the upstream categories and stores the discovered source/category records.
-3. Open the integrated admin UI and go to `Categories`.
+3. Open `XtreamForge.Blazor` and go to `Categories`.
 4. Select the upstream source and content type.
-5. Use the category grid to search/filter rows, then choose `Disabled`, `Original`, `New category`, or an existing custom category.
-6. Manage rules and global custom categories in the same screen with inline save/delete feedback.
+5. Search/filter rows while typing, then choose `Disabled`, `Original`, `New category`, or an existing custom category.
+6. Manage rules and global custom categories in the same screen with interactive save/delete feedback.
 7. Repeat the category request to receive the rewritten category list with stable XtreamForge IDs.
 
 Notes:
 
-- Source identity is based on upstream destination only; credentials are not used as the source key and are not stored with category records.
-- `get_vod_streams` and `get_series` translate XtreamForge output category IDs back to the currently effective upstream category IDs before querying/filtering results.
-- for `get_vod_streams` and `get_series`, missing `category_id`, empty `category_id`, and `category_id=ALL` all mean "all categories" and still pass through XtreamForge filtering/remapping.
-- in all-category mode, XtreamForge keeps the upstream query shape when possible: missing `category_id` stays absent upstream, while explicit `category_id=ALL` stays present.
-- returned stream and detail payloads expose XtreamForge category IDs instead of upstream category IDs.
-- effective reverse mappings exclude upstream categories removed by manual disable or category rules.
-- legacy source-local renamed/merged outputs are migrated into global custom-category records as safely as practical; identical legacy names are preserved rather than silently merged across sources.
+- source identity is based on upstream destination only; credentials are not used as the source key and are not stored with category records
+- `get_vod_streams` and `get_series` translate XtreamForge output category IDs back to the currently effective upstream category IDs before querying/filtering results
+- for `get_vod_streams` and `get_series`, missing `category_id`, empty `category_id`, and `category_id=ALL` all mean all categories and still pass through XtreamForge filtering/remapping
+- in all-category mode, XtreamForge keeps the upstream query shape when possible: missing `category_id` stays absent upstream, while explicit `category_id=ALL` stays present
+- returned stream and detail payloads expose XtreamForge category IDs instead of upstream category IDs
+- effective reverse mappings exclude upstream categories removed by manual disable or category rules
 
 ## Category Rules
 
@@ -226,40 +264,13 @@ Rule behavior:
 - `Include` and `Exclude` actions are supported
 - no matching rule means `Include`
 - excluded categories remain discovered in PostgreSQL and are not deleted
-- the Categories grid shows the first matched rule for each category
-- administrators can edit, reorder, enable/disable, and delete rules inline from the Categories admin page
+- the admin UI can create, edit, reorder, enable/disable, and delete rules interactively
 
 Manual category disable still takes precedence over rule evaluation.
 
-Example:
-
-| Order | Action  | Match      | Pattern       |
-|------:|---------|------------|---------------|
-| 10    | Include | Contains   | DOCUMENTAIRE  |
-| 20    | Exclude | Contains   | SPORT         |
-| 30    | Exclude | StartsWith | \|XXX\|       |
-
-Category:
-
-```text
-|FR| DOCUMENTAIRE SPORT
-```
-
-Result:
-
-```text
-Included
-```
-
-Reason:
-
-```text
-Rule 10 matches first. Rule 20 is never used for this category.
-```
-
 ## Stream and detail category translation
 
-XtreamForge now applies the effective category model when processing:
+XtreamForge applies the effective category model when processing:
 
 - `get_vod_streams`
 - `get_series`
@@ -268,33 +279,12 @@ XtreamForge now applies the effective category model when processing:
 
 Behavior:
 
-- Xtream clients send XtreamForge output category IDs.
-- XtreamForge resolves those IDs to the effective included upstream category IDs for the selected source and content type.
-- manual exclusions and category rules are respected before any reverse mapping is used.
-- merged output categories are queried using only the currently included upstream category IDs.
-- stream list results are filtered and rewritten so returned `category_id` values use XtreamForge IDs.
-- detail results rewrite discovered `category_id` / `category_ids` values to XtreamForge IDs.
-
-Example:
-
-```text
-Upstream:
-10 -> |FR| 4K
-20 -> |FR| UHD
-30 -> |FR| COMEDIE
-
-XtreamForge:
-10 + 20 -> output 5 "4K Movies"
-30      -> output 6 "Comedy"
-```
-
-If the client requests:
-
-```text
-player_api.php?action=get_vod_streams&category_id=5
-```
-
-XtreamForge resolves output category `5` back to the currently effective included upstream categories for that output category, queries/filter results accordingly, and returns items with `category_id=5`.
+- Xtream clients send XtreamForge output category IDs
+- XtreamForge resolves those IDs to the effective included upstream category IDs for the selected source and content type
+- manual exclusions and category rules are respected before any reverse mapping is used
+- merged output categories are queried using only the currently included upstream category IDs
+- stream list results are filtered and rewritten so returned `category_id` values use XtreamForge IDs
+- detail results rewrite discovered `category_id` / `category_ids` values to XtreamForge IDs
 
 If the client requests either:
 
@@ -303,13 +293,14 @@ player_api.php?action=get_vod_streams
 player_api.php?action=get_vod_streams&category_id=ALL
 ```
 
-XtreamForge treats both requests as "all categories", performs one upstream catalogue request, rewrites `category_id` / `category_ids` to XtreamForge IDs, removes excluded category references, drops items with no effective included category, and deduplicates the result set. The same behavior applies to `get_series`.
+XtreamForge treats both requests as all categories, performs one upstream catalogue request, rewrites `category_id` / `category_ids` to XtreamForge IDs, removes excluded category references, drops items with no effective included category, and deduplicates the result set. The same behavior applies to `get_series`.
 
 ## Useful endpoints
 
-- Dashboard UI: `http://localhost:8080/`
-- API status: `http://localhost:8080/api/status`
-- API health: `http://localhost:8080/health`
+- Admin UI: `http://localhost:8081/`
+- Backend status: `http://localhost:8080/api/status`
+- Backend admin status: `http://localhost:8080/api/admin/status`
+- Backend health: `http://localhost:8080/health`
 
 ## Test
 
@@ -319,19 +310,12 @@ dotnet build
 dotnet test
 ```
 
-The current test suite does not require a locally installed PostgreSQL instance.
+The test suite does not require a locally installed PostgreSQL instance.
 
 ## Known limitations
 
 - Xtream rewriting currently focuses on category translation for category, stream, and detail actions
-- Stream/info rewriting currently focuses on category translation only
-- No TMDB client or enrichment yet
-- No admin authentication yet
-- No background jobs yet
-
-## Suggested next steps
-
-1. Add TMDB-aware rewriting for `get_vod_info` and `get_series_info`.
-2. Add TMDB lookup/enrichment services.
-3. Add admin authentication and auditing.
-4. Expand API compatibility coverage and health reporting.
+- stream/info rewriting currently focuses on category translation only
+- no TMDB client or enrichment yet
+- no admin authentication yet
+- no background jobs yet

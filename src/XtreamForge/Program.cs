@@ -1,20 +1,16 @@
-using Microsoft.AspNetCore.Hosting;
+using XtreamForge.Admin;
 using Microsoft.EntityFrameworkCore;
 using XtreamForge.Categories;
-using XtreamForge.Components;
 using XtreamForge.Configuration;
 using XtreamForge.Data;
 using XtreamForge.Endpoints;
 using XtreamForge.Xtream;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.WebHost.UseStaticWebAssets();
 
 builder.AddServiceDefaults();
 
 builder.Services.AddOpenApi();
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
 
 builder.Services.AddOptions<XtreamOptions>()
     .BindConfiguration(XtreamOptions.SectionName);
@@ -67,16 +63,13 @@ if (app.Configuration.GetValue("Database:ApplyMigrations", true))
 }
 
 app.MapDefaultEndpoints();
-app.UseAntiforgery();
 
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
-app.MapStaticAssets();
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+app.MapAdminEndpoints();
 app.MapStatusEndpoints();
 app.MapXtreamEndpoints();
 

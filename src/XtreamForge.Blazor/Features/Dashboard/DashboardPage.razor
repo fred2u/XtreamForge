@@ -1,0 +1,62 @@
+@page "/"
+@inject DashboardClient DashboardClient
+
+<PageTitle>Dashboard - XtreamForge</PageTitle>
+
+<h1>Dashboard</h1>
+<p class="page-subtitle">Operational view for the XtreamForge administration application.</p>
+
+@if (_isLoading)
+{
+    <section class="status-card">
+        <p>Loading dashboard…</p>
+    </section>
+}
+else if (_status is null)
+{
+    <section class="status-card validation-card">
+        <p>Unable to load dashboard status.</p>
+        @if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <p>@_errorMessage</p>
+        }
+    </section>
+}
+else
+{
+    <div class="dashboard-grid">
+        <section class="status-card">
+            <h2>Application status</h2>
+            <p class="status-value">@_status.Status</p>
+            <p>@_status.ApplicationName v@_status.ApplicationVersion</p>
+        </section>
+
+        <section class="status-card">
+            <h2>Database connectivity</h2>
+            <p class="status-value">@_status.DatabaseStatus</p>
+            <p>@_status.DatabaseDetails</p>
+        </section>
+    </div>
+}
+
+@code {
+    private DashboardStatus? _status;
+    private bool _isLoading = true;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _status = await DashboardClient.GetStatusAsync();
+        }
+        catch (Exception exception)
+        {
+            _errorMessage = exception.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

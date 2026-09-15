@@ -38,35 +38,6 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
     }
 
     [Fact]
-    public async Task GetDashboard_ReturnsInteractiveBlazorUi()
-    {
-        using var client = _factory.CreateClient();
-
-        var response = await client.GetAsync("/");
-        var content = await response.Content.ReadAsStringAsync();
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("XtreamForge", content);
-        Assert.Contains("Dashboard", content);
-        Assert.Contains("Categories", content);
-        Assert.Contains("Settings", content);
-    }
-
-    [Fact]
-    public async Task Dashboard_WhenDatabaseCheckThrows_ShowsUnavailableFallback()
-    {
-        using var factory = _factory.WithFailingDatabaseFactory();
-        using var client = factory.CreateClient();
-
-        var response = await client.GetAsync("/");
-        var content = await response.Content.ReadAsStringAsync();
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("Unavailable", content);
-        Assert.Contains("The database connectivity check failed.", content);
-    }
-
-    [Fact]
     public void DependencyInjection_CanConstructInfrastructureServices()
     {
         using var scope = _factory.Services.CreateScope();
@@ -1009,80 +980,6 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.DoesNotContain(logSink.Messages, message => message.Contains("username=user", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public async Task CategoriesPage_ReturnsInteractiveAdminShell()
-    {
-        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
-        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
-        await EnsureDatabaseCreatedAsync(setupFactory);
-
-        using (var discoveryFactory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(CreateJsonHandler("[{\"category_id\":\"42\",\"category_name\":\"Alpha\"}]")))
-        using (var discoveryClient = discoveryFactory.CreateClient())
-        {
-            await discoveryClient.GetAsync("/https/example.com/443/player_api.php?action=get_vod_categories");
-        }
-
-        var source = await GetSourceAsync(setupFactory);
-
-        using var pageFactory = _factory.WithSqliteDatabase(databasePath);
-        using var client = pageFactory.CreateClient();
-        var pageHtml = await GetCategoriesPageHtmlAsync(client, source.Id, ContentType.Vod);
-
-        Assert.Contains("blazor.web.js", pageHtml, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Search", pageHtml, StringComparison.Ordinal);
-        Assert.Contains("Status", pageHtml, StringComparison.Ordinal);
-        Assert.Contains("Global custom categories", pageHtml, StringComparison.Ordinal);
-        Assert.Contains("Add rule", pageHtml, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task BlazorWebScript_IsServedForCategoriesInteractivity()
-    {
-        using var client = _factory.CreateClient();
-
-        var response = await client.GetAsync("/_framework/blazor.web.js");
-
-        response.EnsureSuccessStatusCode();
-        var script = await response.Content.ReadAsStringAsync();
-        Assert.Contains("Blazor", script, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task CategoriesPage_PrerrenderedGridShowsMatchedRuleAndManualDisabledStatus()
-    {
-        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
-        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
-        await EnsureDatabaseCreatedAsync(setupFactory);
-
-        await using (var scope = setupFactory.Services.CreateAsyncScope())
-        {
-            var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
-            var ruleService = scope.ServiceProvider.GetRequiredService<CategoryRuleService>();
-
-            await mappingService.SyncCategoriesAsync(
-                new XtreamSourceDescriptor("https", "example.com", 443),
-                ContentType.Vod,
-                [new DiscoveredCategory("42", "|FR| DOCUMENTAIRE")]);
-
-            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-            var sourceId = await dbContext.XtreamSources.Select(source => source.Id).SingleAsync();
-            var category = await dbContext.UpstreamCategories.SingleAsync();
-
-            await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Include, CategoryRuleOperator.Contains, "DOCUMENTAIRE", false, true));
-            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category.Id, sourceId, ContentType.Vod, CategoryMappingSelection.Disabled, null, null));
-        }
-
-        var source = await GetSourceAsync(setupFactory);
-
-        using var pageFactory = _factory.WithSqliteDatabase(databasePath);
-        using var client = pageFactory.CreateClient();
-        var pageHtml = await GetCategoriesPageHtmlAsync(client, source.Id, ContentType.Vod);
-
-        Assert.Contains("Disabled (manual)", pageHtml, StringComparison.Ordinal);
-        Assert.Contains("#10 Include", pageHtml, StringComparison.Ordinal);
-        Assert.Contains("Confirm delete", pageHtml, StringComparison.Ordinal);
-    }
-
     private static FakeForwarderHandler CreateForwardingHandler() =>
         new((_, _) => Task.FromResult(FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "{\"forwarded\":true}")));
 
@@ -1102,34 +999,6 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         await using var scope = factory.Services.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
         await dbContext.Database.EnsureCreatedAsync();
-    }
-
-    private static async Task<string> GetCategoriesPageHtmlAsync(HttpClient client, int sourceId, ContentType contentType)
-    {
-        var response = await client.GetAsync($"/categories?sourceId={sourceId}&contentType={contentType}");
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStringAsync();
-    }
-
-    private static async Task<XtreamSource> GetSourceAsync(WebApplicationFactory<Program> factory)
-    {
-        await using var scope = factory.Services.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-        return await dbContext.XtreamSources.AsNoTracking().SingleAsync();
-    }
-
-    private static async Task<CategoryRule> GetRuleByPatternAsync(WebApplicationFactory<Program> factory, string pattern)
-    {
-        await using var scope = factory.Services.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-        return await dbContext.CategoryRules.AsNoTracking().SingleAsync(rule => rule.Pattern == pattern);
-    }
-
-    private static async Task<CategoryRule> GetRuleByIdAsync(WebApplicationFactory<Program> factory, int ruleId)
-    {
-        await using var scope = factory.Services.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-        return await dbContext.CategoryRules.AsNoTracking().SingleAsync(rule => rule.Id == ruleId);
     }
 
     private static IEnumerable<string> GetHeaderValues(HttpResponseMessage response, string headerName)

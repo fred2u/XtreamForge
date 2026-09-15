@@ -1,6 +1,7 @@
 <Project Sdk="Aspire.AppHost.Sdk/13.5.3">
 
   <ItemGroup>
+    <ProjectReference Include="..\XtreamForge.Blazor\XtreamForge.Blazor.csproj" />
     <ProjectReference Include="..\XtreamForge\XtreamForge.csproj" />
   </ItemGroup>
 

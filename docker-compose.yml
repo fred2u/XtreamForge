@@ -30,5 +30,19 @@ services:
     ports:
       - "8080:8080"
 
+  xtreamforge-blazor:
+    build:
+      context: .
+      dockerfile: src/XtreamForge.Blazor/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      Backend__BaseUrl: http://xtreamforge:8080
+    depends_on:
+      xtreamforge:
+        condition: service_started
+    ports:
+      - "8081:8080"
+
 volumes:
   xtreamforge-postgres-data:

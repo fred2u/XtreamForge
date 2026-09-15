@@ -1,6 +1,7 @@
 using XtreamForge.Blazor.Components;
 using XtreamForge.Blazor.Features.Categories;
 using XtreamForge.Blazor.Features.Dashboard;
+using Microsoft.AspNetCore.Hosting;
 
 namespace XtreamForge.Blazor;
 
@@ -9,6 +10,7 @@ public sealed class Program
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
+        builder.WebHost.UseStaticWebAssets();
 
         builder.AddServiceDefaults();
 

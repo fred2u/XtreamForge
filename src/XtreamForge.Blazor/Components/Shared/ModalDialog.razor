@@ -1,10 +1,11 @@
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.JSInterop
+@implements IAsyncDisposable
 @inject IJSRuntime JSRuntime
 
 @if (IsOpen)
 {
-    <div class="modal-backdrop" tabindex="-1" @onclick="HandleBackdropClickAsync" @onkeydown="HandleKeyDownAsync">
+    <div class="modal-backdrop" tabindex="-1" @onclick="HandleBackdropClickAsync">
         <span class="sr-only" tabindex="0" @onfocus="@(() => FocusLastAsync())">Dialog focus guard</span>
         <section
             class="modal-dialog"
@@ -42,6 +43,8 @@
     private readonly string _titleId = $"dialog-title-{Guid.NewGuid():N}";
     private ElementReference _dialogElement;
     private bool _shouldFocus;
+    private DotNetObjectReference<ModalDialog>? _dotNetReference;
+    private bool _escapeHandlerRegistered;
 
     [Parameter]
     public bool IsOpen { get; set; }
@@ -71,6 +74,18 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (IsOpen && !_escapeHandlerRegistered)
+        {
+            _dotNetReference ??= DotNetObjectReference.Create(this);
+            await JSRuntime.InvokeVoidAsync("xtreamForgeDialog.registerEscapeHandler", _dotNetReference);
+            _escapeHandlerRegistered = true;
+        }
+        else if (!IsOpen && _escapeHandlerRegistered)
+        {
+            await JSRuntime.InvokeVoidAsync("xtreamForgeDialog.unregisterEscapeHandler");
+            _escapeHandlerRegistered = false;
+        }
+
         if (_shouldFocus && IsOpen)
         {
             _shouldFocus = false;
@@ -83,12 +98,26 @@
             ? OnClose.InvokeAsync()
             : Task.CompletedTask;
 
-    private Task HandleKeyDownAsync(KeyboardEventArgs args) =>
-        args.Key == "Escape"
-            ? OnClose.InvokeAsync()
-            : Task.CompletedTask;
-
     private ValueTask FocusFirstAsync() => JSRuntime.InvokeVoidAsync("xtreamForgeDialog.focusFirst", _dialogElement);
 
     private ValueTask FocusLastAsync() => JSRuntime.InvokeVoidAsync("xtreamForgeDialog.focusLast", _dialogElement);
+
+    [JSInvokable]
+    public Task HandleEscapeFromJs() => OnClose.InvokeAsync();
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_escapeHandlerRegistered)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("xtreamForgeDialog.unregisterEscapeHandler");
+            }
+            catch
+            {
+            }
+        }
+
+        _dotNetReference?.Dispose();
+    }
 }

@@ -1011,6 +1011,8 @@ else
                 _sourceDiscoveryForm.Username,
                 _sourceDiscoveryForm.Password));
 
+            _sourceDiscoveryForm.Username = null;
+            _sourceDiscoveryForm.Password = null;
             _selectedSourceId = result.SourceId;
             _activeTab = CategoriesTab.SourceCategories;
             UpdateLocation();

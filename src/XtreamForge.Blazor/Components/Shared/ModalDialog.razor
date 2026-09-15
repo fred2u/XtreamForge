@@ -1,27 +1,29 @@
-@using Microsoft.AspNetCore.Components.Web
-@using Microsoft.JSInterop
-@implements IAsyncDisposable
-@inject IJSRuntime JSRuntime
-
 @if (IsOpen)
 {
-    <div class="modal-backdrop" tabindex="-1" @onclick="HandleBackdropClickAsync">
-        <span class="sr-only" tabindex="0" @onfocus="@(() => FocusLastAsync())">Dialog focus guard</span>
-        <section
-            class="modal-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="@_titleId"
-            tabindex="-1"
-            @ref="_dialogElement"
-            @onclick:stopPropagation="true">
+    <div class="modal-backdrop"
+         role="presentation"
+         @onclick="HandleBackdropClickAsync"
+         @onkeydown="HandleKeyDownAsync">
+        <section class="modal-dialog"
+                 role="dialog"
+                 aria-modal="true"
+                 aria-labelledby="@_titleId"
+                 tabindex="-1"
+                 @ref="_dialogElement"
+                 @onclick:stopPropagation="true">
             <header class="modal-header">
                 <h2 id="@_titleId">@Title</h2>
-                <button type="button" class="icon-button" title="Close dialog" aria-label="Close dialog" @onclick="OnClose">
-                    <svg viewBox="0 0 16 16" aria-hidden="true">
-                        <path d="M3.22 3.22a.75.75 0 0 1 1.06 0L8 6.94l3.72-3.72a.75.75 0 1 1 1.06 1.06L9.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L8 9.06l-3.72 3.72a.75.75 0 1 1-1.06-1.06L6.94 8 3.22 4.28a.75.75 0 0 1 0-1.06Z" fill="currentColor" />
-                    </svg>
-                </button>
+
+                @if (ShowCloseButton)
+                {
+                    <button type="button"
+                            class="icon-button"
+                            aria-label="Close dialog"
+                            @onclick="CloseAsync"
+                            disabled="@IsBusy">
+                        <AppIcon Name="x" />
+                    </button>
+                }
             </header>
 
             <div class="modal-body">
@@ -35,28 +37,31 @@
                 </footer>
             }
         </section>
-        <span class="sr-only" tabindex="0" @onfocus="@(() => FocusFirstAsync())">Dialog focus guard</span>
     </div>
 }
 
 @code {
     private readonly string _titleId = $"dialog-title-{Guid.NewGuid():N}";
     private ElementReference _dialogElement;
-    private bool _shouldFocus;
-    private DotNetObjectReference<ModalDialog>? _dotNetReference;
-    private bool _escapeHandlerRegistered;
+    private bool _wasOpen;
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
 
     [Parameter]
     public bool IsOpen { get; set; }
 
     [Parameter]
-    public string Title { get; set; } = string.Empty;
+    public bool ShowCloseButton { get; set; } = true;
 
     [Parameter]
     public bool CloseOnBackdropClick { get; set; } = true;
 
     [Parameter]
-    public EventCallback OnClose { get; set; }
+    public bool CloseOnEscape { get; set; } = true;
+
+    [Parameter]
+    public bool IsBusy { get; set; }
 
     [Parameter]
     public RenderFragment? ChildContent { get; set; }
@@ -64,60 +69,28 @@
     [Parameter]
     public RenderFragment? FooterContent { get; set; }
 
-    protected override void OnParametersSet()
-    {
-        if (IsOpen)
-        {
-            _shouldFocus = true;
-        }
-    }
+    [Parameter]
+    public EventCallback OnClose { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (IsOpen && !_escapeHandlerRegistered)
+        if (IsOpen && !_wasOpen)
         {
-            _dotNetReference ??= DotNetObjectReference.Create(this);
-            await JSRuntime.InvokeVoidAsync("xtreamForgeDialog.registerEscapeHandler", _dotNetReference);
-            _escapeHandlerRegistered = true;
-        }
-        else if (!IsOpen && _escapeHandlerRegistered)
-        {
-            await JSRuntime.InvokeVoidAsync("xtreamForgeDialog.unregisterEscapeHandler");
-            _escapeHandlerRegistered = false;
+            await _dialogElement.FocusAsync();
         }
 
-        if (_shouldFocus && IsOpen)
-        {
-            _shouldFocus = false;
-            await FocusFirstAsync();
-        }
+        _wasOpen = IsOpen;
     }
 
     private Task HandleBackdropClickAsync() =>
-        CloseOnBackdropClick
-            ? OnClose.InvokeAsync()
+        CloseOnBackdropClick && !IsBusy
+            ? CloseAsync()
             : Task.CompletedTask;
 
-    private ValueTask FocusFirstAsync() => JSRuntime.InvokeVoidAsync("xtreamForgeDialog.focusFirst", _dialogElement);
+    private Task HandleKeyDownAsync(KeyboardEventArgs args) =>
+        CloseOnEscape && !IsBusy && string.Equals(args.Key, "Escape", StringComparison.Ordinal)
+            ? CloseAsync()
+            : Task.CompletedTask;
 
-    private ValueTask FocusLastAsync() => JSRuntime.InvokeVoidAsync("xtreamForgeDialog.focusLast", _dialogElement);
-
-    [JSInvokable]
-    public Task HandleEscapeFromJs() => OnClose.InvokeAsync();
-
-    public async ValueTask DisposeAsync()
-    {
-        if (_escapeHandlerRegistered)
-        {
-            try
-            {
-                await JSRuntime.InvokeVoidAsync("xtreamForgeDialog.unregisterEscapeHandler");
-            }
-            catch
-            {
-            }
-        }
-
-        _dotNetReference?.Dispose();
-    }
+    private Task CloseAsync() => OnClose.InvokeAsync();
 }

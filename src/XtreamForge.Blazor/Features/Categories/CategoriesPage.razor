@@ -65,7 +65,7 @@ else
                         Sources="_categoryView.Sources"
                         SelectedSourceId="_selectedSourceId"
                         SelectedContentType="_selectedContentType"
-                        SearchText="_searchText"
+                        SearchText="@_searchText"
                         StatusFilter="_statusFilter"
                         Rows="FilteredCategoryRows"
                         TotalCount="_categoryRows.Count"
@@ -91,10 +91,7 @@ else
                         SelectedSourceId="_selectedSourceId"
                         SelectedContentType="_selectedContentType"
                         Rows="_ruleRows"
-                        NewRule="_newRule"
                         Tester="_ruleTester"
-                        ShowCreateEditor="_showNewRuleEditor"
-                        IsCreating="_isRuleCreating"
                         IsRefreshing="_isRulesRefreshing"
                         HighlightedRuleId="_highlightedRuleId"
                         DraggedRuleId="_draggedRuleId"
@@ -103,8 +100,7 @@ else
                         ErrorMessage="@_ruleErrorMessage"
                         OnSourceChanged="OnSourceChangedAsync"
                         OnContentTypeChanged="OnContentTypeChangedAsync"
-                        OnCreate="CreateRuleAsync"
-                        OnToggleCreate="ToggleRuleCreateEditor"
+                        OnOpenCreate="OpenAddRuleDialog"
                         OnRunTester="RunRuleTesterAsync"
                         OnBeginEdit="BeginRuleEdit"
                         OnCancelEdit="CancelRuleEdit"
@@ -122,15 +118,11 @@ else
                     <CustomCategoriesTab
                         SelectedContentType="_selectedContentType"
                         Rows="_customCategoryRows"
-                        NewCustomCategory="_newCustomCategory"
-                        ShowCreateEditor="_showNewCustomCategoryEditor"
-                        IsCreating="_isCustomCategoryCreating"
                         IsRefreshing="_isCategoryDataRefreshing"
                         Message="@_customCategoryMessage"
                         ErrorMessage="@_customCategoryErrorMessage"
                         OnContentTypeChanged="OnContentTypeChangedAsync"
-                        OnCreate="CreateStandaloneCustomCategoryAsync"
-                        OnToggleCreate="ToggleCustomCategoryCreateEditor"
+                        OnOpenCreate="OpenNewCustomCategoryDialog"
                         OnBeginEdit="BeginCustomCategoryEdit"
                         OnCancelEdit="CancelCustomCategoryEdit"
                         OnSave="SaveCustomCategoryAsync"
@@ -178,6 +170,51 @@ else
     <FooterContent>
         <button type="button" class="secondary-button" @onclick="CloseAddSourceDialog" disabled="@_isSourceDiscoverySaving">Cancel</button>
         <button type="button" @onclick="DiscoverSourceAsync" disabled="@_isSourceDiscoverySaving">@( _isSourceDiscoverySaving ? "Connecting…" : "Connect & import")</button>
+    </FooterContent>
+</ModalDialog>
+
+<ModalDialog IsOpen="@_isAddRuleDialogOpen" Title="Add category rule" OnClose="CloseAddRuleDialog" IsBusy="@_isRuleCreating">
+    <ChildContent>
+        <div class="dialog-form-grid">
+            <label>
+                Action
+                <InputSelect @bind-Value="_newRule.Action" disabled="@_isRuleCreating">
+                    <option value="@CategoryRuleActionOption.Include">Include</option>
+                    <option value="@CategoryRuleActionOption.Exclude">Exclude</option>
+                </InputSelect>
+            </label>
+            <label>
+                Match
+                <InputSelect @bind-Value="_newRule.Operator" disabled="@_isRuleCreating">
+                    <option value="@CategoryRuleOperatorOption.Contains">Contains</option>
+                    <option value="@CategoryRuleOperatorOption.StartsWith">StartsWith</option>
+                </InputSelect>
+            </label>
+            <label>
+                Pattern
+                <InputText @bind-Value="_newRule.Pattern" maxlength="255" disabled="@_isRuleCreating" />
+            </label>
+            <label>
+                Case
+                <InputSelect @bind-Value="_newRule.CaseSensitive" disabled="@_isRuleCreating">
+                    <option value="false">Ignore case</option>
+                    <option value="true">Case sensitive</option>
+                </InputSelect>
+            </label>
+        </div>
+        <label class="checkbox-label">
+            <InputCheckbox @bind-Value="_newRule.IsEnabled" disabled="@_isRuleCreating" />
+            Enabled
+        </label>
+
+        @if (!string.IsNullOrWhiteSpace(_ruleCreateErrorMessage))
+        {
+            <div class="inline-error">@_ruleCreateErrorMessage</div>
+        }
+    </ChildContent>
+    <FooterContent>
+        <button type="button" class="secondary-button" @onclick="CloseAddRuleDialog" disabled="@_isRuleCreating">Cancel</button>
+        <button type="button" @onclick="CreateRuleAsync" disabled="@_isRuleCreating">@( _isRuleCreating ? "Adding…" : "Add rule")</button>
     </FooterContent>
 </ModalDialog>
 
@@ -243,6 +280,28 @@ else
     </FooterContent>
 </ModalDialog>
 
+<ModalDialog IsOpen="@_isNewCustomCategoryDialogOpen" Title="Create custom category" OnClose="CloseNewCustomCategoryDialog" IsBusy="@_isCustomCategoryCreating">
+    <ChildContent>
+        <label>
+            Content type
+            <input value="@_selectedContentType" readonly />
+        </label>
+        <label>
+            Name
+            <InputText @bind-Value="_newCustomCategory.DisplayName" maxlength="255" placeholder="Movies 4K" disabled="@_isCustomCategoryCreating" />
+        </label>
+
+        @if (!string.IsNullOrWhiteSpace(_customCategoryCreateErrorMessage))
+        {
+            <div class="inline-error">@_customCategoryCreateErrorMessage</div>
+        }
+    </ChildContent>
+    <FooterContent>
+        <button type="button" class="secondary-button" @onclick="CloseNewCustomCategoryDialog" disabled="@_isCustomCategoryCreating">Cancel</button>
+        <button type="button" @onclick="CreateStandaloneCustomCategoryAsync" disabled="@_isCustomCategoryCreating">@( _isCustomCategoryCreating ? "Creating…" : "Create")</button>
+    </FooterContent>
+</ModalDialog>
+
 <ModalDialog IsOpen="@(_pendingCustomCategoryDelete is not null)" Title="Delete custom category?" OnClose="CloseCustomCategoryDeleteDialog">
     <ChildContent>
         @if (_pendingCustomCategoryDelete is not null)
@@ -288,9 +347,11 @@ else
     private CategoriesTab _activeTab = CategoriesTab.SourceCategories;
     private int? _highlightedRuleId;
     private bool _isRuleCreating;
-    private bool _showNewRuleEditor = true;
+    private bool _isAddRuleDialogOpen;
+    private string? _ruleCreateErrorMessage;
     private bool _isCustomCategoryCreating;
-    private bool _showNewCustomCategoryEditor = true;
+    private bool _isNewCustomCategoryDialogOpen;
+    private string? _customCategoryCreateErrorMessage;
     private string? _pageErrorMessage;
     private string? _categoryMessage;
     private string? _categoryErrorMessage;
@@ -331,8 +392,10 @@ else
         _categoryErrorMessage = null;
         _ruleMessage = null;
         _ruleErrorMessage = null;
+        _ruleCreateErrorMessage = null;
         _customCategoryMessage = null;
         _customCategoryErrorMessage = null;
+        _customCategoryCreateErrorMessage = null;
 
         try
         {
@@ -398,6 +461,7 @@ else
             await RefreshAllDataCoreAsync();
             _highlightedRuleId = highlightRuleId;
             _ruleMessage = message;
+            _ruleCreateErrorMessage = null;
         }
         catch (Exception exception)
         {
@@ -577,7 +641,7 @@ else
     {
         if (_selectedSourceId is null)
         {
-            _ruleErrorMessage = "A source must be selected.";
+            _ruleCreateErrorMessage = "A source must be selected.";
             return;
         }
 
@@ -586,6 +650,7 @@ else
             _isRuleCreating = true;
             _ruleMessage = null;
             _ruleErrorMessage = null;
+            _ruleCreateErrorMessage = null;
 
             await CategoriesClient.CreateRuleAsync(new AdminCategoryRuleUpdate(
                 _selectedSourceId.Value,
@@ -596,13 +661,12 @@ else
                 _newRule.CaseSensitive,
                 _newRule.IsEnabled));
 
-            _newRule = new RuleEditorState { IsEnabled = true };
-            _showNewRuleEditor = false;
+            ResetAddRuleDialogState();
             await RefreshRulesAndCategoryViewsAsync("Rule created.");
         }
         catch (Exception exception)
         {
-            _ruleErrorMessage = exception.Message;
+            _ruleCreateErrorMessage = exception.Message;
         }
         finally
         {
@@ -610,9 +674,23 @@ else
         }
     }
 
-    private Task ToggleRuleCreateEditor()
+    private Task OpenAddRuleDialog()
     {
-        _showNewRuleEditor = !_showNewRuleEditor;
+        if (_selectedSourceId is null)
+        {
+            _ruleErrorMessage = "Select a source to add a rule.";
+            return Task.CompletedTask;
+        }
+
+        _isAddRuleDialogOpen = true;
+        _ruleCreateErrorMessage = null;
+        _newRule = new RuleEditorState { IsEnabled = true };
+        return Task.CompletedTask;
+    }
+
+    private Task CloseAddRuleDialog()
+    {
+        ResetAddRuleDialogState();
         return Task.CompletedTask;
     }
 
@@ -808,6 +886,7 @@ else
         }
 
         var orderedIds = _ruleRows.Select(rule => rule.RuleId).ToList();
+        var originalOrder = orderedIds.ToList();
         var draggedId = orderedIds[currentIndex];
         orderedIds.RemoveAt(currentIndex);
         if (index > currentIndex)
@@ -819,7 +898,7 @@ else
 
         await EndRuleDrag();
 
-        if (orderedIds.SequenceEqual(_ruleRows.Select(rule => rule.RuleId)))
+        if (orderedIds.SequenceEqual(originalOrder))
         {
             return;
         }
@@ -877,15 +956,15 @@ else
             _isCustomCategoryCreating = true;
             _customCategoryMessage = null;
             _customCategoryErrorMessage = null;
+            _customCategoryCreateErrorMessage = null;
             await CategoriesClient.CreateCustomCategoryAsync(new AdminCustomCategoryCreate(_selectedContentType.ToString(), _newCustomCategory.DisplayName));
-            _newCustomCategory = new CustomCategoryEditorState();
-            _showNewCustomCategoryEditor = false;
+            ResetNewCustomCategoryDialogState();
             _customCategoryMessage = "Custom category created.";
             await RefreshCategoriesViewAsync();
         }
         catch (Exception exception)
         {
-            _customCategoryErrorMessage = exception.Message;
+            _customCategoryCreateErrorMessage = exception.Message;
         }
         finally
         {
@@ -893,9 +972,17 @@ else
         }
     }
 
-    private Task ToggleCustomCategoryCreateEditor()
+    private Task OpenNewCustomCategoryDialog()
     {
-        _showNewCustomCategoryEditor = !_showNewCustomCategoryEditor;
+        _isNewCustomCategoryDialogOpen = true;
+        _customCategoryCreateErrorMessage = null;
+        _newCustomCategory = new CustomCategoryEditorState();
+        return Task.CompletedTask;
+    }
+
+    private Task CloseNewCustomCategoryDialog()
+    {
+        ResetNewCustomCategoryDialogState();
         return Task.CompletedTask;
     }
 
@@ -1062,5 +1149,19 @@ else
         _isAddSourceDialogOpen = false;
         _sourceDiscoveryErrorMessage = null;
         _sourceDiscoveryForm = SourceDiscoveryFormState.CreateDefault();
+    }
+
+    private void ResetAddRuleDialogState()
+    {
+        _isAddRuleDialogOpen = false;
+        _ruleCreateErrorMessage = null;
+        _newRule = new RuleEditorState { IsEnabled = true };
+    }
+
+    private void ResetNewCustomCategoryDialogState()
+    {
+        _isNewCustomCategoryDialogOpen = false;
+        _customCategoryCreateErrorMessage = null;
+        _newCustomCategory = new CustomCategoryEditorState();
     }
 }

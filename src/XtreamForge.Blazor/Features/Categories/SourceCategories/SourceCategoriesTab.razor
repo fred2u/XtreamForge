@@ -99,7 +99,6 @@
                         <th>Mapping</th>
                         <th>Status</th>
                         <th>Rule</th>
-                        <th>State</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -114,20 +113,32 @@
                                 <div class="category-meta">Upstream ID @row.Summary.UpstreamCategoryId · XtreamForge ID @row.Summary.DedicatedXtreamForgeCategoryId</div>
                             </td>
                             <td>
-                                <InputSelect @bind-Value="row.MappingValue" @bind-Value:after="() => OnMappingChanged.InvokeAsync(row)" disabled="@row.IsBusy">
-                                    <option value="disabled">Disabled</option>
-                                    <option value="original">Original</option>
-                                    <option value="new">New category</option>
-                                    @if (CustomCategories.Count > 0)
+                                <div class="mapping-control-row">
+                                    <InputSelect @bind-Value="row.MappingValue" @bind-Value:after="() => OnMappingChanged.InvokeAsync(row)" disabled="@row.IsBusy">
+                                        <option value="disabled">Disabled</option>
+                                        <option value="original">Original</option>
+                                        <option value="new">New category</option>
+                                        @if (CustomCategories.Count > 0)
+                                        {
+                                            <optgroup label="Global custom categories">
+                                                @foreach (var customCategory in CustomCategories)
+                                                {
+                                                    <option value="@CategoryRowState.GetCustomMappingValue(customCategory.Summary.Id)">@customCategory.Summary.DisplayName</option>
+                                                }
+                                            </optgroup>
+                                        }
+                                    </InputSelect>
+
+                                    @switch (row.SaveState)
                                     {
-                                        <optgroup label="Global custom categories">
-                                            @foreach (var customCategory in CustomCategories)
-                                            {
-                                                <option value="@CategoryRowState.GetCustomMappingValue(customCategory.Summary.Id)">@customCategory.Summary.DisplayName</option>
-                                            }
-                                        </optgroup>
+                                        case MutationFeedbackState.Saving:
+                                            <span class="category-meta">Saving…</span>
+                                            break;
+                                        case MutationFeedbackState.Saved:
+                                            <span class="inline-success">✓</span>
+                                            break;
                                     }
-                                </InputSelect>
+                                </div>
 
                                 @if (row.IsCreatingCustomCategory)
                                 {
@@ -140,6 +151,14 @@
                                             <button type="button" @onclick="() => OnCreateCustomCategory.InvokeAsync(row)" disabled="@row.IsBusy">Create &amp; map</button>
                                             <button type="button" class="secondary-button" @onclick="() => OnCancelCustomCategory.InvokeAsync(row)" disabled="@row.IsBusy">Cancel</button>
                                         </div>
+                                    </div>
+                                }
+
+                                @if (row.SaveState == MutationFeedbackState.Failed && !string.IsNullOrWhiteSpace(row.ValidationError))
+                                {
+                                    <div class="mapping-feedback">
+                                        <div class="inline-error">@row.ValidationError</div>
+                                        <button type="button" class="link-button" @onclick="() => OnRetry.InvokeAsync(row)">Retry</button>
                                     </div>
                                 }
                             </td>
@@ -160,24 +179,6 @@
                                 else
                                 {
                                     <span class="category-meta">—</span>
-                                }
-                            </td>
-                            <td>
-                                @switch (row.SaveState)
-                                {
-                                    case MutationFeedbackState.Saving:
-                                        <span class="category-meta">Saving…</span>
-                                        break;
-                                    case MutationFeedbackState.Saved:
-                                        <span class="inline-success">Saved</span>
-                                        break;
-                                    case MutationFeedbackState.Failed:
-                                        <div class="inline-error">@row.ValidationError</div>
-                                        <button type="button" class="link-button" @onclick="() => OnRetry.InvokeAsync(row)">Retry</button>
-                                        break;
-                                    default:
-                                        <span class="category-meta">—</span>
-                                        break;
                                 }
                             </td>
                         </tr>

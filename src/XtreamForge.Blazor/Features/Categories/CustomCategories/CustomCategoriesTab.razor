@@ -23,9 +23,7 @@
         </label>
 
         <div class="toolbar-actions">
-            <button type="button" @onclick="() => OnToggleCreate.InvokeAsync()">
-                @(ShowCreateEditor ? "Hide new category" : "+ New category")
-            </button>
+            <button type="button" @onclick="() => OnOpenCreate.InvokeAsync()">+ New category</button>
         </div>
     </div>
 
@@ -40,22 +38,6 @@
             {
                 <div class="inline-error">@ErrorMessage</div>
             }
-        </div>
-    }
-
-    @if (ShowCreateEditor)
-    {
-        <div class="rule-editor-card">
-            <h3>Create custom category</h3>
-            <div class="custom-category-create-grid">
-                <label>
-                    Name
-                    <InputText @bind-Value="NewCustomCategory.DisplayName" maxlength="255" placeholder="Movies 4K" disabled="@IsCreating" />
-                </label>
-                <div class="rule-action-cell">
-                    <button type="button" @onclick="() => OnCreate.InvokeAsync()" disabled="@IsCreating">@(IsCreating ? "Saving…" : "Create")</button>
-                </div>
-            </div>
         </div>
     }
 
@@ -156,15 +138,6 @@
     public required IReadOnlyList<CustomCategoryRowState> Rows { get; set; }
 
     [Parameter]
-    public required CustomCategoryEditorState NewCustomCategory { get; set; }
-
-    [Parameter]
-    public bool ShowCreateEditor { get; set; }
-
-    [Parameter]
-    public bool IsCreating { get; set; }
-
-    [Parameter]
     public bool IsRefreshing { get; set; }
 
     [Parameter]
@@ -174,10 +147,7 @@
     public string? ErrorMessage { get; set; }
 
     [Parameter]
-    public EventCallback OnCreate { get; set; }
-
-    [Parameter]
-    public EventCallback OnToggleCreate { get; set; }
+    public EventCallback OnOpenCreate { get; set; }
 
     [Parameter]
     public EventCallback<AdminContentType> OnContentTypeChanged { get; set; }

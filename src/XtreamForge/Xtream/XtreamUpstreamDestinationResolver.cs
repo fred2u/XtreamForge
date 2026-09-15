@@ -62,7 +62,7 @@ public sealed class XtreamUpstreamDestinationResolver(IOptions<XtreamProxyOption
             return false;
         }
 
-        return Uri.CheckHostName(host) is UriHostNameType.Dns or UriHostNameType.IPv4;
+        return Uri.CheckHostName(host) is UriHostNameType.Dns or UriHostNameType.IPv4 or UriHostNameType.IPv6;
     }
 
     private bool IsAllowedHost(string host)

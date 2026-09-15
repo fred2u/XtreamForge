@@ -135,6 +135,7 @@ public sealed class XtreamCategoryMappingService(
         for (var attempt = 1; attempt <= MaxSyncAttempts; attempt++)
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
             try
             {
@@ -173,10 +174,12 @@ public sealed class XtreamCategoryMappingService(
                 }
 
                 await dbContext.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
                 return new CategoryConfigurationResult(upstreamCategory.XtreamSourceId, upstreamCategory.ContentType);
             }
             catch (DbUpdateException exception) when (attempt < MaxSyncAttempts && IsUniqueConstraintViolation(exception))
             {
+                await transaction.RollbackAsync(CancellationToken.None);
             }
         }
 

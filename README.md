@@ -175,8 +175,7 @@ Security notes:
 
 - Xtream credentials in the query string are preserved for upstream forwarding but are not intentionally logged or persisted by this proxy layer
 - the proxy route has SSRF implications, so XtreamForge enforces protocol, host, port, and configured host authorization checks
-- IPv4 addresses and DNS hostnames are supported in the route format today
-- IPv6 literals are not currently supported by this path-based route format
+- IPv4 addresses, IPv6 literals, and DNS hostnames are supported in the route format today
 - the generic Xtream proxy route is excluded from generated OpenAPI documentation
 
 ## Administration UI

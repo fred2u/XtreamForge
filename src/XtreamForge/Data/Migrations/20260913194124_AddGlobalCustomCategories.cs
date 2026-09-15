@@ -254,10 +254,6 @@ namespace XtreamForge.Data.Migrations
                 type: "integer",
                 nullable: true);
 
-            migrationBuilder.DropColumn(
-                name: "custom_category_id",
-                table: "upstream_categories");
-
             migrationBuilder.AddColumn<bool>(
                 name: "is_enabled",
                 table: "output_categories",
@@ -327,6 +323,10 @@ namespace XtreamForge.Data.Migrations
                         WHERE cc.id = output_categories.id);
                     """);
             }
+
+            migrationBuilder.DropColumn(
+                name: "custom_category_id",
+                table: "upstream_categories");
 
             migrationBuilder.DropTable(
                 name: "custom_categories");

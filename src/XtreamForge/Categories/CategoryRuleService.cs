@@ -163,7 +163,7 @@ public sealed class CategoryRuleService(
         return new CategoryRuleMutationResult(command.SelectedSourceId, command.SelectedContentType);
     }
 
-    public async Task<CategoryRuleMutationResult> MoveRuleAsync(CategoryRuleIdentityCommand command, CategoryRuleMoveDirection direction, CancellationToken cancellationToken = default)
+    public async Task<CategoryRuleMutationResult> ReorderRulesAsync(CategoryRuleOrderCommand command, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
 
@@ -176,25 +176,39 @@ public sealed class CategoryRuleService(
             .ThenBy(rule => rule.Id)
             .ToListAsync(cancellationToken);
 
-        var currentIndex = rules.FindIndex(rule => rule.Id == command.RuleId);
-        if (currentIndex < 0)
+        if (command.OrderedRuleIds.Count == 0)
         {
-            throw new InvalidOperationException("Category rule was not found.");
+            throw new InvalidOperationException("At least one category rule ID is required.");
         }
 
-        var targetIndex = direction switch
-        {
-            CategoryRuleMoveDirection.Up when currentIndex > 0 => currentIndex - 1,
-            CategoryRuleMoveDirection.Down when currentIndex < rules.Count - 1 => currentIndex + 1,
-            _ => currentIndex
-        };
+        var duplicateRuleIds = command.OrderedRuleIds
+            .GroupBy(ruleId => ruleId)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToList();
 
-        if (targetIndex != currentIndex)
+        if (duplicateRuleIds.Count > 0)
         {
-            (rules[currentIndex], rules[targetIndex]) = (rules[targetIndex], rules[currentIndex]);
-            await ReassignSequencesAsync(dbContext, rules, cancellationToken);
+            throw new InvalidOperationException("Category rule IDs must be unique.");
         }
 
+        if (rules.Count != command.OrderedRuleIds.Count)
+        {
+            throw new InvalidOperationException("The reorder request must include every category rule for the selected source and content type.");
+        }
+
+        var existingRuleIds = rules.Select(rule => rule.Id).ToHashSet();
+        if (command.OrderedRuleIds.Any(ruleId => !existingRuleIds.Contains(ruleId)))
+        {
+            throw new InvalidOperationException("One or more category rules do not belong to the selected source or content type.");
+        }
+
+        var orderByRuleId = command.OrderedRuleIds
+            .Select((ruleId, index) => new { ruleId, index })
+            .ToDictionary(item => item.ruleId, item => item.index);
+        rules.Sort((left, right) => orderByRuleId[left.Id].CompareTo(orderByRuleId[right.Id]));
+
+        await ReassignSequencesAsync(dbContext, rules, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new CategoryRuleMutationResult(command.SelectedSourceId, command.SelectedContentType);
     }
@@ -326,6 +340,11 @@ public record CategoryRuleIdentityCommand(
     int SelectedSourceId,
     ContentType SelectedContentType);
 
+public sealed record CategoryRuleOrderCommand(
+    int SelectedSourceId,
+    ContentType SelectedContentType,
+    IReadOnlyList<int> OrderedRuleIds);
+
 public sealed record CategoryRuleDeleteCommand(
     int RuleId,
     int SelectedSourceId,
@@ -335,9 +354,3 @@ public sealed record CategoryRuleDeleteCommand(
 public sealed record CategoryRuleMutationResult(
     int SourceId,
     ContentType ContentType);
-
-public enum CategoryRuleMoveDirection
-{
-    Up = 1,
-    Down = 2
-}

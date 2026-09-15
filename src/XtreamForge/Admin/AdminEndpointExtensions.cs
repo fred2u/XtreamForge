@@ -1,9 +1,6 @@
 using System.Net.Http.Json;
-using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using XtreamForge.Categories;
-using XtreamForge.Configuration;
 using XtreamForge.Data;
 using XtreamForge.Xtream;
 
@@ -29,9 +26,9 @@ public static class AdminEndpointExtensions
             .WithName("UpdateAdminCategoryMapping")
             .WithSummary("Updates the effective mapping for one source category.");
 
-        adminGroup.MapPost("/categories/refresh", RefreshCategoriesAsync)
-            .WithName("RefreshAdminCategories")
-            .WithSummary("Refreshes upstream categories for the selected source and content type.");
+        adminGroup.MapPost("/sources/discover", DiscoverSourceAsync)
+            .WithName("DiscoverAdminSource")
+            .WithSummary("Discovers or refreshes an Xtream source using transient credentials.");
 
         adminGroup.MapGet("/category-rules", GetCategoryRulesAsync)
             .WithName("GetAdminCategoryRules")
@@ -49,13 +46,9 @@ public static class AdminEndpointExtensions
             .WithName("UpdateAdminCategoryRule")
             .WithSummary("Updates a category rule.");
 
-        adminGroup.MapPost("/category-rules/{ruleId:int}/move-up", MoveCategoryRuleUpAsync)
-            .WithName("MoveAdminCategoryRuleUp")
-            .WithSummary("Moves a category rule up.");
-
-        adminGroup.MapPost("/category-rules/{ruleId:int}/move-down", MoveCategoryRuleDownAsync)
-            .WithName("MoveAdminCategoryRuleDown")
-            .WithSummary("Moves a category rule down.");
+        adminGroup.MapPut("/category-rules/order", ReorderCategoryRulesAsync)
+            .WithName("ReorderAdminCategoryRules")
+            .WithSummary("Reorders category rules for the selected source and content type.");
 
         adminGroup.MapDelete("/category-rules/{ruleId:int}", DeleteCategoryRuleAsync)
             .WithName("DeleteAdminCategoryRule")
@@ -72,6 +65,10 @@ public static class AdminEndpointExtensions
         adminGroup.MapDelete("/custom-categories/{customCategoryId:int}", DeleteCustomCategoryAsync)
             .WithName("DeleteAdminCustomCategory")
             .WithSummary("Deletes a global custom category when it is no longer referenced.");
+
+        adminGroup.MapGet("/custom-categories/{customCategoryId:int}/usages", GetCustomCategoryUsagesAsync)
+            .WithName("GetAdminCustomCategoryUsages")
+            .WithSummary("Gets source category usages for a global custom category.");
 
         return endpoints;
     }
@@ -155,47 +152,35 @@ public static class AdminEndpointExtensions
         }
     }
 
-    private static async Task<IResult> RefreshCategoriesAsync(
-        AdminCategoryRefreshRequest request,
-        IDbContextFactory<XtreamForgeDbContext> dbContextFactory,
-        IOptions<XtreamOptions> xtreamOptions,
-        XtreamUpstreamClient upstreamClient,
-        XtreamCategoryMappingService categoryMappingService,
+    private static async Task<IResult> DiscoverSourceAsync(
+        AdminSourceDiscoveryRequest request,
+        XtreamSourceDiscoveryService sourceDiscoveryService,
         CancellationToken cancellationToken)
     {
         try
         {
-            var selectedContentType = ParseContentType(request.SelectedContentType);
-            var configuredBaseUri = GetConfiguredXtreamBaseUri(xtreamOptions.Value);
-
-            await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-            var source = await dbContext.XtreamSources.SingleOrDefaultAsync(source => source.Id == request.SelectedSourceId, cancellationToken);
-            if (source is null)
-            {
-                throw new InvalidOperationException("Xtream source was not found.");
-            }
-
-            EnsureConfiguredSourceMatchesSelection(configuredBaseUri, source);
-
-            var requestUri = BuildXtreamCategoryRefreshUri(configuredBaseUri, xtreamOptions.Value, selectedContentType);
-            using var requestMessage = new HttpRequestMessage(HttpMethod.Get, requestUri);
-            using var responseMessage = await upstreamClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            responseMessage.EnsureSuccessStatusCode();
-            var upstreamCategories = await responseMessage.Content.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(cancellationToken: cancellationToken) ?? [];
-
-            await categoryMappingService.SyncCategoriesAsync(
-                new XtreamSourceDescriptor(source.Protocol, source.Host, source.Port),
-                selectedContentType,
-                upstreamCategories
-                    .Select(category => new DiscoveredCategory(category.CategoryId ?? string.Empty, category.CategoryName ?? string.Empty))
-                    .ToList(),
+            var result = await sourceDiscoveryService.DiscoverAsync(
+                new XtreamSourceDiscoveryRequest(
+                    request.Protocol,
+                    request.HostOrBaseUrl,
+                    request.Port,
+                    request.Username,
+                    request.Password),
                 cancellationToken);
 
-            return TypedResults.Ok(new AdminMutationResponse(source.Id, selectedContentType.ToString()));
+            return TypedResults.Ok(new AdminSourceDiscoveryResponse(result.SourceId, result.VodCategoryCount, result.SeriesCategoryCount));
         }
         catch (HttpRequestException)
         {
-            return TypedResults.BadRequest(new AdminErrorResponse("Refreshing categories from the configured Xtream source failed."));
+            return TypedResults.BadRequest(new AdminErrorResponse("Connecting to the Xtream source failed."));
+        }
+        catch (TaskCanceledException)
+        {
+            return TypedResults.BadRequest(new AdminErrorResponse("Connecting to the Xtream source timed out."));
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return TypedResults.BadRequest(new AdminErrorResponse("The Xtream source returned an invalid category payload."));
         }
         catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
         {
@@ -298,35 +283,18 @@ public static class AdminEndpointExtensions
         }
     }
 
-    private static Task<IResult> MoveCategoryRuleUpAsync(
-        int ruleId,
-        int sourceId,
-        string contentType,
-        CategoryRuleService categoryRuleService,
-        CancellationToken cancellationToken) =>
-        MoveCategoryRuleAsync(ruleId, sourceId, contentType, CategoryRuleMoveDirection.Up, categoryRuleService, cancellationToken);
-
-    private static Task<IResult> MoveCategoryRuleDownAsync(
-        int ruleId,
-        int sourceId,
-        string contentType,
-        CategoryRuleService categoryRuleService,
-        CancellationToken cancellationToken) =>
-        MoveCategoryRuleAsync(ruleId, sourceId, contentType, CategoryRuleMoveDirection.Down, categoryRuleService, cancellationToken);
-
-    private static async Task<IResult> MoveCategoryRuleAsync(
-        int ruleId,
-        int sourceId,
-        string contentType,
-        CategoryRuleMoveDirection direction,
+    private static async Task<IResult> ReorderCategoryRulesAsync(
+        AdminCategoryRuleOrderRequest request,
         CategoryRuleService categoryRuleService,
         CancellationToken cancellationToken)
     {
         try
         {
-            var result = await categoryRuleService.MoveRuleAsync(
-                new CategoryRuleIdentityCommand(ruleId, sourceId, ParseContentType(contentType)),
-                direction,
+            var result = await categoryRuleService.ReorderRulesAsync(
+                new CategoryRuleOrderCommand(
+                    request.SelectedSourceId,
+                    ParseContentType(request.SelectedContentType),
+                    request.OrderedRuleIds),
                 cancellationToken);
 
             return TypedResults.Ok(new AdminMutationResponse(result.SourceId, result.ContentType.ToString()));
@@ -418,6 +386,35 @@ public static class AdminEndpointExtensions
         }
     }
 
+    private static async Task<IResult> GetCustomCategoryUsagesAsync(
+        int customCategoryId,
+        string contentType,
+        XtreamCategoryMappingService categoryMappingService,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var usages = await categoryMappingService.GetCustomCategoryUsagesAsync(
+                customCategoryId,
+                ParseContentType(contentType),
+                cancellationToken);
+
+            return TypedResults.Ok(usages.Select(usage => new AdminCustomCategoryUsageResponse(
+                usage.UpstreamCategoryRecordId,
+                usage.SourceId,
+                usage.SourceProtocol,
+                usage.SourceHost,
+                usage.SourcePort,
+                usage.ContentType.ToString(),
+                usage.UpstreamCategoryId,
+                usage.UpstreamCategoryName)).ToList());
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        {
+            return TypedResults.BadRequest(new AdminErrorResponse(exception.Message));
+        }
+    }
+
     private static CategoryRuleEditorCommand ToRuleEditorCommand(int? ruleId, AdminCategoryRuleRequest request) =>
         new(
             ruleId,
@@ -465,60 +462,6 @@ public static class AdminEndpointExtensions
             rule.Pattern,
             rule.CaseSensitive,
             rule.IsEnabled);
-
-    private static Uri GetConfiguredXtreamBaseUri(XtreamOptions options)
-    {
-        if (!Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var baseUri))
-        {
-            throw new InvalidOperationException("Configure Xtream:BaseUrl before refreshing source categories.");
-        }
-
-        if (string.IsNullOrWhiteSpace(options.Username) || string.IsNullOrWhiteSpace(options.Password))
-        {
-            throw new InvalidOperationException("Configure Xtream credentials before refreshing source categories.");
-        }
-
-        return baseUri;
-    }
-
-    private static void EnsureConfiguredSourceMatchesSelection(Uri configuredBaseUri, XtreamSource source)
-    {
-        var configuredPort = configuredBaseUri.IsDefaultPort
-            ? configuredBaseUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ? 443 : 80
-            : configuredBaseUri.Port;
-
-        if (!configuredBaseUri.Scheme.Equals(source.Protocol, StringComparison.OrdinalIgnoreCase)
-            || !configuredBaseUri.Host.Equals(source.Host, StringComparison.OrdinalIgnoreCase)
-            || configuredPort != source.Port)
-        {
-            throw new InvalidOperationException("Refresh from source is available only for the configured Xtream source.");
-        }
-    }
-
-    private static string BuildXtreamCategoryRefreshUri(Uri configuredBaseUri, XtreamOptions options, ContentType contentType)
-    {
-        var path = configuredBaseUri.AbsolutePath.EndsWith("player_api.php", StringComparison.OrdinalIgnoreCase)
-            ? configuredBaseUri.AbsolutePath
-            : $"{configuredBaseUri.AbsolutePath.TrimEnd('/')}/player_api.php";
-
-        var uriBuilder = new UriBuilder(configuredBaseUri)
-        {
-            Path = path
-        };
-
-        var action = contentType == ContentType.Series
-            ? "get_series_categories"
-            : "get_vod_categories";
-
-        return QueryHelpers.AddQueryString(
-            uriBuilder.Uri.ToString(),
-            new Dictionary<string, string?>
-            {
-                ["username"] = options.Username,
-                ["password"] = options.Password,
-                ["action"] = action
-            });
-    }
 
     private static ContentType ParseContentType(string? value)
     {
@@ -645,13 +588,36 @@ public sealed record AdminCategoryRuleRequest(
     bool CaseSensitive,
     bool IsEnabled);
 
+public sealed record AdminCategoryRuleOrderRequest(
+    int SelectedSourceId,
+    string SelectedContentType,
+    IReadOnlyList<int> OrderedRuleIds);
+
 public sealed record AdminCustomCategoryCreateRequest(string SelectedContentType, string? DisplayName);
 
 public sealed record AdminCustomCategoryUpdateRequest(string SelectedContentType, string DisplayName);
 
-public sealed record AdminCategoryRefreshRequest(
-    int SelectedSourceId,
-    string SelectedContentType);
+public sealed record AdminSourceDiscoveryRequest(
+    string? Protocol,
+    string? HostOrBaseUrl,
+    int? Port,
+    string? Username,
+    string? Password);
+
+public sealed record AdminSourceDiscoveryResponse(
+    int SourceId,
+    int VodCategoryCount,
+    int SeriesCategoryCount);
+
+public sealed record AdminCustomCategoryUsageResponse(
+    int UpstreamCategoryRecordId,
+    int SourceId,
+    string SourceProtocol,
+    string SourceHost,
+    int SourcePort,
+    string ContentType,
+    string UpstreamCategoryId,
+    string UpstreamCategoryName);
 
 public sealed record AdminMutationResponse(int SourceId, string ContentType);
 

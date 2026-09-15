@@ -275,6 +275,39 @@ public sealed class XtreamCategoryMappingService(
         return new CustomCategoryMutationResult(command.ContentType);
     }
 
+    public async Task<IReadOnlyList<CustomCategoryUsageSummary>> GetCustomCategoryUsagesAsync(
+        int customCategoryId,
+        ContentType contentType,
+        CancellationToken cancellationToken = default)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var categoryExists = await dbContext.CustomCategories
+            .AsNoTracking()
+            .AnyAsync(category => category.Id == customCategoryId && category.ContentType == contentType, cancellationToken);
+        if (!categoryExists)
+        {
+            throw new InvalidOperationException("Custom category was not found.");
+        }
+
+        return await dbContext.UpstreamCategories
+            .AsNoTracking()
+            .Where(category => category.CustomCategoryId == customCategoryId && category.ContentType == contentType)
+            .OrderBy(category => category.XtreamSource.Host)
+            .ThenBy(category => category.XtreamSource.Port)
+            .ThenBy(category => category.UpstreamCategoryName)
+            .Select(category => new CustomCategoryUsageSummary(
+                category.Id,
+                category.XtreamSourceId,
+                category.XtreamSource.Protocol,
+                category.XtreamSource.Host,
+                category.XtreamSource.Port,
+                category.ContentType,
+                category.UpstreamCategoryId,
+                category.UpstreamCategoryName))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<EffectiveOutputCategoryMapping>> GetEffectiveOutputCategoryMappingsAsync(
         int sourceId,
         ContentType contentType,
@@ -620,6 +653,16 @@ public sealed record EffectiveOutputCategoryMapping(
     int SortOrder,
     string DisplayName,
     IReadOnlyList<string> IncludedUpstreamCategoryIds);
+
+public sealed record CustomCategoryUsageSummary(
+    int UpstreamCategoryRecordId,
+    int SourceId,
+    string SourceProtocol,
+    string SourceHost,
+    int SourcePort,
+    ContentType ContentType,
+    string UpstreamCategoryId,
+    string UpstreamCategoryName);
 
 public sealed record XtreamSourceSummary(int Id, string Protocol, string Host, int Port, DateTimeOffset LastSeenAtUtc);
 

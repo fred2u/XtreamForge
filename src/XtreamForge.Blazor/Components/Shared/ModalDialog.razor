@@ -1,0 +1,97 @@
+@if (IsOpen)
+{
+    <div class="modal-backdrop"
+         role="presentation"
+         @onclick="HandleBackdropClickAsync"
+         @onkeydown="HandleKeyDownAsync">
+        <section class="modal-dialog"
+                 role="dialog"
+                 aria-modal="true"
+                 aria-labelledby="@_titleId"
+                 tabindex="-1"
+                 @ref="_dialogElement"
+                 @onclick:stopPropagation="true">
+            <header class="modal-header">
+                <h2 id="@_titleId">@Title</h2>
+
+                @if (ShowCloseButton)
+                {
+                    <button type="button"
+                            class="icon-button"
+                            aria-label="Close"
+                            title="Close"
+                            @onclick="CloseAsync"
+                            disabled="@IsBusy">
+                        <AppIcon Name="x" />
+                    </button>
+                }
+            </header>
+
+            <div class="modal-body">
+                @ChildContent
+            </div>
+
+            @if (FooterContent is not null)
+            {
+                <footer class="modal-footer">
+                    @FooterContent
+                </footer>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    private readonly string _titleId = $"dialog-title-{Guid.NewGuid():N}";
+    private ElementReference _dialogElement;
+    private bool _wasOpen;
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public bool IsOpen { get; set; }
+
+    [Parameter]
+    public bool ShowCloseButton { get; set; } = true;
+
+    [Parameter]
+    public bool CloseOnBackdropClick { get; set; } = true;
+
+    [Parameter]
+    public bool CloseOnEscape { get; set; } = true;
+
+    [Parameter]
+    public bool IsBusy { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public RenderFragment? FooterContent { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (IsOpen && !_wasOpen)
+        {
+            await _dialogElement.FocusAsync();
+        }
+
+        _wasOpen = IsOpen;
+    }
+
+    private Task HandleBackdropClickAsync() =>
+        CloseOnBackdropClick && !IsBusy
+            ? CloseAsync()
+            : Task.CompletedTask;
+
+    private Task HandleKeyDownAsync(KeyboardEventArgs args) =>
+        CloseOnEscape && !IsBusy && string.Equals(args.Key, "Escape", StringComparison.Ordinal)
+            ? CloseAsync()
+            : Task.CompletedTask;
+
+    private Task CloseAsync() => OnClose.InvokeAsync();
+}

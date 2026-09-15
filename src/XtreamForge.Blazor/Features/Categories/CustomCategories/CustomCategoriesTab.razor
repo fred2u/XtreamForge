@@ -1,16 +1,31 @@
 @namespace XtreamForge.Blazor.Features.Categories.CustomCategories
+@using XtreamForge.Blazor.Components.Shared
 
 <section class="categories-tab-panel">
     <header class="categories-panel-header">
         <div>
             <h2>Global Custom Categories</h2>
-            <p class="category-meta">Custom categories are global per content type and keep their stable XtreamForge IDs.</p>
+            <p class="category-meta">Custom categories are shared across sources for the selected content type and keep stable XtreamForge IDs.</p>
         </div>
         @if (IsRefreshing)
         {
             <div class="categories-count">Refreshing…</div>
         }
     </header>
+
+    <div class="categories-toolbar-grid">
+        <label>
+            Content Type
+            <select value="@SelectedContentType.ToString()" @onchange="HandleContentTypeChangedAsync">
+                <option value="@AdminContentType.Vod">VOD</option>
+                <option value="@AdminContentType.Series">Series</option>
+            </select>
+        </label>
+
+        <div class="toolbar-actions">
+            <button type="button" @onclick="() => OnOpenCreate.InvokeAsync()">+ New category</button>
+        </div>
+    </div>
 
     @if (!string.IsNullOrWhiteSpace(Message) || !string.IsNullOrWhiteSpace(ErrorMessage))
     {
@@ -26,19 +41,6 @@
         </div>
     }
 
-    <div class="rule-editor-card">
-        <h3>Create custom category</h3>
-        <div class="custom-category-create-grid">
-            <label>
-                Name
-                <InputText @bind-Value="NewCustomCategory.DisplayName" maxlength="255" placeholder="Movies 4K" disabled="@IsCreating" />
-            </label>
-            <div class="rule-action-cell">
-                <button type="button" @onclick="() => OnCreate.InvokeAsync()" disabled="@IsCreating">@(IsCreating ? "Saving…" : "Create")</button>
-            </div>
-        </div>
-    </div>
-
     @if (Rows.Count == 0)
     {
         <div class="empty-state">
@@ -52,8 +54,7 @@
                 <thead>
                     <tr>
                         <th>Name</th>
-                        <th>XtreamForge ID</th>
-                        <th>Used by</th>
+                        <th>Used By</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -62,33 +63,59 @@
                     {
                         <tr @key="row.Summary.Id">
                             <td>
+                                <div class="category-name">@row.Summary.DisplayName</div>
+                                <div class="category-meta">XtreamForge ID @row.Summary.XtreamForgeCategoryId</div>
                                 @if (row.IsEditing)
                                 {
-                                    <InputText @bind-Value="row.DisplayName" maxlength="255" disabled="@row.IsBusy" />
+                                    <div class="inline-editor-box">
+                                        <label>
+                                            Name
+                                            <InputText @bind-Value="row.DisplayName" maxlength="255" disabled="@row.IsBusy" />
+                                        </label>
+                                        <div class="inline-editor-actions">
+                                            <button type="button" @onclick="() => OnSave.InvokeAsync(row)" disabled="@row.IsBusy">@(row.IsBusy ? "Saving…" : "Save")</button>
+                                            <button type="button" class="secondary-button" @onclick="() => OnCancelEdit.InvokeAsync(row)" disabled="@row.IsBusy">Cancel</button>
+                                        </div>
+                                    </div>
+                                }
+                            </td>
+                            <td>
+                                @if (row.UsageCount > 0)
+                                {
+                                    <div class="usage-cell">
+                                        <button type="button" class="link-button" @onclick="() => OnOpenUsages.InvokeAsync(row)">
+                                            @row.UsageCount source categor@(row.UsageCount == 1 ? "y" : "ies")
+                                        </button>
+                                        <button type="button" class="icon-button" title="View source category usage" aria-label="View source category usage" @onclick="() => OnOpenUsages.InvokeAsync(row)">
+                                            <AppIcon Name="details" />
+                                        </button>
+                                    </div>
                                 }
                                 else
                                 {
-                                    <span>@row.DisplayName</span>
+                                    <span class="category-meta">Unused</span>
                                 }
                             </td>
-                            <td>@row.Summary.XtreamForgeCategoryId</td>
-                            <td>@row.Summary.UsageCount source categor@(row.Summary.UsageCount == 1 ? "y" : "ies")</td>
                             <td>
-                                <div class="inline-editor-actions">
-                                    @if (row.IsEditing)
+                                <div class="row-actions">
+                                    @if (!row.IsEditing)
                                     {
-                                        <button type="button" @onclick="() => OnSave.InvokeAsync(row)" disabled="@row.IsBusy">@(row.IsBusy ? "Saving…" : "Save")</button>
-                                        <button type="button" class="secondary-button" @onclick="() => OnCancelEdit.InvokeAsync(row)" disabled="@row.IsBusy">Cancel</button>
+                                        <button type="button" class="icon-button" title="Edit custom category" aria-label="Edit custom category" @onclick="() => OnBeginEdit.InvokeAsync(row)" disabled="@row.IsBusy">
+                                            <AppIcon Name="edit" />
+                                        </button>
                                     }
-                                    else
-                                    {
-                                        <button type="button" class="secondary-button" @onclick="() => OnBeginEdit.InvokeAsync(row)" disabled="@row.IsBusy">Edit</button>
-                                    }
-                                    <button type="button" class="danger-button" @onclick="() => OnDelete.InvokeAsync(row)" disabled="@(row.IsBusy || row.Summary.UsageCount > 0)">Delete</button>
+                                    <button type="button"
+                                            class="icon-button danger-button"
+                                            title="@(row.UsageCount > 0 ? "Delete unavailable while category is in use" : "Delete custom category")"
+                                            aria-label="Delete custom category"
+                                            @onclick="() => OnRequestDelete.InvokeAsync(row)"
+                                            disabled="@(row.IsBusy || row.UsageCount > 0)">
+                                        <AppIcon Name="trash" />
+                                    </button>
                                 </div>
-                                @if (row.Summary.UsageCount > 0)
+                                @if (row.UsageCount > 0)
                                 {
-                                    <div class="category-meta">Delete is available only when unused.</div>
+                                    <div class="category-meta">Delete is available only when unused. Inspect Used By for details.</div>
                                 }
                                 @if (!string.IsNullOrWhiteSpace(row.Message))
                                 {
@@ -105,13 +132,10 @@
 
 @code {
     [Parameter]
+    public AdminContentType SelectedContentType { get; set; }
+
+    [Parameter]
     public required IReadOnlyList<CustomCategoryRowState> Rows { get; set; }
-
-    [Parameter]
-    public required CustomCategoryEditorState NewCustomCategory { get; set; }
-
-    [Parameter]
-    public bool IsCreating { get; set; }
 
     [Parameter]
     public bool IsRefreshing { get; set; }
@@ -123,7 +147,10 @@
     public string? ErrorMessage { get; set; }
 
     [Parameter]
-    public EventCallback OnCreate { get; set; }
+    public EventCallback OnOpenCreate { get; set; }
+
+    [Parameter]
+    public EventCallback<AdminContentType> OnContentTypeChanged { get; set; }
 
     [Parameter]
     public EventCallback<CustomCategoryRowState> OnBeginEdit { get; set; }
@@ -135,5 +162,13 @@
     public EventCallback<CustomCategoryRowState> OnSave { get; set; }
 
     [Parameter]
-    public EventCallback<CustomCategoryRowState> OnDelete { get; set; }
+    public EventCallback<CustomCategoryRowState> OnOpenUsages { get; set; }
+
+    [Parameter]
+    public EventCallback<CustomCategoryRowState> OnRequestDelete { get; set; }
+
+    private Task HandleContentTypeChangedAsync(ChangeEventArgs args) =>
+        Enum.TryParse<AdminContentType>(args.Value?.ToString(), true, out var value)
+            ? OnContentTypeChanged.InvokeAsync(value)
+            : Task.CompletedTask;
 }

@@ -105,8 +105,8 @@ else
                     TotalCount="_categoryRows.Count"
                     CustomCategories="_customCategoryRows"
                     IsRefreshing="_isCategoryDataRefreshing"
-                    Message="_categoryMessage"
-                    ErrorMessage="_categoryErrorMessage"
+                    Message="@_categoryMessage"
+                    ErrorMessage="@_categoryErrorMessage"
                     OnMappingChanged="OnMappingSelectionChangedAsync"
                     OnCreateCustomCategory="CreateCustomCategoryAsync"
                     OnCancelCustomCategory="CancelCustomCategoryCreate"
@@ -123,8 +123,8 @@ else
                     IsRefreshing="_isRulesRefreshing"
                     SelectedSourceId="_selectedSourceId"
                     HighlightedRuleId="_highlightedRuleId"
-                    Message="_ruleMessage"
-                    ErrorMessage="_ruleErrorMessage"
+                    Message="@_ruleMessage"
+                    ErrorMessage="@_ruleErrorMessage"
                     OnCreate="CreateRuleAsync"
                     OnRunTester="RunRuleTesterAsync"
                     OnBeginEdit="BeginRuleEdit"
@@ -141,8 +141,8 @@ else
                     NewCustomCategory="_newCustomCategory"
                     IsCreating="_isCustomCategoryCreating"
                     IsRefreshing="_isCategoryDataRefreshing"
-                    Message="CustomCategoryMessage"
-                    ErrorMessage="_customCategoryErrorMessage"
+                    Message="@CustomCategoryMessage"
+                    ErrorMessage="@_customCategoryErrorMessage"
                     OnCreate="CreateStandaloneCustomCategoryAsync"
                     OnBeginEdit="BeginCustomCategoryEdit"
                     OnCancelEdit="CancelCustomCategoryEdit"
@@ -223,13 +223,11 @@ else
 
     private async Task RefreshAllDataCoreAsync()
     {
-        var categoriesTask = CategoriesClient.GetCategoriesAsync(_selectedSourceId, _selectedContentType);
-        var rulesTask = CategoriesClient.GetRulesAsync(_selectedSourceId, _selectedContentType);
+        var categoriesPayload = await CategoriesClient.GetCategoriesAsync(_selectedSourceId, _selectedContentType);
+        ApplyCategoryView(categoriesPayload);
 
-        await Task.WhenAll(categoriesTask, rulesTask);
-
-        ApplyCategoryView(await categoriesTask);
-        ApplyRulesView(await rulesTask);
+        var rulesPayload = await CategoriesClient.GetRulesAsync(_selectedSourceId, _selectedContentType);
+        ApplyRulesView(rulesPayload);
     }
 
     private async Task RefreshCategoriesViewAsync(int? markSavedCategoryId = null, string? message = null)

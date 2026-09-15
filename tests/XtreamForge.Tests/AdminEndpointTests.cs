@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using XtreamForge.Admin;
 using XtreamForge.Categories;
@@ -225,9 +226,9 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Single(handler.Requests);
-        Assert.NotNull(handler.Requests[0].RequestUri);
-        Assert.Equal("/player_api.php", handler.Requests[0].RequestUri!.AbsolutePath);
-        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(handler.Requests[0].RequestUri.Query);
+        var requestUri = Assert.IsType<Uri>(handler.Requests[0].RequestUri);
+        Assert.Equal("/player_api.php", requestUri.AbsolutePath);
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(requestUri.Query);
         Assert.Equal("user", query["username"]);
         Assert.Equal("pass", query["password"]);
         Assert.Equal("get_vod_categories", query["action"]);

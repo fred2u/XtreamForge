@@ -84,7 +84,7 @@
                                     {
                                         <button type="button" class="secondary-button" @onclick="() => OnBeginEdit.InvokeAsync(row)" disabled="@row.IsBusy">Edit</button>
                                     }
-                                    <button type="button" class="danger-button" @onclick="() => OnDelete.InvokeAsync(row)" disabled="@row.IsBusy || row.Summary.UsageCount > 0">Delete</button>
+                                    <button type="button" class="danger-button" @onclick="() => OnDelete.InvokeAsync(row)" disabled="@(row.IsBusy || row.Summary.UsageCount > 0)">Delete</button>
                                 </div>
                                 @if (row.Summary.UsageCount > 0)
                                 {

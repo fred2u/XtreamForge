@@ -1,8 +1,11 @@
 @using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
 
 @if (IsOpen)
 {
     <div class="modal-backdrop" tabindex="-1" @onclick="HandleBackdropClickAsync" @onkeydown="HandleKeyDownAsync">
+        <span class="sr-only" tabindex="0" @onfocus="@(() => FocusLastAsync())">Dialog focus guard</span>
         <section
             class="modal-dialog"
             role="dialog"
@@ -31,6 +34,7 @@
                 </footer>
             }
         </section>
+        <span class="sr-only" tabindex="0" @onfocus="@(() => FocusFirstAsync())">Dialog focus guard</span>
     </div>
 }
 
@@ -70,7 +74,7 @@
         if (_shouldFocus && IsOpen)
         {
             _shouldFocus = false;
-            await _dialogElement.FocusAsync();
+            await FocusFirstAsync();
         }
     }
 
@@ -83,4 +87,8 @@
         args.Key == "Escape"
             ? OnClose.InvokeAsync()
             : Task.CompletedTask;
+
+    private ValueTask FocusFirstAsync() => JSRuntime.InvokeVoidAsync("xtreamForgeDialog.focusFirst", _dialogElement);
+
+    private ValueTask FocusLastAsync() => JSRuntime.InvokeVoidAsync("xtreamForgeDialog.focusLast", _dialogElement);
 }

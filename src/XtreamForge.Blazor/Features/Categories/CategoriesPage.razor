@@ -984,10 +984,7 @@ else
 
     private Task CloseAddSourceDialog()
     {
-        _isAddSourceDialogOpen = false;
-        _isSourceDiscoverySaving = false;
-        _sourceDiscoveryErrorMessage = null;
-        _sourceDiscoveryForm = SourceDiscoveryFormState.CreateDefault();
+        ResetAddSourceDialogState();
         return Task.CompletedTask;
     }
 
@@ -1000,6 +997,9 @@ else
 
     private async Task DiscoverSourceAsync()
     {
+        var didSucceed = false;
+        string? successMessage = null;
+
         try
         {
             _isSourceDiscoverySaving = true;
@@ -1014,9 +1014,9 @@ else
             _selectedSourceId = result.SourceId;
             _activeTab = CategoriesTab.SourceCategories;
             UpdateLocation();
-            await CloseAddSourceDialog();
             await ReloadAsync();
-            _categoryMessage = $"Source imported. {result.VodCategoryCount} VOD and {result.SeriesCategoryCount} Series categories synchronized.";
+            successMessage = $"Source imported. {result.VodCategoryCount} VOD and {result.SeriesCategoryCount} Series categories synchronized.";
+            didSucceed = true;
         }
         catch (Exception exception)
         {
@@ -1025,6 +1025,11 @@ else
         finally
         {
             _isSourceDiscoverySaving = false;
+            if (didSucceed)
+            {
+                ResetAddSourceDialogState();
+                _categoryMessage = successMessage;
+            }
         }
     }
 
@@ -1048,5 +1053,12 @@ else
         {
             Port = Protocol == "http" ? 80 : 443;
         }
+    }
+
+    private void ResetAddSourceDialogState()
+    {
+        _isAddSourceDialogOpen = false;
+        _sourceDiscoveryErrorMessage = null;
+        _sourceDiscoveryForm = SourceDiscoveryFormState.CreateDefault();
     }
 }

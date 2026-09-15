@@ -1,5 +1,6 @@
 using XtreamForge.Admin;
 using Microsoft.EntityFrameworkCore;
+using System.Net;
 using XtreamForge.Categories;
 using XtreamForge.Configuration;
 using XtreamForge.Data;
@@ -43,10 +44,20 @@ builder.Services.AddScoped(static serviceProvider =>
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<XtreamForgeDbContext>(name: "database");
 
-builder.Services.AddHttpClient(ForwarderService.HttpClientName);
 builder.Services.AddSingleton<CategoryRuleEvaluator>();
 builder.Services.AddScoped<CategoryRuleService>();
 builder.Services.AddScoped<XtreamCategoryMappingService>();
+builder.Services.AddSingleton(_ =>
+{
+    var handler = new SocketsHttpHandler
+    {
+        AllowAutoRedirect = false,
+        AutomaticDecompression = DecompressionMethods.None,
+        UseCookies = false
+    };
+
+    return new XtreamUpstreamClient(new HttpClient(handler));
+});
 builder.Services.AddScoped<ForwarderService>();
 builder.Services.AddScoped<XtreamCategoryProxyService>();
 builder.Services.AddScoped<XtreamContentProxyService>();

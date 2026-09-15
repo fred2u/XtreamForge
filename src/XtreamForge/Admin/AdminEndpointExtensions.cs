@@ -159,7 +159,7 @@ public static class AdminEndpointExtensions
         AdminCategoryRefreshRequest request,
         IDbContextFactory<XtreamForgeDbContext> dbContextFactory,
         IOptions<XtreamOptions> xtreamOptions,
-        IHttpClientFactory httpClientFactory,
+        XtreamUpstreamClient upstreamClient,
         XtreamCategoryMappingService categoryMappingService,
         CancellationToken cancellationToken)
     {
@@ -178,8 +178,10 @@ public static class AdminEndpointExtensions
             EnsureConfiguredSourceMatchesSelection(configuredBaseUri, source);
 
             var requestUri = BuildXtreamCategoryRefreshUri(configuredBaseUri, xtreamOptions.Value, selectedContentType);
-            var httpClient = httpClientFactory.CreateClient(ForwarderService.HttpClientName);
-            var upstreamCategories = await httpClient.GetFromJsonAsync<List<XtreamUpstreamCategoryDto>>(requestUri, cancellationToken) ?? [];
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Get, requestUri);
+            using var responseMessage = await upstreamClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            responseMessage.EnsureSuccessStatusCode();
+            var upstreamCategories = await responseMessage.Content.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(cancellationToken: cancellationToken) ?? [];
 
             await categoryMappingService.SyncCategoriesAsync(
                 new XtreamSourceDescriptor(source.Protocol, source.Host, source.Port),

@@ -46,8 +46,8 @@ internal static class XtreamForgeApiFactoryExtensions
         {
             builder.ConfigureTestServices(services =>
             {
-                services.AddHttpClient(ForwarderService.HttpClientName)
-                    .ConfigurePrimaryHttpMessageHandler(() => handler);
+                services.RemoveAll<XtreamUpstreamClient>();
+                services.AddSingleton(new XtreamUpstreamClient(new HttpClient(handler, disposeHandler: false)));
 
                 if (failIfDatabaseAccessed)
                 {

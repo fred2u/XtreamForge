@@ -6,7 +6,7 @@ using XtreamForge.Categories;
 namespace XtreamForge.Xtream;
 
 public sealed class XtreamCategoryProxyService(
-    IHttpClientFactory httpClientFactory,
+    XtreamUpstreamClient upstreamClient,
     XtreamCategoryMappingService categoryMappingService,
     ILogger<XtreamCategoryProxyService> logger)
 {
@@ -23,9 +23,7 @@ public sealed class XtreamCategoryProxyService(
         try
         {
             using var requestMessage = XtreamProxyHttpRequestFactory.Create(destination.TargetUri, context.Request);
-            var httpClient = httpClientFactory.CreateClient(ForwarderService.HttpClientName);
-
-            using var responseMessage = await httpClient.SendAsync(
+            using var responseMessage = await upstreamClient.SendAsync(
                 requestMessage,
                 HttpCompletionOption.ResponseHeadersRead,
                 context.RequestAborted);

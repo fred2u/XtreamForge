@@ -99,7 +99,7 @@ public sealed class XtreamUpstreamDestinationResolver(IOptions<XtreamProxyOption
             }
 
             var addresses = Dns.GetHostAddresses(host);
-            return addresses.Length > 0 && addresses.All(IsPubliclyRoutableAddress);
+            return addresses.Any(IsPubliclyRoutableAddress);
         }
         catch
         {

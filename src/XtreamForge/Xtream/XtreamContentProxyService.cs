@@ -8,7 +8,7 @@ using XtreamForge.Categories;
 namespace XtreamForge.Xtream;
 
 public sealed class XtreamContentProxyService(
-    IHttpClientFactory httpClientFactory,
+    XtreamUpstreamClient upstreamClient,
     XtreamCategoryMappingService categoryMappingService,
     ILogger<XtreamContentProxyService> logger)
 {
@@ -45,8 +45,7 @@ public sealed class XtreamContentProxyService(
             foreach (var targetUri in GetStreamTargetUris(destination.TargetUri, context.Request.Query, categoryContext, categoryRequest))
             {
                 using var requestMessage = XtreamProxyHttpRequestFactory.Create(targetUri, context.Request);
-                var httpClient = httpClientFactory.CreateClient(ForwarderService.HttpClientName);
-                using var responseMessage = await httpClient.SendAsync(
+                using var responseMessage = await upstreamClient.SendAsync(
                     requestMessage,
                     HttpCompletionOption.ResponseHeadersRead,
                     context.RequestAborted);
@@ -96,8 +95,7 @@ public sealed class XtreamContentProxyService(
             var categoryContext = await RefreshCategoryContextAsync(destination, classification.ContentType!.Value, context, context.RequestAborted);
 
             using var requestMessage = XtreamProxyHttpRequestFactory.Create(destination.TargetUri, context.Request);
-            var httpClient = httpClientFactory.CreateClient(ForwarderService.HttpClientName);
-            using var responseMessage = await httpClient.SendAsync(
+            using var responseMessage = await upstreamClient.SendAsync(
                 requestMessage,
                 HttpCompletionOption.ResponseHeadersRead,
                 context.RequestAborted);
@@ -155,8 +153,7 @@ public sealed class XtreamContentProxyService(
             var categoryTargetUri = BuildTargetUri(destination.TargetUri, context.Request.Query, ("action", categoryAction), ["category_id", "vod_id", "series_id"]);
 
             using var requestMessage = XtreamProxyHttpRequestFactory.Create(categoryTargetUri, context.Request);
-            var httpClient = httpClientFactory.CreateClient(ForwarderService.HttpClientName);
-            using var responseMessage = await httpClient.SendAsync(
+            using var responseMessage = await upstreamClient.SendAsync(
                 requestMessage,
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);

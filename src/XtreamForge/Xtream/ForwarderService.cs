@@ -3,11 +3,9 @@ using System.Net;
 namespace XtreamForge.Xtream;
 
 public sealed class ForwarderService(
-    IHttpClientFactory httpClientFactory,
+    XtreamUpstreamClient upstreamClient,
     ILogger<ForwarderService> logger)
 {
-    public const string HttpClientName = "XtreamForwarder";
-
     internal static readonly HashSet<string> HopByHopHeaders = new(StringComparer.OrdinalIgnoreCase)
     {
         Microsoft.Net.Http.Headers.HeaderNames.Connection,
@@ -29,9 +27,7 @@ public sealed class ForwarderService(
         try
         {
             using var requestMessage = XtreamProxyHttpRequestFactory.Create(destination.TargetUri, context.Request);
-            var httpClient = httpClientFactory.CreateClient(HttpClientName);
-
-            using var responseMessage = await httpClient.SendAsync(
+            using var responseMessage = await upstreamClient.SendAsync(
                 requestMessage,
                 HttpCompletionOption.ResponseHeadersRead,
                 context.RequestAborted);

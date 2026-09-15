@@ -14,6 +14,8 @@ public sealed class XtreamSourceDiscoveryService(
     XtreamCategoryMappingService categoryMappingService,
     IDbContextFactory<XtreamForgeDbContext> dbContextFactory)
 {
+    private readonly XtreamUpstreamClient _upstreamClient = upstreamClient;
+
     public async Task<XtreamSourceDiscoveryResult> DiscoverAsync(
         XtreamSourceDiscoveryRequest request,
         CancellationToken cancellationToken = default)
@@ -83,7 +85,7 @@ public sealed class XtreamSourceDiscoveryService(
             throw new InvalidOperationException("Protocol must match the host or base URL.");
         }
 
-        var embeddedPort = parsedUri.IsDefaultPort ? null : parsedUri.Port;
+        int? embeddedPort = parsedUri.IsDefaultPort ? null : parsedUri.Port;
         if (request.Port is int requestedPort && embeddedPort is int uriPort && requestedPort != uriPort)
         {
             throw new InvalidOperationException("Port must match the host or base URL.");
@@ -110,7 +112,7 @@ public sealed class XtreamSourceDiscoveryService(
         return new XtreamValidatedSourceDestination(protocol, parsedUri.Host.ToLowerInvariant(), port, rest, resolution.Destination.TargetUri);
     }
 
-    private static async Task<IReadOnlyList<DiscoveredCategory>> FetchCategoriesAsync(
+    private async Task<IReadOnlyList<DiscoveredCategory>> FetchCategoriesAsync(
         XtreamValidatedSourceDestination destination,
         string username,
         string password,
@@ -118,7 +120,7 @@ public sealed class XtreamSourceDiscoveryService(
         CancellationToken cancellationToken)
     {
         using var requestMessage = new HttpRequestMessage(HttpMethod.Get, BuildCategoryRequestUri(destination.TargetUri, username, password, action));
-        using var responseMessage = await upstreamClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        using var responseMessage = await _upstreamClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         responseMessage.EnsureSuccessStatusCode();
 
         var payload = await responseMessage.Content.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(cancellationToken: cancellationToken) ?? [];
@@ -140,12 +142,20 @@ public sealed class XtreamSourceDiscoveryService(
 
     private static bool TryParseInputUri(string protocol, string input, out Uri parsedUri)
     {
-        if (Uri.TryCreate(input, UriKind.Absolute, out parsedUri))
+        if (Uri.TryCreate(input, UriKind.Absolute, out var explicitUri))
         {
+            parsedUri = explicitUri;
             return parsedUri.Scheme is "http" or "https";
         }
 
-        return Uri.TryCreate($"{protocol}://{input.TrimStart('/')}", UriKind.Absolute, out parsedUri);
+        if (Uri.TryCreate($"{protocol}://{input.TrimStart('/')}", UriKind.Absolute, out var implicitUri))
+        {
+            parsedUri = implicitUri;
+            return true;
+        }
+
+        parsedUri = null!;
+        return false;
     }
 
     private static string BuildPlayerApiRest(string path)

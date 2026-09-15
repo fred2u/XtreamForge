@@ -16,10 +16,10 @@
     <div class="categories-toolbar-grid">
         <label>
             Content Type
-            <InputSelect Value="SelectedContentType" ValueChanged="OnSelectedContentTypeChangedAsync">
+            <select value="@SelectedContentType.ToString()" @onchange="HandleContentTypeChangedAsync">
                 <option value="@AdminContentType.Vod">VOD</option>
                 <option value="@AdminContentType.Series">Series</option>
-            </InputSelect>
+            </select>
         </label>
 
         <div class="toolbar-actions">
@@ -197,5 +197,8 @@
     [Parameter]
     public EventCallback<CustomCategoryRowState> OnRequestDelete { get; set; }
 
-    private Task OnSelectedContentTypeChangedAsync(AdminContentType value) => OnContentTypeChanged.InvokeAsync(value);
+    private Task HandleContentTypeChangedAsync(ChangeEventArgs args) =>
+        Enum.TryParse<AdminContentType>(args.Value?.ToString(), true, out var value)
+            ? OnContentTypeChanged.InvokeAsync(value)
+            : Task.CompletedTask;
 }

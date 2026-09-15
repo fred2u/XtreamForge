@@ -514,6 +514,7 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);
+        Assert.Single(handler.Requests);
         Assert.Collection(
             payload,
             first =>
@@ -539,6 +540,36 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.Equal(2, upstreamCategories.Count);
         Assert.Equal(2, outputCategories.Count);
         Assert.All(upstreamCategories, category => Assert.False(category.IsExcluded));
+    }
+
+    [Fact]
+    public async Task CategoryDiscovery_FromClientRequest_DoesNotPersistCredentials_AndDoesNotRefetchCategories()
+    {
+        var handler = CreateJsonHandler("[{\"category_id\":\"42\",\"category_name\":\"Alpha\"}]");
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
+
+        using var factory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(factory);
+        using var scopedFactory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(handler);
+        using var client = scopedFactory.CreateClient();
+
+        var response = await client.GetAsync("/https/example.com/443/player_api.php?action=get_vod_categories&username=test-user&******");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Single(handler.Requests);
+
+        await using var scope = scopedFactory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var source = await dbContext.XtreamSources.SingleAsync();
+        var category = await dbContext.UpstreamCategories.SingleAsync();
+
+        Assert.Equal("https", source.Protocol);
+        Assert.Equal("example.com", source.Host);
+        Assert.Equal(443, source.Port);
+        Assert.DoesNotContain("test-user", source.Protocol, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("test-user", source.Host, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("test-password", category.UpstreamCategoryName, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("test-password", category.UpstreamCategoryId, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

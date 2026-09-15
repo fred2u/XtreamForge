@@ -121,8 +121,10 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
         var updateResponse = await client.PutAsJsonAsync($"/api/admin/category-rules/{firstRuleId}", new AdminCategoryRuleRequest(sourceId, "Vod", "Exclude", "Contains", "SPORT HD", true, false));
         Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
 
-        var moveResponse = await client.PostAsync($"/api/admin/category-rules/{firstRuleId}/move-down?sourceId={sourceId}&contentType=Vod", null);
-        Assert.Equal(HttpStatusCode.OK, moveResponse.StatusCode);
+        var reorderResponse = await client.PutAsJsonAsync(
+            "/api/admin/category-rules/order",
+            new AdminCategoryRuleOrderRequest(sourceId, "Vod", [secondRuleId, firstRuleId]));
+        Assert.Equal(HttpStatusCode.OK, reorderResponse.StatusCode);
 
         var movedRules = await client.GetFromJsonAsync<AdminCategoryRulesResponse>($"/api/admin/category-rules?sourceId={sourceId}&contentType=Vod");
         Assert.NotNull(movedRules);
@@ -194,49 +196,153 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
     }
 
     [Fact]
-    public async Task RefreshCategoriesEndpoint_ReusesConfiguredXtreamSourceAndPersistsDiscoveredCategories()
+    public async Task DiscoverSourceEndpoint_ImportsVodAndSeriesCategories_WithoutPersistingCredentials()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-admin-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        var handler = new FakeForwarderHandler((request, _) => Task.FromResult(FakeForwarderHandler.CreateJsonResponse(
+            HttpStatusCode.OK,
+            ParseQuery(request.RequestUri, "action") switch
+            {
+                "get_vod_categories" => """[{"category_id":"10","category_name":"Movies A"}]""",
+                "get_series_categories" => """[{"category_id":"20","category_name":"Series A"}]""",
+                _ => "[]"
+            })));
+
+        using var factory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(handler);
+
+        using var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/admin/sources/discover", new AdminSourceDiscoveryRequest("https", "example.com", null, "user", "pass"));
+        var payload = await response.Content.ReadFromJsonAsync<AdminSourceDiscoveryResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Equal(1, payload.SourceId);
+        Assert.Equal(1, payload.VodCategoryCount);
+        Assert.Equal(1, payload.SeriesCategoryCount);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.All(handler.Requests, request =>
+        {
+            var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Assert.IsType<Uri>(request.RequestUri).Query);
+            Assert.Equal("user", query["username"]);
+            Assert.Equal("pass", query["password"]);
+        });
+        Assert.Equal("get_vod_categories", ParseQuery(handler.Requests[0].RequestUri, "action"));
+        Assert.Equal("get_series_categories", ParseQuery(handler.Requests[1].RequestUri, "action"));
+
+        await using var scope = setupFactory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var source = await dbContext.XtreamSources.SingleAsync();
+        var upstreamCategories = await dbContext.UpstreamCategories.OrderBy(category => category.ContentType).ThenBy(category => category.UpstreamCategoryId).ToListAsync();
+
+        Assert.Equal("https", source.Protocol);
+        Assert.Equal("example.com", source.Host);
+        Assert.Equal(443, source.Port);
+        Assert.Collection(
+            upstreamCategories,
+            first => Assert.Equal((ContentType.Series, "20", "Series A"), (first.ContentType, first.UpstreamCategoryId, first.UpstreamCategoryName)),
+            second => Assert.Equal((ContentType.Vod, "10", "Movies A"), (second.ContentType, second.UpstreamCategoryId, second.UpstreamCategoryName)));
+        Assert.DoesNotContain("user", source.Protocol, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("user", source.Host, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("pass", source.Protocol, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("pass", source.Host, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(upstreamCategories.SelectMany(category => new[] { category.UpstreamCategoryId, category.UpstreamCategoryName }), value => value.Contains("pass", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task DiscoverSourceEndpoint_ReusesExistingSourceAndPreservesMappings()
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-admin-tests-{Guid.NewGuid():N}.db");
         using var setupFactory = _factory.WithSqliteDatabase(databasePath);
         await EnsureDatabaseCreatedAsync(setupFactory);
 
         var sourceId = await SeedSingleSourceAsync(setupFactory);
-        var handler = new FakeForwarderHandler((_, _) => Task.FromResult(FakeForwarderHandler.CreateJsonResponse(
+        var upstreamCategoryId = await GetUpstreamCategoryRecordIdAsync(setupFactory, "10");
+        await using (var scope = setupFactory.Services.CreateAsyncScope())
+        {
+            var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(upstreamCategoryId, sourceId, ContentType.Vod, CategoryMappingSelection.Custom, null, "Movies Shared"));
+        }
+
+        var handler = new FakeForwarderHandler((request, _) => Task.FromResult(FakeForwarderHandler.CreateJsonResponse(
             HttpStatusCode.OK,
-            """[{"category_id":"10","category_name":"Movies A"},{"category_id":"20","category_name":"Movies B"}]""")));
-
-        using var factory = _factory
-            .WithSqliteDatabase(databasePath)
-            .WithForwarderHandler(handler)
-            .WithWebHostBuilder(builder =>
+            ParseQuery(request.RequestUri, "action") switch
             {
-                builder.ConfigureAppConfiguration((_, configurationBuilder) =>
-                {
-                    configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
-                    {
-                        ["Xtream:BaseUrl"] = "https://example.com",
-                        ["Xtream:Username"] = "user",
-                        ["Xtream:Password"] = "pass"
-                    });
-                });
-            });
+                "get_vod_categories" => """[{"category_id":"10","category_name":"Movies A"},{"category_id":"20","category_name":"Movies B"}]""",
+                "get_series_categories" => """[]""",
+                _ => "[]"
+            })));
 
+        using var factory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(handler);
         using var client = factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/admin/categories/refresh", new AdminCategoryRefreshRequest(sourceId, "Vod"));
+        var response = await client.PostAsJsonAsync("/api/admin/sources/discover", new AdminSourceDiscoveryRequest("https", "https://example.com", null, "user", "pass"));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Single(handler.Requests);
-        var requestUri = Assert.IsType<Uri>(handler.Requests[0].RequestUri);
-        Assert.Equal("/player_api.php", requestUri.AbsolutePath);
-        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(requestUri.Query);
-        Assert.Equal("user", query["username"]);
-        Assert.Equal("pass", query["password"]);
-        Assert.Equal("get_vod_categories", query["action"]);
 
-        await using var scope = setupFactory.Services.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-        Assert.Equal(2, await dbContext.UpstreamCategories.CountAsync());
-        Assert.Contains(await dbContext.UpstreamCategories.Select(category => category.UpstreamCategoryName).ToListAsync(), name => name == "Movies B");
+        await using var verifyScope = setupFactory.Services.CreateAsyncScope();
+        var dbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        Assert.Equal(1, await dbContext.XtreamSources.CountAsync());
+        var categories = await dbContext.UpstreamCategories.OrderBy(category => category.UpstreamCategoryId).ToListAsync();
+        Assert.Equal(2, categories.Count(category => category.ContentType == ContentType.Vod));
+        Assert.Equal(1, await dbContext.CustomCategories.CountAsync());
+        Assert.Equal(await dbContext.CustomCategories.Select(category => category.Id).SingleAsync(), categories.Single(category => category.UpstreamCategoryId == "10" && category.ContentType == ContentType.Vod).CustomCategoryId);
+    }
+
+    [Fact]
+    public async Task DiscoverSourceEndpoint_RejectsInvalidInputWithoutLeakingPassword()
+    {
+        using var client = _factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/admin/sources/discover", new AdminSourceDiscoveryRequest("https", "not a valid host", 70000, "user", "top-secret"));
+        var payload = await response.Content.ReadFromJsonAsync<AdminErrorResponse>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.DoesNotContain("top-secret", payload.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CustomCategories_UsagesEndpoint_ReturnsMappedSourceCategoriesAcrossSources()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-admin-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        await using (var scope = setupFactory.Services.CreateAsyncScope())
+        {
+            var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+
+            await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "provider-a.com", 443), ContentType.Vod, [new DiscoveredCategory("10", "Movies A")]);
+            await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "provider-b.net", 443), ContentType.Vod, [new DiscoveredCategory("20", "Movies B")]);
+            await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "provider-a.com", 443), ContentType.Series, [new DiscoveredCategory("30", "Series A")]);
+
+            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+            var sourceACategory = await dbContext.UpstreamCategories.SingleAsync(category => category.UpstreamCategoryId == "10" && category.ContentType == ContentType.Vod);
+            var sourceBCategory = await dbContext.UpstreamCategories.SingleAsync(category => category.UpstreamCategoryId == "20" && category.ContentType == ContentType.Vod);
+            var seriesCategory = await dbContext.UpstreamCategories.SingleAsync(category => category.UpstreamCategoryId == "30" && category.ContentType == ContentType.Series);
+
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(sourceACategory.Id, sourceACategory.XtreamSourceId, ContentType.Vod, CategoryMappingSelection.Custom, null, "Movies Shared"));
+            var customCategoryId = await dbContext.CustomCategories.Where(category => category.ContentType == ContentType.Vod).Select(category => category.Id).SingleAsync();
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(sourceBCategory.Id, sourceBCategory.XtreamSourceId, ContentType.Vod, CategoryMappingSelection.Custom, customCategoryId, null));
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(seriesCategory.Id, seriesCategory.XtreamSourceId, ContentType.Series, CategoryMappingSelection.Custom, null, "Series Shared"));
+        }
+
+        await using var verifyScope = setupFactory.Services.CreateAsyncScope();
+        var verifyContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var targetCustomCategoryId = await verifyContext.CustomCategories.Where(category => category.ContentType == ContentType.Vod).Select(category => category.Id).SingleAsync();
+
+        using var factory = _factory.WithSqliteDatabase(databasePath);
+        using var client = factory.CreateClient();
+        var response = await client.GetAsync($"/api/admin/custom-categories/{targetCustomCategoryId}/usages?contentType=Vod");
+        var payload = await response.Content.ReadFromJsonAsync<List<AdminCustomCategoryUsageResponse>>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Collection(
+            payload.OrderBy(item => item.SourceHost).ThenBy(item => item.UpstreamCategoryId),
+            first => Assert.Equal(("provider-a.com", "Vod", "10"), (first.SourceHost, first.ContentType, first.UpstreamCategoryId)),
+            second => Assert.Equal(("provider-b.net", "Vod", "20"), (second.SourceHost, second.ContentType, second.UpstreamCategoryId)));
     }
 
     private static async Task EnsureDatabaseCreatedAsync(WebApplicationFactory<Program> factory)
@@ -293,5 +399,16 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
         await using var scope = factory.Services.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
         return await dbContext.UpstreamCategories.Where(category => category.UpstreamCategoryId == upstreamCategoryId).Select(category => category.Id).SingleAsync();
+    }
+
+    private static string? ParseQuery(Uri? requestUri, string key)
+    {
+        if (requestUri is null)
+        {
+            return null;
+        }
+
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(requestUri.Query);
+        return query.TryGetValue(key, out var values) ? values[0] : null;
     }
 }

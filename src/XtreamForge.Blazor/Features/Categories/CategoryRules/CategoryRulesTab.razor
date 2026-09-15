@@ -16,7 +16,7 @@
     <div class="categories-toolbar-grid">
         <label>
             Source
-            <InputSelect Value="SelectedSourceId" ValueChanged="OnSelectedSourceChangedAsync" disabled="@(Sources.Count == 0)">
+            <select value="@FormatNullableInt(SelectedSourceId)" @onchange="HandleSourceChangedAsync" disabled="@(Sources.Count == 0)">
                 @if (Sources.Count == 0)
                 {
                     <option value="">No sources</option>
@@ -28,15 +28,15 @@
                         <option value="@source.Id">@source.DisplayName</option>
                     }
                 }
-            </InputSelect>
+            </select>
         </label>
 
         <label>
             Content Type
-            <InputSelect Value="SelectedContentType" ValueChanged="OnSelectedContentTypeChangedAsync">
+            <select value="@SelectedContentType.ToString()" @onchange="HandleContentTypeChangedAsync">
                 <option value="@AdminContentType.Vod">VOD</option>
                 <option value="@AdminContentType.Series">Series</option>
-            </InputSelect>
+            </select>
         </label>
 
         <div class="toolbar-actions">
@@ -371,7 +371,16 @@
 
     private bool HasSelectedSource => SelectedSourceId is not null;
 
-    private Task OnSelectedSourceChangedAsync(int? value) => OnSourceChanged.InvokeAsync(value);
+    private static string FormatNullableInt(int? value) => value?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
 
-    private Task OnSelectedContentTypeChangedAsync(AdminContentType value) => OnContentTypeChanged.InvokeAsync(value);
+    private Task HandleSourceChangedAsync(ChangeEventArgs args)
+    {
+        var value = args.Value?.ToString();
+        return OnSourceChanged.InvokeAsync(int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedValue) ? parsedValue : null);
+    }
+
+    private Task HandleContentTypeChangedAsync(ChangeEventArgs args) =>
+        Enum.TryParse<AdminContentType>(args.Value?.ToString(), true, out var value)
+            ? OnContentTypeChanged.InvokeAsync(value)
+            : Task.CompletedTask;
 }

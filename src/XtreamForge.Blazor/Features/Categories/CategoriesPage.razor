@@ -143,37 +143,38 @@ else
 }
 
 <ModalDialog IsOpen="@_isAddSourceDialogOpen" Title="Add Xtream source" OnClose="CloseAddSourceDialog">
-    <div class="dialog-form-grid">
-        <label>
-            Protocol
-            <InputSelect @bind-Value="_sourceDiscoveryForm.Protocol" @bind-Value:after="OnSourceDiscoveryProtocolChangedAsync" disabled="@_isSourceDiscoverySaving">
-                <option value="https">HTTPS</option>
-                <option value="http">HTTP</option>
-            </InputSelect>
-        </label>
-        <label>
-            Host / Base URL
-            <InputText @bind-Value="_sourceDiscoveryForm.HostOrBaseUrl" placeholder="example.com" disabled="@_isSourceDiscoverySaving" />
-        </label>
-        <label>
-            Port
-            <InputNumber @bind-Value="_sourceDiscoveryForm.Port" disabled="@_isSourceDiscoverySaving" />
-        </label>
-        <label>
-            Username
-            <InputText @bind-Value="_sourceDiscoveryForm.Username" disabled="@_isSourceDiscoverySaving" />
-        </label>
-        <label>
-            Password
-            <input class="blazor-password-input" type="password" @bind="_sourceDiscoveryForm.Password" disabled="@_isSourceDiscoverySaving" />
-        </label>
-    </div>
+    <ChildContent>
+        <div class="dialog-form-grid">
+            <label>
+                Protocol
+                <select value="@_sourceDiscoveryForm.Protocol" @onchange="HandleSourceDiscoveryProtocolChangedAsync" disabled="@_isSourceDiscoverySaving">
+                    <option value="https">HTTPS</option>
+                    <option value="http">HTTP</option>
+                </select>
+            </label>
+            <label>
+                Host / Base URL
+                <InputText @bind-Value="_sourceDiscoveryForm.HostOrBaseUrl" placeholder="example.com" disabled="@_isSourceDiscoverySaving" />
+            </label>
+            <label>
+                Port
+                <InputNumber @bind-Value="_sourceDiscoveryForm.Port" disabled="@_isSourceDiscoverySaving" />
+            </label>
+            <label>
+                Username
+                <InputText @bind-Value="_sourceDiscoveryForm.Username" disabled="@_isSourceDiscoverySaving" />
+            </label>
+            <label>
+                Password
+                <input class="blazor-password-input" type="password" @bind="_sourceDiscoveryForm.Password" disabled="@_isSourceDiscoverySaving" />
+            </label>
+        </div>
 
-    @if (!string.IsNullOrWhiteSpace(_sourceDiscoveryErrorMessage))
-    {
-        <div class="inline-error">@_sourceDiscoveryErrorMessage</div>
-    }
-
+        @if (!string.IsNullOrWhiteSpace(_sourceDiscoveryErrorMessage))
+        {
+            <div class="inline-error">@_sourceDiscoveryErrorMessage</div>
+        }
+    </ChildContent>
     <FooterContent>
         <button type="button" class="secondary-button" @onclick="CloseAddSourceDialog" disabled="@_isSourceDiscoverySaving">Cancel</button>
         <button type="button" @onclick="DiscoverSourceAsync" disabled="@_isSourceDiscoverySaving">@( _isSourceDiscoverySaving ? "Connecting…" : "Connect & import")</button>
@@ -181,15 +182,17 @@ else
 </ModalDialog>
 
 <ModalDialog IsOpen="@(_pendingRuleDelete is not null)" Title="Delete category rule?" OnClose="CloseRuleDeleteDialog">
-    @if (_pendingRuleDelete is not null)
-    {
-        <p>@FormatRuleSummary(_pendingRuleDelete)</p>
-        <p class="category-meta">This rule will no longer affect matching source categories.</p>
-    }
-    @if (!string.IsNullOrWhiteSpace(_ruleDeleteErrorMessage))
-    {
-        <div class="inline-error">@_ruleDeleteErrorMessage</div>
-    }
+    <ChildContent>
+        @if (_pendingRuleDelete is not null)
+        {
+            <p>@FormatRuleSummary(_pendingRuleDelete)</p>
+            <p class="category-meta">This rule will no longer affect matching source categories.</p>
+        }
+        @if (!string.IsNullOrWhiteSpace(_ruleDeleteErrorMessage))
+        {
+            <div class="inline-error">@_ruleDeleteErrorMessage</div>
+        }
+    </ChildContent>
     <FooterContent>
         <button type="button" class="secondary-button" @onclick="CloseRuleDeleteDialog" disabled="@_isRuleDeleteSaving">Cancel</button>
         <button type="button" class="danger-button" @onclick="DeletePendingRuleAsync" disabled="@_isRuleDeleteSaving">@( _isRuleDeleteSaving ? "Deleting…" : "Delete")</button>
@@ -197,57 +200,61 @@ else
 </ModalDialog>
 
 <ModalDialog IsOpen="@_isCustomCategoryUsageDialogOpen" Title="@(_customCategoryUsageTitle ?? "Custom category usage")" OnClose="CloseCustomCategoryUsagesDialog">
-    @if (_isCustomCategoryUsageLoading)
-    {
-        <p>Loading usage…</p>
-    }
-    else if (!string.IsNullOrWhiteSpace(_customCategoryUsageErrorMessage))
-    {
-        <div class="inline-error">@_customCategoryUsageErrorMessage</div>
-    }
-    else
-    {
-        <p class="category-meta">Used by @_customCategoryUsages.Count source categor@(_customCategoryUsages.Count == 1 ? "y" : "ies").</p>
-        <div class="table-scroll">
-            <table class="category-grid">
-                <thead>
-                    <tr>
-                        <th>Source</th>
-                        <th>Type</th>
-                        <th>Source Category</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var usage in _customCategoryUsages)
-                    {
+    <ChildContent>
+        @if (_isCustomCategoryUsageLoading)
+        {
+            <p>Loading usage…</p>
+        }
+        else if (!string.IsNullOrWhiteSpace(_customCategoryUsageErrorMessage))
+        {
+            <div class="inline-error">@_customCategoryUsageErrorMessage</div>
+        }
+        else
+        {
+            <p class="category-meta">Used by @_customCategoryUsages.Count source categor@(_customCategoryUsages.Count == 1 ? "y" : "ies").</p>
+            <div class="table-scroll">
+                <table class="category-grid">
+                    <thead>
                         <tr>
-                            <td>@usage.SourceDisplayName</td>
-                            <td>@usage.ContentType</td>
-                            <td>
-                                <div class="category-name">@usage.UpstreamCategoryName</div>
-                                <div class="category-meta">Upstream ID @usage.UpstreamCategoryId</div>
-                            </td>
+                            <th>Source</th>
+                            <th>Type</th>
+                            <th>Source Category</th>
                         </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    }
+                    </thead>
+                    <tbody>
+                        @foreach (var usage in _customCategoryUsages)
+                        {
+                            <tr>
+                                <td>@usage.SourceDisplayName</td>
+                                <td>@usage.ContentType</td>
+                                <td>
+                                    <div class="category-name">@usage.UpstreamCategoryName</div>
+                                    <div class="category-meta">Upstream ID @usage.UpstreamCategoryId</div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </ChildContent>
     <FooterContent>
         <button type="button" class="secondary-button" @onclick="CloseCustomCategoryUsagesDialog">Close</button>
     </FooterContent>
 </ModalDialog>
 
 <ModalDialog IsOpen="@(_pendingCustomCategoryDelete is not null)" Title="Delete custom category?" OnClose="CloseCustomCategoryDeleteDialog">
-    @if (_pendingCustomCategoryDelete is not null)
-    {
-        <p>@_pendingCustomCategoryDelete.DisplayName</p>
-        <p class="category-meta">This custom category is unused and can be removed.</p>
-    }
-    @if (!string.IsNullOrWhiteSpace(_customCategoryDeleteErrorMessage))
-    {
-        <div class="inline-error">@_customCategoryDeleteErrorMessage</div>
-    }
+    <ChildContent>
+        @if (_pendingCustomCategoryDelete is not null)
+        {
+            <p>@_pendingCustomCategoryDelete.DisplayName</p>
+            <p class="category-meta">This custom category is unused and can be removed.</p>
+        }
+        @if (!string.IsNullOrWhiteSpace(_customCategoryDeleteErrorMessage))
+        {
+            <div class="inline-error">@_customCategoryDeleteErrorMessage</div>
+        }
+    </ChildContent>
     <FooterContent>
         <button type="button" class="secondary-button" @onclick="CloseCustomCategoryDeleteDialog" disabled="@_isCustomCategoryDeleteSaving">Cancel</button>
         <button type="button" class="danger-button" @onclick="DeletePendingCustomCategoryAsync" disabled="@_isCustomCategoryDeleteSaving">@( _isCustomCategoryDeleteSaving ? "Deleting…" : "Delete")</button>
@@ -984,8 +991,9 @@ else
         return Task.CompletedTask;
     }
 
-    private Task OnSourceDiscoveryProtocolChangedAsync()
+    private Task HandleSourceDiscoveryProtocolChangedAsync(ChangeEventArgs args)
     {
+        _sourceDiscoveryForm.Protocol = args.Value?.ToString() ?? "https";
         _sourceDiscoveryForm.ApplyDefaultPortForProtocol();
         return Task.CompletedTask;
     }

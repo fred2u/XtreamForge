@@ -24,7 +24,7 @@ public sealed class CategoryRuleServiceTests
         var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
         var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
         await SeedVodCategoriesAsync(mappingService);
-        var sourceId = await GetSourceIdAsync(serviceProvider);
+        var sourceId = await GetSourceIdAsync(serviceProvider, "example.com");
 
         await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(
             null,
@@ -68,7 +68,7 @@ public sealed class CategoryRuleServiceTests
         var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
         var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
         await SeedVodCategoriesAsync(mappingService);
-        var sourceId = await GetSourceIdAsync(serviceProvider);
+        var sourceId = await GetSourceIdAsync(serviceProvider, "example.com");
 
         await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(
             null,
@@ -146,7 +146,7 @@ public sealed class CategoryRuleServiceTests
         var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
         var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
         await SeedVodCategoriesAsync(mappingService);
-        var sourceId = await GetSourceIdAsync(serviceProvider);
+        var sourceId = await GetSourceIdAsync(serviceProvider, "example.com");
 
         await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(
             null,
@@ -237,6 +237,73 @@ public sealed class CategoryRuleServiceTests
         Assert.Contains("not found", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task ReorderRulesAsync_PersistsNormalizedSequenceAndChangesFirstMatchOrder()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var serviceProvider = CreateServiceProvider(connection);
+        await EnsureCreatedAsync(serviceProvider);
+
+        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
+        await SeedVodCategoriesAsync(mappingService);
+        var sourceId = await GetSourceIdAsync(serviceProvider);
+
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Include, CategoryRuleOperator.Contains, "SPORT", false, true));
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
+
+        var originalRules = await GetRulesAsync(serviceProvider);
+        Assert.Equal(CategoryInclusionDecision.Include, (await ruleService.PreviewAsync(sourceId, ContentType.Vod, "|FR| SPORT"))!.Evaluation.Decision);
+
+        await ruleService.ReorderRulesAsync(new CategoryRuleOrderCommand(sourceId, ContentType.Vod, originalRules.OrderByDescending(rule => rule.Sequence).Select(rule => rule.Id).ToArray()));
+
+        var reorderedRules = await GetRulesAsync(serviceProvider);
+        Assert.Equal([10, 20], reorderedRules.Select(rule => rule.Sequence).ToArray());
+        Assert.Equal(CategoryRuleAction.Exclude, reorderedRules[0].Action);
+        Assert.Equal(CategoryInclusionDecision.Exclude, (await ruleService.PreviewAsync(sourceId, ContentType.Vod, "|FR| SPORT"))!.Evaluation.Decision);
+    }
+
+    [Fact]
+    public async Task ReorderRulesAsync_RejectsRulesFromDifferentScopes()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var serviceProvider = CreateServiceProvider(connection);
+        await EnsureCreatedAsync(serviceProvider);
+
+        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
+        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Vod, [new DiscoveredCategory("42", "SPORT")]);
+        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "other.example", 443), ContentType.Vod, [new DiscoveredCategory("50", "NEWS")]);
+
+        var sourceId = await GetSourceIdAsync(serviceProvider, "example.com");
+        var otherSourceId = await GetSourceIdAsync(serviceProvider, "other.example");
+
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Include, CategoryRuleOperator.Contains, "SPORT", false, true));
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "MOVIES", false, true));
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Series, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, otherSourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "NEWS", false, true));
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var targetRuleIds = await dbContext.CategoryRules
+            .Where(rule => rule.XtreamSourceId == sourceId && rule.ContentType == ContentType.Vod)
+            .OrderBy(rule => rule.Sequence)
+            .Select(rule => rule.Id)
+            .ToListAsync();
+        var wrongSourceRuleId = await dbContext.CategoryRules.Where(rule => rule.XtreamSourceId == otherSourceId && rule.ContentType == ContentType.Vod).Select(rule => rule.Id).SingleAsync();
+        var wrongTypeRuleId = await dbContext.CategoryRules.Where(rule => rule.XtreamSourceId == sourceId && rule.ContentType == ContentType.Series).Select(rule => rule.Id).SingleAsync();
+
+        var wrongSourceException = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ruleService.ReorderRulesAsync(new CategoryRuleOrderCommand(sourceId, ContentType.Vod, [targetRuleIds[0], wrongSourceRuleId])));
+        Assert.Contains("selected source or content type", wrongSourceException.Message, StringComparison.OrdinalIgnoreCase);
+
+        var wrongTypeException = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ruleService.ReorderRulesAsync(new CategoryRuleOrderCommand(sourceId, ContentType.Vod, [targetRuleIds[0], wrongTypeRuleId])));
+        Assert.Contains("selected source or content type", wrongTypeException.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ServiceProvider CreateServiceProvider(SqliteConnection connection)
     {
         var services = new ServiceCollection();
@@ -262,11 +329,17 @@ public sealed class CategoryRuleServiceTests
             [new DiscoveredCategory("42", "|FR| SPORT")]);
     }
 
-    private static async Task<int> GetSourceIdAsync(ServiceProvider serviceProvider)
+    private static async Task<int> GetSourceIdAsync(ServiceProvider serviceProvider, string? host = null)
     {
         await using var scope = serviceProvider.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-        return await dbContext.XtreamSources.Select(source => source.Id).SingleAsync();
+        var query = dbContext.XtreamSources.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(host))
+        {
+            query = query.Where(source => source.Host == host);
+        }
+
+        return await query.Select(source => source.Id).SingleAsync();
     }
 
     private static async Task<CategoryRule> GetRuleAsync(ServiceProvider serviceProvider)
@@ -274,5 +347,12 @@ public sealed class CategoryRuleServiceTests
         await using var scope = serviceProvider.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
         return await dbContext.CategoryRules.AsNoTracking().SingleAsync();
+    }
+
+    private static async Task<List<CategoryRule>> GetRulesAsync(ServiceProvider serviceProvider)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        return await dbContext.CategoryRules.AsNoTracking().OrderBy(rule => rule.Sequence).ToListAsync();
     }
 }

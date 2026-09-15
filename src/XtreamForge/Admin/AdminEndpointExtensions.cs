@@ -1,6 +1,11 @@
+using System.Net.Http.Json;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using XtreamForge.Categories;
+using XtreamForge.Configuration;
 using XtreamForge.Data;
+using XtreamForge.Xtream;
 
 namespace XtreamForge.Admin;
 
@@ -24,9 +29,17 @@ public static class AdminEndpointExtensions
             .WithName("UpdateAdminCategoryMapping")
             .WithSummary("Updates the effective mapping for one source category.");
 
+        adminGroup.MapPost("/categories/refresh", RefreshCategoriesAsync)
+            .WithName("RefreshAdminCategories")
+            .WithSummary("Refreshes upstream categories for the selected source and content type.");
+
         adminGroup.MapGet("/category-rules", GetCategoryRulesAsync)
             .WithName("GetAdminCategoryRules")
             .WithSummary("Gets category rules for the selected source and content type.");
+
+        adminGroup.MapGet("/category-rules/preview", PreviewCategoryRulesAsync)
+            .WithName("PreviewAdminCategoryRules")
+            .WithSummary("Previews the effective rule decision for a category name.");
 
         adminGroup.MapPost("/category-rules", CreateCategoryRuleAsync)
             .WithName("CreateAdminCategoryRule")
@@ -142,6 +155,52 @@ public static class AdminEndpointExtensions
         }
     }
 
+    private static async Task<IResult> RefreshCategoriesAsync(
+        AdminCategoryRefreshRequest request,
+        IDbContextFactory<XtreamForgeDbContext> dbContextFactory,
+        IOptions<XtreamOptions> xtreamOptions,
+        IHttpClientFactory httpClientFactory,
+        XtreamCategoryMappingService categoryMappingService,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var selectedContentType = ParseContentType(request.SelectedContentType);
+            var configuredBaseUri = GetConfiguredXtreamBaseUri(xtreamOptions.Value);
+
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+            var source = await dbContext.XtreamSources.SingleOrDefaultAsync(source => source.Id == request.SelectedSourceId, cancellationToken);
+            if (source is null)
+            {
+                throw new InvalidOperationException("Xtream source was not found.");
+            }
+
+            EnsureConfiguredSourceMatchesSelection(configuredBaseUri, source);
+
+            var requestUri = BuildXtreamCategoryRefreshUri(configuredBaseUri, xtreamOptions.Value, selectedContentType);
+            var httpClient = httpClientFactory.CreateClient(ForwarderService.HttpClientName);
+            var upstreamCategories = await httpClient.GetFromJsonAsync<List<XtreamUpstreamCategoryDto>>(requestUri, cancellationToken) ?? [];
+
+            await categoryMappingService.SyncCategoriesAsync(
+                new XtreamSourceDescriptor(source.Protocol, source.Host, source.Port),
+                selectedContentType,
+                upstreamCategories
+                    .Select(category => new DiscoveredCategory(category.CategoryId ?? string.Empty, category.CategoryName ?? string.Empty))
+                    .ToList(),
+                cancellationToken);
+
+            return TypedResults.Ok(new AdminMutationResponse(source.Id, selectedContentType.ToString()));
+        }
+        catch (HttpRequestException)
+        {
+            return TypedResults.BadRequest(new AdminErrorResponse("Refreshing categories from the configured Xtream source failed."));
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        {
+            return TypedResults.BadRequest(new AdminErrorResponse(exception.Message));
+        }
+    }
+
     private static async Task<IResult> GetCategoryRulesAsync(
         int? sourceId,
         string? contentType,
@@ -161,6 +220,42 @@ public static class AdminEndpointExtensions
                 sourceId,
                 selectedContentType.ToString(),
                 rules.Select(ToResponse).ToList()));
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        {
+            return TypedResults.BadRequest(new AdminErrorResponse(exception.Message));
+        }
+    }
+
+    private static async Task<IResult> PreviewCategoryRulesAsync(
+        int? sourceId,
+        string? contentType,
+        string? categoryName,
+        CategoryRuleService categoryRuleService,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (sourceId is null)
+            {
+                return TypedResults.BadRequest(new AdminErrorResponse("A source must be selected."));
+            }
+
+            var preview = await categoryRuleService.PreviewAsync(sourceId, ParseContentType(contentType), categoryName, cancellationToken);
+            if (preview is null)
+            {
+                return TypedResults.BadRequest(new AdminErrorResponse("A category name is required."));
+            }
+
+            return TypedResults.Ok(new AdminCategoryRulePreviewResponse(
+                preview.CategoryName,
+                preview.Evaluation.Decision.ToString(),
+                preview.Evaluation.MatchedRuleId,
+                preview.Evaluation.MatchedRuleSequence,
+                preview.Evaluation.MatchedRuleAction?.ToString(),
+                preview.Evaluation.MatchedRuleOperator?.ToString(),
+                preview.Evaluation.MatchedPattern,
+                preview.Evaluation.MatchedRuleCaseSensitive));
         }
         catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
         {
@@ -369,6 +464,60 @@ public static class AdminEndpointExtensions
             rule.CaseSensitive,
             rule.IsEnabled);
 
+    private static Uri GetConfiguredXtreamBaseUri(XtreamOptions options)
+    {
+        if (!Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var baseUri))
+        {
+            throw new InvalidOperationException("Configure Xtream:BaseUrl before refreshing source categories.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.Username) || string.IsNullOrWhiteSpace(options.Password))
+        {
+            throw new InvalidOperationException("Configure Xtream credentials before refreshing source categories.");
+        }
+
+        return baseUri;
+    }
+
+    private static void EnsureConfiguredSourceMatchesSelection(Uri configuredBaseUri, XtreamSource source)
+    {
+        var configuredPort = configuredBaseUri.IsDefaultPort
+            ? configuredBaseUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ? 443 : 80
+            : configuredBaseUri.Port;
+
+        if (!configuredBaseUri.Scheme.Equals(source.Protocol, StringComparison.OrdinalIgnoreCase)
+            || !configuredBaseUri.Host.Equals(source.Host, StringComparison.OrdinalIgnoreCase)
+            || configuredPort != source.Port)
+        {
+            throw new InvalidOperationException("Refresh from source is available only for the configured Xtream source.");
+        }
+    }
+
+    private static string BuildXtreamCategoryRefreshUri(Uri configuredBaseUri, XtreamOptions options, ContentType contentType)
+    {
+        var path = configuredBaseUri.AbsolutePath.EndsWith("player_api.php", StringComparison.OrdinalIgnoreCase)
+            ? configuredBaseUri.AbsolutePath
+            : $"{configuredBaseUri.AbsolutePath.TrimEnd('/')}/player_api.php";
+
+        var uriBuilder = new UriBuilder(configuredBaseUri)
+        {
+            Path = path
+        };
+
+        var action = contentType == ContentType.Series
+            ? "get_series_categories"
+            : "get_vod_categories";
+
+        return QueryHelpers.AddQueryString(
+            uriBuilder.Uri.ToString(),
+            new Dictionary<string, string?>
+            {
+                ["username"] = options.Username,
+                ["password"] = options.Password,
+                ["action"] = action
+            });
+    }
+
     private static ContentType ParseContentType(string? value)
     {
         if (Enum.TryParse<ContentType>(value, true, out var contentType))
@@ -466,6 +615,16 @@ public sealed record AdminCategoryRulesResponse(
     string SelectedContentType,
     IReadOnlyList<AdminCategoryRuleResponse> Rules);
 
+public sealed record AdminCategoryRulePreviewResponse(
+    string CategoryName,
+    string Decision,
+    int? MatchedRuleId,
+    int? MatchedRuleSequence,
+    string? MatchedRuleAction,
+    string? MatchedRuleOperator,
+    string? MatchedPattern,
+    bool? MatchedRuleCaseSensitive);
+
 public sealed record AdminCategoryRuleResponse(
     int Id,
     int Sequence,
@@ -487,6 +646,10 @@ public sealed record AdminCategoryRuleRequest(
 public sealed record AdminCustomCategoryCreateRequest(string SelectedContentType, string? DisplayName);
 
 public sealed record AdminCustomCategoryUpdateRequest(string SelectedContentType, string DisplayName);
+
+public sealed record AdminCategoryRefreshRequest(
+    int SelectedSourceId,
+    string SelectedContentType);
 
 public sealed record AdminMutationResponse(int SourceId, string ContentType);
 

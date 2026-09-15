@@ -1,0 +1,261 @@
+@namespace XtreamForge.Blazor.Features.Categories.CategoryRules
+
+<section class="categories-tab-panel">
+    <header class="categories-panel-header">
+        <div>
+            <h2>Category Rules</h2>
+            <p class="category-meta">Rules are evaluated in order. First match wins.</p>
+        </div>
+        @if (IsRefreshing)
+        {
+            <div class="categories-count">Refreshing…</div>
+        }
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(Message) || !string.IsNullOrWhiteSpace(ErrorMessage))
+    {
+        <div class="panel-feedback">
+            @if (!string.IsNullOrWhiteSpace(Message))
+            {
+                <div class="inline-success">@Message</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(ErrorMessage))
+            {
+                <div class="inline-error">@ErrorMessage</div>
+            }
+        </div>
+    }
+
+    <div class="rule-editor-card">
+        <h3>Add rule</h3>
+        <div class="rule-editor-grid">
+            <label>
+                Action
+                <InputSelect @bind-Value="NewRule.Action" disabled="@(!HasSelectedSource || IsCreating)">
+                    <option value="@CategoryRuleActionOption.Include">Include</option>
+                    <option value="@CategoryRuleActionOption.Exclude">Exclude</option>
+                </InputSelect>
+            </label>
+            <label>
+                Match
+                <InputSelect @bind-Value="NewRule.Operator" disabled="@(!HasSelectedSource || IsCreating)">
+                    <option value="@CategoryRuleOperatorOption.Contains">Contains</option>
+                    <option value="@CategoryRuleOperatorOption.StartsWith">StartsWith</option>
+                </InputSelect>
+            </label>
+            <label>
+                Pattern
+                <InputText @bind-Value="NewRule.Pattern" maxlength="255" disabled="@(!HasSelectedSource || IsCreating)" />
+            </label>
+            <label>
+                Case
+                <InputSelect @bind-Value="NewRule.CaseSensitive" disabled="@(!HasSelectedSource || IsCreating)">
+                    <option value="false">Ignore case</option>
+                    <option value="true">Case sensitive</option>
+                </InputSelect>
+            </label>
+            <label>
+                Enabled
+                <InputSelect @bind-Value="NewRule.IsEnabled" disabled="@(!HasSelectedSource || IsCreating)">
+                    <option value="true">Yes</option>
+                    <option value="false">No</option>
+                </InputSelect>
+            </label>
+            <div class="rule-action-cell">
+                <button type="button" @onclick="() => OnCreate.InvokeAsync()" disabled="@(!HasSelectedSource || IsCreating)">@(IsCreating ? "Saving…" : "Create")</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="rule-editor-card">
+        <h3>Rule Tester</h3>
+        <div class="rule-tester-grid">
+            <label>
+                Category name
+                <InputText @bind-Value="Tester.CategoryName" maxlength="255" placeholder="|FR| DOCUMENTAIRE SPORT" disabled="@(!HasSelectedSource || Tester.IsBusy)" />
+            </label>
+            <div class="rule-action-cell">
+                <button type="button" @onclick="() => OnRunTester.InvokeAsync()" disabled="@(!HasSelectedSource || Tester.IsBusy)">@(Tester.IsBusy ? "Testing…" : "Test rule")</button>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Tester.ErrorMessage))
+        {
+            <div class="inline-error">@Tester.ErrorMessage</div>
+        }
+        else if (Tester.Preview is not null)
+        {
+            <div class="rule-tester-result">
+                <strong>@(Tester.Preview.Decision == "Exclude" ? "Excluded" : "Included")</strong>
+                @if (Tester.Preview.MatchedRuleId is int && Tester.Preview.MatchedRuleSequence is int matchedRuleSequence)
+                {
+                    <div class="category-meta">Matched rule #@matchedRuleSequence · @Tester.Preview.MatchedRuleAction · @Tester.Preview.MatchedPattern</div>
+                }
+                else
+                {
+                    <div class="category-meta">No rule matched. Default include applies.</div>
+                }
+            </div>
+        }
+    </div>
+
+    @if (!HasSelectedSource)
+    {
+        <div class="empty-state">
+            <p>Select a source to manage rules.</p>
+        </div>
+    }
+    else if (Rows.Count == 0)
+    {
+        <div class="empty-state">
+            <p>No rules configured for this source and content type.</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="category-grid rules-grid">
+                <thead>
+                    <tr>
+                        <th>Order</th>
+                        <th>Action</th>
+                        <th>Match</th>
+                        <th>Pattern</th>
+                        <th>Case</th>
+                        <th>Enabled</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var rule in Rows)
+                    {
+                        <tr @key="rule.RuleId" class="@(HighlightedRuleId == rule.RuleId ? "highlighted-row" : null)">
+                            <td>@rule.Sequence</td>
+                            @if (rule.IsEditing)
+                            {
+                                <td>
+                                    <InputSelect @bind-Value="rule.Action" disabled="@rule.IsBusy">
+                                        <option value="@CategoryRuleActionOption.Include">Include</option>
+                                        <option value="@CategoryRuleActionOption.Exclude">Exclude</option>
+                                    </InputSelect>
+                                </td>
+                                <td>
+                                    <InputSelect @bind-Value="rule.Operator" disabled="@rule.IsBusy">
+                                        <option value="@CategoryRuleOperatorOption.Contains">Contains</option>
+                                        <option value="@CategoryRuleOperatorOption.StartsWith">StartsWith</option>
+                                    </InputSelect>
+                                </td>
+                                <td><InputText @bind-Value="rule.Pattern" maxlength="255" disabled="@rule.IsBusy" /></td>
+                                <td>
+                                    <label class="checkbox-label compact-checkbox-label">
+                                        <InputCheckbox @bind-Value="rule.CaseSensitive" disabled="@rule.IsBusy" />
+                                        Case sensitive
+                                    </label>
+                                </td>
+                                <td>
+                                    <label class="checkbox-label compact-checkbox-label">
+                                        <InputCheckbox @bind-Value="rule.IsEnabled" disabled="@rule.IsBusy" />
+                                        Enabled
+                                    </label>
+                                </td>
+                            }
+                            else
+                            {
+                                <td>@rule.Action</td>
+                                <td>@rule.Operator</td>
+                                <td>@rule.Pattern</td>
+                                <td>@(rule.CaseSensitive ? "Case sensitive" : "Ignore case")</td>
+                                <td>@(rule.IsEnabled ? "Yes" : "No")</td>
+                            }
+                            <td>
+                                <div class="inline-editor-actions">
+                                    @if (rule.IsEditing)
+                                    {
+                                        <button type="button" @onclick="() => OnSave.InvokeAsync(rule)" disabled="@rule.IsBusy">@(rule.IsBusy ? "Saving…" : "Save")</button>
+                                        <button type="button" class="secondary-button" @onclick="() => OnCancelEdit.InvokeAsync(rule)" disabled="@rule.IsBusy">Cancel</button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="secondary-button" @onclick="() => OnBeginEdit.InvokeAsync(rule)" disabled="@rule.IsBusy">Edit</button>
+                                    }
+                                    <button type="button" class="secondary-button" @onclick="() => OnToggleEnabled.InvokeAsync(rule)" disabled="@rule.IsBusy">@(rule.IsEnabled ? "Disable" : "Enable")</button>
+                                    <button type="button" class="secondary-button" @onclick="() => OnMoveUp.InvokeAsync(rule)" disabled="@rule.IsBusy" aria-label="Move rule up">↑</button>
+                                    <button type="button" class="secondary-button" @onclick="() => OnMoveDown.InvokeAsync(rule)" disabled="@rule.IsBusy" aria-label="Move rule down">↓</button>
+                                </div>
+                                <div class="inline-editor-actions">
+                                    <label class="checkbox-label compact-checkbox-label">
+                                        <InputCheckbox @bind-Value="rule.ConfirmDelete" disabled="@rule.IsBusy" />
+                                        Confirm delete
+                                    </label>
+                                    <button type="button" class="danger-button" @onclick="() => OnDelete.InvokeAsync(rule)" disabled="@rule.IsBusy">Delete</button>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(rule.Message))
+                                {
+                                    <div class="@(rule.SaveState == MutationFeedbackState.Failed ? "inline-error" : "category-meta")">@rule.Message</div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter]
+    public required IReadOnlyList<RuleRowState> Rows { get; set; }
+
+    [Parameter]
+    public required RuleEditorState NewRule { get; set; }
+
+    [Parameter]
+    public required RuleTesterState Tester { get; set; }
+
+    [Parameter]
+    public bool IsCreating { get; set; }
+
+    [Parameter]
+    public bool IsRefreshing { get; set; }
+
+    [Parameter]
+    public int? SelectedSourceId { get; set; }
+
+    [Parameter]
+    public int? HighlightedRuleId { get; set; }
+
+    [Parameter]
+    public string? Message { get; set; }
+
+    [Parameter]
+    public string? ErrorMessage { get; set; }
+
+    [Parameter]
+    public EventCallback OnCreate { get; set; }
+
+    [Parameter]
+    public EventCallback OnRunTester { get; set; }
+
+    [Parameter]
+    public EventCallback<RuleRowState> OnBeginEdit { get; set; }
+
+    [Parameter]
+    public EventCallback<RuleRowState> OnCancelEdit { get; set; }
+
+    [Parameter]
+    public EventCallback<RuleRowState> OnSave { get; set; }
+
+    [Parameter]
+    public EventCallback<RuleRowState> OnDelete { get; set; }
+
+    [Parameter]
+    public EventCallback<RuleRowState> OnMoveUp { get; set; }
+
+    [Parameter]
+    public EventCallback<RuleRowState> OnMoveDown { get; set; }
+
+    [Parameter]
+    public EventCallback<RuleRowState> OnToggleEnabled { get; set; }
+
+    private bool HasSelectedSource => SelectedSourceId is not null;
+}

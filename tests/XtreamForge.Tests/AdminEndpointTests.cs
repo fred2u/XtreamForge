@@ -142,6 +142,30 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
     }
 
     [Fact]
+    public async Task CategoryRules_PreviewEndpoint_UsesBackendRuleSemantics()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-admin-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        var sourceId = await SeedCategoryAdministrationDataAsync(setupFactory);
+
+        using var factory = _factory.WithSqliteDatabase(databasePath);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync($"/api/admin/category-rules/preview?sourceId={sourceId}&contentType=Vod&categoryName=%7CFR%7C%20DOCUMENTAIRE%20SPORT");
+        var payload = await response.Content.ReadFromJsonAsync<AdminCategoryRulePreviewResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Equal("Exclude", payload.Decision);
+        Assert.Equal(10, payload.MatchedRuleSequence);
+        Assert.Equal("Exclude", payload.MatchedRuleAction);
+        Assert.Equal("Contains", payload.MatchedRuleOperator);
+        Assert.Equal("SPORT", payload.MatchedPattern);
+    }
+
+    [Fact]
     public async Task CustomCategories_Endpoints_CreateRenameAndDeleteUnusedCategory()
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-admin-tests-{Guid.NewGuid():N}.db");
@@ -166,6 +190,52 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
         await using var scope = setupFactory.Services.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
         Assert.False(await dbContext.CustomCategories.AnyAsync());
+    }
+
+    [Fact]
+    public async Task RefreshCategoriesEndpoint_ReusesConfiguredXtreamSourceAndPersistsDiscoveredCategories()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-admin-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        var sourceId = await SeedSingleSourceAsync(setupFactory);
+        var handler = new FakeForwarderHandler((_, _) => Task.FromResult(FakeForwarderHandler.CreateJsonResponse(
+            HttpStatusCode.OK,
+            """[{"category_id":"10","category_name":"Movies A"},{"category_id":"20","category_name":"Movies B"}]""")));
+
+        using var factory = _factory
+            .WithSqliteDatabase(databasePath)
+            .WithForwarderHandler(handler)
+            .WithWebHostBuilder(builder =>
+            {
+                builder.ConfigureAppConfiguration((_, configurationBuilder) =>
+                {
+                    configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["Xtream:BaseUrl"] = "https://example.com",
+                        ["Xtream:Username"] = "user",
+                        ["Xtream:Password"] = "pass"
+                    });
+                });
+            });
+
+        using var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/admin/categories/refresh", new AdminCategoryRefreshRequest(sourceId, "Vod"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Single(handler.Requests);
+        Assert.NotNull(handler.Requests[0].RequestUri);
+        Assert.Equal("/player_api.php", handler.Requests[0].RequestUri!.AbsolutePath);
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(handler.Requests[0].RequestUri.Query);
+        Assert.Equal("user", query["username"]);
+        Assert.Equal("pass", query["password"]);
+        Assert.Equal("get_vod_categories", query["action"]);
+
+        await using var scope = setupFactory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        Assert.Equal(2, await dbContext.UpstreamCategories.CountAsync());
+        Assert.Contains(await dbContext.UpstreamCategories.Select(category => category.UpstreamCategoryName).ToListAsync(), name => name == "Movies B");
     }
 
     private static async Task EnsureDatabaseCreatedAsync(WebApplicationFactory<Program> factory)

@@ -32,6 +32,12 @@ public sealed class CategoriesClient(HttpClient httpClient)
         await EnsureSuccessAsync(response, cancellationToken);
     }
 
+    public async Task RefreshCategoriesAsync(AdminCategoryRefreshRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await httpClient.PostAsJsonAsync("/api/admin/categories/refresh", request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
     public async Task CreateRuleAsync(AdminCategoryRuleUpdate request, CancellationToken cancellationToken = default)
     {
         var response = await httpClient.PostAsJsonAsync("/api/admin/category-rules", request, cancellationToken);
@@ -55,6 +61,12 @@ public sealed class CategoriesClient(HttpClient httpClient)
     {
         var response = await httpClient.DeleteAsync($"/api/admin/category-rules/{ruleId}?sourceId={sourceId}&contentType={contentType}&confirmDelete=true", cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    public Task<AdminCategoryRulePreview> PreviewRuleAsync(int sourceId, AdminContentType contentType, string categoryName, CancellationToken cancellationToken = default)
+    {
+        var requestUri = $"/api/admin/category-rules/preview?sourceId={sourceId}&contentType={contentType}&categoryName={Uri.EscapeDataString(categoryName)}";
+        return ReadAsync<AdminCategoryRulePreview>(requestUri, cancellationToken);
     }
 
     public async Task<AdminCustomCategory> CreateCustomCategoryAsync(AdminCustomCategoryCreate request, CancellationToken cancellationToken = default)

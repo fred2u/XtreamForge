@@ -1,0 +1,70 @@
+@implements IDisposable
+
+<input
+    class="debounced-text-input"
+    type="@Type"
+    value="@_currentValue"
+    placeholder="@Placeholder"
+    disabled="@Disabled"
+    @oninput="HandleInputAsync" />
+
+@code {
+    private string? _currentValue;
+    private CancellationTokenSource? _cancellationTokenSource;
+
+    [Parameter]
+    public string? Value { get; set; }
+
+    [Parameter]
+    public EventCallback<string?> ValueChanged { get; set; }
+
+    [Parameter]
+    public string Placeholder { get; set; } = string.Empty;
+
+    [Parameter]
+    public string Type { get; set; } = "search";
+
+    [Parameter]
+    public int DebounceMilliseconds { get; set; } = 200;
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (!string.Equals(Value, _currentValue, StringComparison.Ordinal))
+        {
+            _currentValue = Value;
+        }
+    }
+
+    private Task HandleInputAsync(ChangeEventArgs args)
+    {
+        _currentValue = args.Value?.ToString() ?? string.Empty;
+
+        _cancellationTokenSource?.Cancel();
+        _cancellationTokenSource?.Dispose();
+        _cancellationTokenSource = new CancellationTokenSource();
+
+        _ = NotifyValueChangedAsync(_currentValue, _cancellationTokenSource.Token);
+        return Task.CompletedTask;
+    }
+
+    private async Task NotifyValueChangedAsync(string? value, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(DebounceMilliseconds, cancellationToken);
+            await InvokeAsync(() => ValueChanged.InvokeAsync(value));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        _cancellationTokenSource?.Cancel();
+        _cancellationTokenSource?.Dispose();
+    }
+}

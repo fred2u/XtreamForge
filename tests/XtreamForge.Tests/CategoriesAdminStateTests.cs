@@ -144,4 +144,16 @@ public sealed class CategoriesAdminStateTests
         Assert.Equal("custom:9", row.MappingValue);
         Assert.Null(row.NewCustomCategoryName);
     }
+
+    [Fact]
+    public void FormatEffectiveStatus_PrefersManualDisabledThenRuleDisabled()
+    {
+        var manualSummary = new AdminUpstreamCategory(1, "10", "Manual", true, null, null, 100, "Manual", "Exclude", "Include", null, null, null, null, null, null, false, "Disabled");
+        var ruleSummary = new AdminUpstreamCategory(2, "20", "Rule", false, null, null, 101, "Rule", "Exclude", "Exclude", 4, 20, "Exclude", "Contains", "SPORT", false, false, "Original");
+        var enabledSummary = new AdminUpstreamCategory(3, "30", "Enabled", false, null, null, 102, "Enabled", "Include", "Include", null, null, null, null, null, null, true, "Original");
+
+        Assert.Equal("Disabled · manual", CategoriesPageState.FormatEffectiveStatus(manualSummary));
+        Assert.Equal("Disabled · rule", CategoriesPageState.FormatEffectiveStatus(ruleSummary));
+        Assert.Equal("Enabled", CategoriesPageState.FormatEffectiveStatus(enabledSummary));
+    }
 }

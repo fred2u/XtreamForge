@@ -11,35 +11,81 @@ public static class CategoriesPageState
             .Where(row => MatchesStatus(row, statusFilter))
             .ToList();
 
+    public static string FormatEffectiveStatus(AdminUpstreamCategory summary)
+    {
+        if (summary.IsManuallyExcluded)
+        {
+            return "Disabled · manual";
+        }
+
+        if (!summary.IsEffectivelyIncluded)
+        {
+            return summary.MatchedRuleId is null
+                ? "Disabled"
+                : "Disabled · rule";
+        }
+
+        return "Enabled";
+    }
+
+    public static string? FormatMatchedRule(AdminUpstreamCategory summary) =>
+        summary.MatchedRuleId is int && summary.MatchedRuleSequence is int matchedRuleSequence
+            ? $"#{matchedRuleSequence} {summary.MatchedRuleAction} · {summary.MatchedPattern}"
+            : null;
+
+    public static string? FormatMatchedRuleDetails(AdminUpstreamCategory summary)
+    {
+        if (summary.MatchedRuleId is null)
+        {
+            return null;
+        }
+
+        var caseLabel = summary.MatchedRuleCaseSensitive == true ? "Case sensitive" : "Ignore case";
+        return $"{summary.MatchedRuleOperator} · {caseLabel}";
+    }
+
     private static bool MatchesSearch(CategoryRowState row, string? searchText) =>
         string.IsNullOrWhiteSpace(searchText)
         || row.Summary.UpstreamCategoryName.Contains(searchText, StringComparison.OrdinalIgnoreCase)
-        || row.Summary.UpstreamCategoryId.Contains(searchText, StringComparison.OrdinalIgnoreCase);
+        || row.Summary.UpstreamCategoryId.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+        || (row.Summary.CustomCategoryName?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false);
 
     private static bool MatchesStatus(CategoryRowState row, CategoryStatusFilter statusFilter) => statusFilter switch
     {
-        CategoryStatusFilter.Enabled => string.Equals(row.Summary.EffectiveDecision, "Include", StringComparison.OrdinalIgnoreCase),
-        CategoryStatusFilter.Disabled => string.Equals(row.Summary.EffectiveDecision, "Exclude", StringComparison.OrdinalIgnoreCase),
+        CategoryStatusFilter.Enabled => row.Summary.IsEffectivelyIncluded,
+        CategoryStatusFilter.Disabled => !row.Summary.IsEffectivelyIncluded,
         _ => true
     };
 }
 
-public sealed class CategoryRowState(AdminUpstreamCategory Summary)
+public sealed class CategoryRowState(AdminUpstreamCategory summary)
 {
-    public AdminUpstreamCategory Summary { get; } = Summary;
+    public AdminUpstreamCategory Summary { get; } = summary;
 
-    public string MappingValue { get; set; } = GetMappingValue(Summary);
+    public bool IsSelected { get; set; }
 
-    public string SavedMappingValue { get; private set; } = GetMappingValue(Summary);
+    public string MappingValue { get; set; } = GetMappingValue(summary);
+
+    public string SavedMappingValue { get; private set; } = GetMappingValue(summary);
 
     public bool IsCreatingCustomCategory { get; private set; }
 
     public string? NewCustomCategoryName { get; set; }
 
-    public string? Message { get; set; }
+    public string? ValidationError { get; private set; }
+
+    public string? PendingMappingValue { get; private set; }
+
+    public string? PendingNewCustomCategoryName { get; private set; }
+
+    public MutationFeedbackState SaveState { get; private set; }
+
+    public bool IsBusy => SaveState == MutationFeedbackState.Saving;
 
     public void BeginCustomCategoryCreate()
     {
+        SaveState = MutationFeedbackState.None;
+        ValidationError = null;
         IsCreatingCustomCategory = true;
         NewCustomCategoryName ??= Summary.UpstreamCategoryName;
     }
@@ -49,7 +95,18 @@ public sealed class CategoryRowState(AdminUpstreamCategory Summary)
         IsCreatingCustomCategory = false;
         MappingValue = SavedMappingValue;
         NewCustomCategoryName = null;
-        Message = null;
+        ValidationError = null;
+        PendingMappingValue = null;
+        PendingNewCustomCategoryName = null;
+        SaveState = MutationFeedbackState.None;
+    }
+
+    public void BeginSave(string mappingValue, string? newCustomCategoryName)
+    {
+        PendingMappingValue = mappingValue;
+        PendingNewCustomCategoryName = newCustomCategoryName;
+        ValidationError = null;
+        SaveState = MutationFeedbackState.Saving;
     }
 
     public void CommitMapping(string mappingValue)
@@ -58,8 +115,29 @@ public sealed class CategoryRowState(AdminUpstreamCategory Summary)
         MappingValue = mappingValue;
         IsCreatingCustomCategory = false;
         NewCustomCategoryName = null;
-        Message = null;
+        ValidationError = null;
+        PendingMappingValue = null;
+        PendingNewCustomCategoryName = null;
+        SaveState = MutationFeedbackState.Saved;
     }
+
+    public void Fail(string message)
+    {
+        ValidationError = message;
+        SaveState = MutationFeedbackState.Failed;
+    }
+
+    public void ClearFeedback()
+    {
+        if (SaveState != MutationFeedbackState.Saving)
+        {
+            SaveState = MutationFeedbackState.None;
+        }
+
+        ValidationError = null;
+    }
+
+    public static string GetCustomMappingValue(int customCategoryId) => $"custom:{customCategoryId}";
 
     private static string GetMappingValue(AdminUpstreamCategory summary) => summary.CurrentMappingSelection switch
     {
@@ -68,29 +146,88 @@ public sealed class CategoryRowState(AdminUpstreamCategory Summary)
         "Custom" when summary.CustomCategoryId is int customCategoryId => GetCustomMappingValue(customCategoryId),
         _ => "original"
     };
-
-    public static string GetCustomMappingValue(int customCategoryId) => $"custom:{customCategoryId}";
 }
 
-public sealed class RuleRowState(AdminCategoryRule Summary)
+public sealed class RuleRowState(AdminCategoryRule summary)
 {
-    public int RuleId { get; } = Summary.Id;
+    private CategoryRuleActionOption _savedAction = ParseAction(summary.Action);
+    private CategoryRuleOperatorOption _savedOperator = ParseOperator(summary.Operator);
+    private string _savedPattern = summary.Pattern;
+    private bool _savedCaseSensitive = summary.CaseSensitive;
+    private bool _savedIsEnabled = summary.IsEnabled;
 
-    public int Sequence { get; set; } = Summary.Sequence;
+    public int RuleId { get; } = summary.Id;
 
-    public CategoryRuleActionOption Action { get; set; } = ParseAction(Summary.Action);
+    public int Sequence { get; set; } = summary.Sequence;
 
-    public CategoryRuleOperatorOption Operator { get; set; } = ParseOperator(Summary.Operator);
+    public CategoryRuleActionOption Action { get; set; } = ParseAction(summary.Action);
 
-    public string Pattern { get; set; } = Summary.Pattern;
+    public CategoryRuleOperatorOption Operator { get; set; } = ParseOperator(summary.Operator);
 
-    public bool CaseSensitive { get; set; } = Summary.CaseSensitive;
+    public string Pattern { get; set; } = summary.Pattern;
 
-    public bool IsEnabled { get; set; } = Summary.IsEnabled;
+    public bool CaseSensitive { get; set; } = summary.CaseSensitive;
+
+    public bool IsEnabled { get; set; } = summary.IsEnabled;
 
     public bool ConfirmDelete { get; set; }
 
-    public string? Message { get; set; }
+    public bool IsEditing { get; private set; }
+
+    public MutationFeedbackState SaveState { get; private set; }
+
+    public string? Message { get; private set; }
+
+    public bool IsBusy => SaveState == MutationFeedbackState.Saving;
+
+    public void BeginEdit()
+    {
+        Message = null;
+        SaveState = MutationFeedbackState.None;
+        IsEditing = true;
+    }
+
+    public void CancelEdit()
+    {
+        Action = _savedAction;
+        Operator = _savedOperator;
+        Pattern = _savedPattern;
+        CaseSensitive = _savedCaseSensitive;
+        IsEnabled = _savedIsEnabled;
+        Message = null;
+        SaveState = MutationFeedbackState.None;
+        IsEditing = false;
+    }
+
+    public void BeginSave()
+    {
+        Message = null;
+        SaveState = MutationFeedbackState.Saving;
+    }
+
+    public void CommitSave()
+    {
+        _savedAction = Action;
+        _savedOperator = Operator;
+        _savedPattern = Pattern;
+        _savedCaseSensitive = CaseSensitive;
+        _savedIsEnabled = IsEnabled;
+        Message = "Saved.";
+        SaveState = MutationFeedbackState.Saved;
+        IsEditing = false;
+    }
+
+    public void Fail(string message)
+    {
+        Message = message;
+        SaveState = MutationFeedbackState.Failed;
+    }
+
+    public void SetSavedEnabled(bool isEnabled)
+    {
+        IsEnabled = isEnabled;
+        _savedIsEnabled = isEnabled;
+    }
 
     private static CategoryRuleActionOption ParseAction(string value) =>
         Enum.TryParse<CategoryRuleActionOption>(value, true, out var action)
@@ -116,11 +253,69 @@ public sealed class RuleEditorState
     public bool IsEnabled { get; set; } = true;
 }
 
-public sealed class CustomCategoryRowState(AdminCustomCategory Summary)
+public sealed class RuleTesterState
 {
-    public AdminCustomCategory Summary { get; } = Summary;
+    public string? CategoryName { get; set; }
 
-    public string DisplayName { get; set; } = Summary.DisplayName;
+    public MutationFeedbackState SaveState { get; set; }
+
+    public string? ErrorMessage { get; set; }
+
+    public AdminCategoryRulePreview? Preview { get; set; }
+
+    public bool IsBusy => SaveState == MutationFeedbackState.Saving;
+}
+
+public sealed class CustomCategoryRowState(AdminCustomCategory summary)
+{
+    private string _savedDisplayName = summary.DisplayName;
+
+    public AdminCustomCategory Summary { get; } = summary;
+
+    public string DisplayName { get; set; } = summary.DisplayName;
+
+    public bool IsEditing { get; private set; }
+
+    public MutationFeedbackState SaveState { get; private set; }
+
+    public string? Message { get; private set; }
+
+    public bool IsBusy => SaveState == MutationFeedbackState.Saving;
+
+    public void BeginEdit()
+    {
+        Message = null;
+        SaveState = MutationFeedbackState.None;
+        IsEditing = true;
+    }
+
+    public void CancelEdit()
+    {
+        DisplayName = _savedDisplayName;
+        Message = null;
+        SaveState = MutationFeedbackState.None;
+        IsEditing = false;
+    }
+
+    public void BeginSave()
+    {
+        Message = null;
+        SaveState = MutationFeedbackState.Saving;
+    }
+
+    public void CommitSave()
+    {
+        _savedDisplayName = DisplayName;
+        Message = "Saved.";
+        SaveState = MutationFeedbackState.Saved;
+        IsEditing = false;
+    }
+
+    public void Fail(string message)
+    {
+        Message = message;
+        SaveState = MutationFeedbackState.Failed;
+    }
 }
 
 public sealed class CustomCategoryEditorState
@@ -151,6 +346,21 @@ public enum CategoryRuleOperatorOption
 {
     Contains = 1,
     StartsWith = 2
+}
+
+public enum CategoriesTab
+{
+    SourceCategories = 1,
+    CategoryRules = 2,
+    GlobalCustomCategories = 3
+}
+
+public enum MutationFeedbackState
+{
+    None = 0,
+    Saving = 1,
+    Saved = 2,
+    Failed = 3
 }
 
 public sealed record AdminCategoriesPayload(
@@ -208,6 +418,10 @@ public sealed record AdminCategoryMappingUpdate(
     int? CustomCategoryId,
     string? NewCustomCategoryName);
 
+public sealed record AdminCategoryRefreshRequest(
+    int SelectedSourceId,
+    string SelectedContentType);
+
 public sealed record AdminCategoryRuleUpdate(
     int SelectedSourceId,
     string SelectedContentType,
@@ -216,6 +430,16 @@ public sealed record AdminCategoryRuleUpdate(
     string? Pattern,
     bool CaseSensitive,
     bool IsEnabled);
+
+public sealed record AdminCategoryRulePreview(
+    string CategoryName,
+    string Decision,
+    int? MatchedRuleId,
+    int? MatchedRuleSequence,
+    string? MatchedRuleAction,
+    string? MatchedRuleOperator,
+    string? MatchedPattern,
+    bool? MatchedRuleCaseSensitive);
 
 public sealed record AdminCustomCategoryCreate(string SelectedContentType, string? DisplayName);
 

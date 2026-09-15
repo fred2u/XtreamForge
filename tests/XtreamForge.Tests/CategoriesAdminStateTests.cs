@@ -83,6 +83,18 @@ public sealed class CategoriesAdminStateTests
     }
 
     [Fact]
+    public void RuleRowState_DisablesSecondaryActionsWhileEditing()
+    {
+        var row = new RuleRowState(new AdminCategoryRule(7, 20, "Exclude", "Contains", "SPORT", false, true));
+
+        Assert.True(row.CanRunSecondaryActions);
+
+        row.BeginEdit();
+
+        Assert.False(row.CanRunSecondaryActions);
+    }
+
+    [Fact]
     public void CategoryRowState_UsesExistingCustomCategorySelection()
     {
         var summary = new AdminUpstreamCategory(

@@ -141,7 +141,7 @@ else
                     NewCustomCategory="_newCustomCategory"
                     IsCreating="_isCustomCategoryCreating"
                     IsRefreshing="_isCategoryDataRefreshing"
-                    Message="@CustomCategoryMessage"
+                    Message="@_customCategoryMessage"
                     ErrorMessage="@_customCategoryErrorMessage"
                     OnCreate="CreateStandaloneCustomCategoryAsync"
                     OnBeginEdit="BeginCustomCategoryEdit"
@@ -185,8 +185,8 @@ else
     private string? _categoryErrorMessage;
     private string? _ruleMessage;
     private string? _ruleErrorMessage;
+    private string? _customCategoryMessage;
     private string? _customCategoryErrorMessage;
-    private string? CustomCategoryMessage { get; set; }
 
     private IReadOnlyList<CategoryRowState> FilteredCategoryRows => CategoriesPageState.FilterCategoryRows(_categoryRows, _searchText, _statusFilter);
 
@@ -204,7 +204,7 @@ else
         _categoryErrorMessage = null;
         _ruleMessage = null;
         _ruleErrorMessage = null;
-        CustomCategoryMessage = null;
+        _customCategoryMessage = null;
         _customCategoryErrorMessage = null;
 
         try
@@ -366,7 +366,10 @@ else
             ["contentType"] = _selectedContentType.ToString()
         });
 
-        NavigationManager.NavigateTo(uri, replace: true);
+        if (!string.Equals(uri, NavigationManager.Uri, StringComparison.Ordinal))
+        {
+            NavigationManager.NavigateTo(uri, replace: true);
+        }
     }
 
     private async Task OnMappingSelectionChangedAsync(CategoryRowState row)
@@ -555,6 +558,12 @@ else
             return;
         }
 
+        if (rule.IsEditing)
+        {
+            rule.Fail("Save or cancel the current edit before changing the rule state.");
+            return;
+        }
+
         var originalValue = rule.IsEnabled;
 
         try
@@ -592,6 +601,12 @@ else
             return;
         }
 
+        if (rule.IsEditing)
+        {
+            rule.Fail("Save or cancel the current edit before reordering the rule.");
+            return;
+        }
+
         try
         {
             rule.BeginSave();
@@ -609,6 +624,12 @@ else
         if (_selectedSourceId is null)
         {
             rule.Fail("A source must be selected.");
+            return;
+        }
+
+        if (rule.IsEditing)
+        {
+            rule.Fail("Save or cancel the current edit before deleting the rule.");
             return;
         }
 
@@ -677,11 +698,11 @@ else
         try
         {
             row.BeginSave();
-            CustomCategoryMessage = null;
+            _customCategoryMessage = null;
             _customCategoryErrorMessage = null;
             await CategoriesClient.UpdateCustomCategoryAsync(row.Summary.Id, new AdminCustomCategoryUpdate(_selectedContentType.ToString(), row.DisplayName));
             row.CommitSave();
-            CustomCategoryMessage = "Custom category saved.";
+            _customCategoryMessage = "Custom category saved.";
             await RefreshCategoriesViewAsync();
         }
         catch (Exception exception)
@@ -695,11 +716,11 @@ else
         try
         {
             _isCustomCategoryCreating = true;
-            CustomCategoryMessage = null;
+            _customCategoryMessage = null;
             _customCategoryErrorMessage = null;
             await CategoriesClient.CreateCustomCategoryAsync(new AdminCustomCategoryCreate(_selectedContentType.ToString(), _newCustomCategory.DisplayName));
             _newCustomCategory = new CustomCategoryEditorState();
-            CustomCategoryMessage = "Custom category created.";
+            _customCategoryMessage = "Custom category created.";
             await RefreshCategoriesViewAsync();
         }
         catch (Exception exception)
@@ -717,10 +738,10 @@ else
         try
         {
             row.BeginSave();
-            CustomCategoryMessage = null;
+            _customCategoryMessage = null;
             _customCategoryErrorMessage = null;
             await CategoriesClient.DeleteCustomCategoryAsync(row.Summary.Id, _selectedContentType);
-            CustomCategoryMessage = "Custom category deleted.";
+            _customCategoryMessage = "Custom category deleted.";
             await RefreshCategoriesViewAsync();
         }
         catch (Exception exception)

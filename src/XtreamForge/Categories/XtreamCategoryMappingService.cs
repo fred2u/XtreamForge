@@ -156,6 +156,8 @@ public sealed class XtreamCategoryMappingService(
                 {
                     case CategoryMappingSelection.Disabled:
                         upstreamCategory.IsExcluded = true;
+                        upstreamCategory.CustomCategoryId = null;
+                        upstreamCategory.CustomCategory = null;
                         break;
                     case CategoryMappingSelection.Original:
                         upstreamCategory.IsExcluded = false;

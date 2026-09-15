@@ -180,6 +180,8 @@ public sealed class RuleRowState(AdminCategoryRule summary)
 
     public bool IsBusy => SaveState == MutationFeedbackState.Saving;
 
+    public bool CanRunSecondaryActions => !IsEditing && !IsBusy;
+
     public void BeginEdit()
     {
         Message = null;

@@ -1,6 +1,5 @@
 using XtreamForge.Blazor.Components;
-using XtreamForge.Blazor.Features.Categories;
-using XtreamForge.Blazor.Features.Dashboard;
+using XtreamForge.Blazor.Configuration;
 using Microsoft.AspNetCore.Hosting;
 
 namespace XtreamForge.Blazor;
@@ -17,9 +16,7 @@ public sealed class Program
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
 
-        var backendBaseUrl = builder.Configuration["Backend:BaseUrl"] ?? "http://xtreamforge";
-        builder.Services.AddHttpClient<DashboardClient>(client => client.BaseAddress = new Uri(backendBaseUrl));
-        builder.Services.AddHttpClient<CategoriesClient>(client => client.BaseAddress = new Uri(backendBaseUrl));
+        builder.Services.AddBackendApiClients();
 
         var app = builder.Build();
 

@@ -143,7 +143,7 @@ public sealed class XtreamCategoryMappingServiceTests
         Assert.True(disabledCategory.IsManuallyExcluded);
         Assert.Equal(CategoryInclusionDecision.Exclude, disabledCategory.EffectiveDecision);
         Assert.Equal(CategoryMappingSelection.Disabled, disabledCategory.CurrentMappingSelection);
-        Assert.NotNull(disabledCategory.CustomCategoryId);
+        Assert.Null(disabledCategory.CustomCategoryId);
 
         await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(
             category.Id,
@@ -157,6 +157,44 @@ public sealed class XtreamCategoryMappingServiceTests
         Assert.False(restoredCategory.IsExcluded);
         Assert.Null(restoredCategory.CustomCategoryId);
         Assert.NotEqual(0, restoredCategory.DedicatedOutputCategoryId);
+    }
+
+    [Fact]
+    public async Task SaveCategoryConfigurationAsync_DisabledSelectionReleasesCustomCategoryUsage()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var serviceProvider = CreateServiceProvider(connection);
+        await EnsureCreatedAsync(serviceProvider);
+
+        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        await SeedVodCategoriesAsync(mappingService);
+        var sourceId = await GetSourceIdAsync(serviceProvider, "example.com");
+        var category = await GetUpstreamCategoryAsync(serviceProvider, sourceId, "42");
+
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(
+            category.Id,
+            sourceId,
+            ContentType.Vod,
+            CategoryMappingSelection.Custom,
+            null,
+            "Movies"));
+
+        var customCategory = await GetSingleCustomCategoryAsync(serviceProvider, ContentType.Vod);
+
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(
+            category.Id,
+            sourceId,
+            ContentType.Vod,
+            CategoryMappingSelection.Disabled,
+            null,
+            null));
+
+        await mappingService.DeleteCustomCategoryAsync(new CustomCategoryDeleteCommand(customCategory.Id, ContentType.Vod));
+
+        await using var verifyScope = serviceProvider.CreateAsyncScope();
+        var dbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        Assert.Equal(0, await dbContext.CustomCategories.CountAsync());
     }
 
     [Fact]

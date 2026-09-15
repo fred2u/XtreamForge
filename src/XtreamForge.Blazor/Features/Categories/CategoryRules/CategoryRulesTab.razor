@@ -178,16 +178,16 @@
                                     {
                                         <button type="button" class="secondary-button" @onclick="() => OnBeginEdit.InvokeAsync(rule)" disabled="@rule.IsBusy">Edit</button>
                                     }
-                                    <button type="button" class="secondary-button" @onclick="() => OnToggleEnabled.InvokeAsync(rule)" disabled="@rule.IsBusy">@(rule.IsEnabled ? "Disable" : "Enable")</button>
-                                    <button type="button" class="secondary-button" @onclick="() => OnMoveUp.InvokeAsync(rule)" disabled="@rule.IsBusy" aria-label="Move rule up">↑</button>
-                                    <button type="button" class="secondary-button" @onclick="() => OnMoveDown.InvokeAsync(rule)" disabled="@rule.IsBusy" aria-label="Move rule down">↓</button>
+                                    <button type="button" class="secondary-button" @onclick="() => OnToggleEnabled.InvokeAsync(rule)" disabled="@(!rule.CanRunSecondaryActions)">@(rule.IsEnabled ? "Disable" : "Enable")</button>
+                                    <button type="button" class="secondary-button" @onclick="() => OnMoveUp.InvokeAsync(rule)" disabled="@(!rule.CanRunSecondaryActions)" aria-label="Move rule up">↑</button>
+                                    <button type="button" class="secondary-button" @onclick="() => OnMoveDown.InvokeAsync(rule)" disabled="@(!rule.CanRunSecondaryActions)" aria-label="Move rule down">↓</button>
                                 </div>
                                 <div class="inline-editor-actions">
                                     <label class="checkbox-label compact-checkbox-label">
-                                        <InputCheckbox @bind-Value="rule.ConfirmDelete" disabled="@rule.IsBusy" />
+                                        <InputCheckbox @bind-Value="rule.ConfirmDelete" disabled="@(!rule.CanRunSecondaryActions)" />
                                         Confirm delete
                                     </label>
-                                    <button type="button" class="danger-button" @onclick="() => OnDelete.InvokeAsync(rule)" disabled="@rule.IsBusy">Delete</button>
+                                    <button type="button" class="danger-button" @onclick="() => OnDelete.InvokeAsync(rule)" disabled="@(!rule.CanRunSecondaryActions)">Delete</button>
                                 </div>
                                 @if (!string.IsNullOrWhiteSpace(rule.Message))
                                 {

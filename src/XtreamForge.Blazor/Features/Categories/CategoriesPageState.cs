@@ -267,10 +267,13 @@ public sealed class RuleTesterState
 public sealed class CustomCategoryRowState(AdminCustomCategory summary)
 {
     private string _savedDisplayName = summary.DisplayName;
+    private int _usageCount = summary.UsageCount;
 
     public AdminCustomCategory Summary { get; } = summary;
 
     public string DisplayName { get; set; } = summary.DisplayName;
+
+    public int UsageCount => _usageCount;
 
     public bool IsEditing { get; private set; }
 
@@ -314,11 +317,52 @@ public sealed class CustomCategoryRowState(AdminCustomCategory summary)
         Message = message;
         SaveState = MutationFeedbackState.Failed;
     }
+
+    public void SetUsageCount(int usageCount)
+    {
+        _usageCount = Math.Max(0, usageCount);
+    }
 }
 
 public sealed class CustomCategoryEditorState
 {
     public string? DisplayName { get; set; }
+}
+
+public sealed class CustomCategoryUsageRowState(AdminCustomCategoryUsage summary)
+{
+    public AdminCustomCategoryUsage Summary { get; } = summary;
+
+    public bool IsConfirmingUnlink { get; private set; }
+
+    public bool IsBusy { get; private set; }
+
+    public string? ErrorMessage { get; private set; }
+
+    public void BeginConfirm()
+    {
+        IsConfirmingUnlink = true;
+        ErrorMessage = null;
+    }
+
+    public void CancelConfirm()
+    {
+        IsConfirmingUnlink = false;
+        IsBusy = false;
+        ErrorMessage = null;
+    }
+
+    public void BeginUnlink()
+    {
+        IsBusy = true;
+        ErrorMessage = null;
+    }
+
+    public void Fail(string message)
+    {
+        IsBusy = false;
+        ErrorMessage = message;
+    }
 }
 
 public enum CategoryStatusFilter
@@ -429,6 +473,8 @@ public sealed record AdminCategoryRuleOrderUpdate(
     int SelectedSourceId,
     string SelectedContentType,
     IReadOnlyList<int> OrderedRuleIds);
+
+public sealed record RuleDropRequest(int DraggedRuleId, int TargetIndex);
 
 public sealed record AdminCategoryRulePreview(
     string CategoryName,

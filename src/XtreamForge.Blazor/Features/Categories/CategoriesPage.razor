@@ -94,8 +94,6 @@ else
                         Tester="_ruleTester"
                         IsRefreshing="_isRulesRefreshing"
                         HighlightedRuleId="_highlightedRuleId"
-                        DraggedRuleId="_draggedRuleId"
-                        DropTargetIndex="_dropTargetIndex"
                         Message="@_ruleMessage"
                         ErrorMessage="@_ruleErrorMessage"
                         OnSourceChanged="OnSourceChangedAsync"
@@ -107,10 +105,7 @@ else
                         OnSave="SaveRuleAsync"
                         OnRequestDelete="RequestRuleDelete"
                         OnToggleEnabled="ToggleRuleEnabledAsync"
-                        OnDragStart="BeginRuleDrag"
-                        OnDragEnd="EndRuleDrag"
-                        OnDropTargetChanged="SetRuleDropTarget"
-                        OnDropAtIndex="DropRuleAtIndexAsync" />
+                        OnDropRequested="DropRuleAsync" />
                 </div>
                 break;
             case CategoriesTab.GlobalCustomCategories:
@@ -256,17 +251,44 @@ else
                             <th>Source</th>
                             <th>Type</th>
                             <th>Source Category</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach (var usage in _customCategoryUsages)
                         {
                             <tr>
-                                <td>@usage.SourceDisplayName</td>
-                                <td>@usage.ContentType</td>
+                                <td>@usage.Summary.SourceDisplayName</td>
+                                <td>@usage.Summary.ContentType</td>
                                 <td>
-                                    <div class="category-name">@usage.UpstreamCategoryName</div>
-                                    <div class="category-meta">Upstream ID @usage.UpstreamCategoryId</div>
+                                    <div class="category-name">@usage.Summary.UpstreamCategoryName</div>
+                                    <div class="category-meta">Upstream ID @usage.Summary.UpstreamCategoryId</div>
+                                    @if (!string.IsNullOrWhiteSpace(usage.ErrorMessage))
+                                    {
+                                        <div class="inline-error">@usage.ErrorMessage</div>
+                                    }
+                                </td>
+                                <td>
+                                    @if (usage.IsConfirmingUnlink)
+                                    {
+                                        <div class="inline-editor-actions">
+                                            <span class="category-meta">Return to Original?</span>
+                                            <button type="button" class="danger-button" @onclick="() => UnlinkCustomCategoryUsageAsync(usage)" disabled="@usage.IsBusy">@(usage.IsBusy ? "Unlinking…" : "Unlink")</button>
+                                            <button type="button" class="secondary-button" @onclick="() => CancelCustomCategoryUsageUnlink(usage)" disabled="@usage.IsBusy">Cancel</button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <button type="button"
+                                                class="secondary-button button-with-icon"
+                                                title="Unlink source category"
+                                                aria-label="Unlink source category"
+                                                @onclick="() => BeginCustomCategoryUsageUnlink(usage)"
+                                                disabled="@usage.IsBusy">
+                                            <AppIcon Name="unlink" />
+                                            <span>Unlink</span>
+                                        </button>
+                                    }
                                 </td>
                             </tr>
                         }
@@ -369,12 +391,11 @@ else
     private bool _isCustomCategoryUsageLoading;
     private string? _customCategoryUsageTitle;
     private string? _customCategoryUsageErrorMessage;
-    private List<AdminCustomCategoryUsage> _customCategoryUsages = [];
+    private int? _customCategoryUsageCustomCategoryId;
+    private List<CustomCategoryUsageRowState> _customCategoryUsages = [];
     private CustomCategoryRowState? _pendingCustomCategoryDelete;
     private bool _isCustomCategoryDeleteSaving;
     private string? _customCategoryDeleteErrorMessage;
-    private int? _draggedRuleId;
-    private int? _dropTargetIndex;
 
     private IReadOnlyList<CategoryRowState> FilteredCategoryRows => CategoriesPageState.FilterCategoryRows(_categoryRows, _searchText, _statusFilter);
 
@@ -852,36 +873,16 @@ else
         }
     }
 
-    private void BeginRuleDrag(int ruleId)
+    private async Task DropRuleAsync(RuleDropRequest request)
     {
-        _draggedRuleId = ruleId;
-        _dropTargetIndex = _ruleRows.FindIndex(rule => rule.RuleId == ruleId);
-    }
-
-    private Task EndRuleDrag()
-    {
-        _draggedRuleId = null;
-        _dropTargetIndex = null;
-        return Task.CompletedTask;
-    }
-
-    private Task SetRuleDropTarget(int index)
-    {
-        _dropTargetIndex = index;
-        return Task.CompletedTask;
-    }
-
-    private async Task DropRuleAtIndexAsync(int index)
-    {
-        if (_draggedRuleId is null || _selectedSourceId is null)
+        if (_selectedSourceId is null)
         {
             return;
         }
 
-        var currentIndex = _ruleRows.FindIndex(rule => rule.RuleId == _draggedRuleId.Value);
+        var currentIndex = _ruleRows.FindIndex(rule => rule.RuleId == request.DraggedRuleId);
         if (currentIndex < 0)
         {
-            await EndRuleDrag();
             return;
         }
 
@@ -889,14 +890,13 @@ else
         var originalOrder = orderedIds.ToList();
         var draggedId = orderedIds[currentIndex];
         orderedIds.RemoveAt(currentIndex);
-        if (index > currentIndex)
+        var targetIndex = request.TargetIndex;
+        if (targetIndex > currentIndex)
         {
-            index--;
+            targetIndex--;
         }
 
-        orderedIds.Insert(Math.Clamp(index, 0, orderedIds.Count), draggedId);
-
-        await EndRuleDrag();
+        orderedIds.Insert(Math.Clamp(targetIndex, 0, orderedIds.Count), draggedId);
 
         if (orderedIds.SequenceEqual(originalOrder))
         {
@@ -992,11 +992,14 @@ else
         _isCustomCategoryUsageLoading = true;
         _customCategoryUsageTitle = row.Summary.DisplayName;
         _customCategoryUsageErrorMessage = null;
+        _customCategoryUsageCustomCategoryId = row.Summary.Id;
         _customCategoryUsages = [];
 
         try
         {
-            _customCategoryUsages = (await CategoriesClient.GetCustomCategoryUsagesAsync(row.Summary.Id, _selectedContentType)).ToList();
+            _customCategoryUsages = (await CategoriesClient.GetCustomCategoryUsagesAsync(row.Summary.Id, _selectedContentType))
+                .Select(usage => new CustomCategoryUsageRowState(usage))
+                .ToList();
         }
         catch (Exception exception)
         {
@@ -1013,8 +1016,58 @@ else
         _isCustomCategoryUsageDialogOpen = false;
         _customCategoryUsageTitle = null;
         _customCategoryUsageErrorMessage = null;
+        _customCategoryUsageCustomCategoryId = null;
         _customCategoryUsages = [];
         return Task.CompletedTask;
+    }
+
+    private Task BeginCustomCategoryUsageUnlink(CustomCategoryUsageRowState row)
+    {
+        foreach (var usage in _customCategoryUsages.Where(usage => usage != row))
+        {
+            usage.CancelConfirm();
+        }
+
+        row.BeginConfirm();
+        return Task.CompletedTask;
+    }
+
+    private Task CancelCustomCategoryUsageUnlink(CustomCategoryUsageRowState row)
+    {
+        row.CancelConfirm();
+        return Task.CompletedTask;
+    }
+
+    private async Task UnlinkCustomCategoryUsageAsync(CustomCategoryUsageRowState row)
+    {
+        try
+        {
+            row.BeginUnlink();
+            _customCategoryUsageErrorMessage = null;
+
+            await CategoriesClient.UpdateCategoryMappingAsync(
+                row.Summary.UpstreamCategoryRecordId,
+                new AdminCategoryMappingUpdate(
+                    row.Summary.SourceId,
+                    row.Summary.ContentType,
+                    "Original",
+                    null,
+                    null));
+
+            _customCategoryUsages.Remove(row);
+
+            if (_customCategoryUsageCustomCategoryId is int customCategoryId
+                && _customCategoryRows.SingleOrDefault(item => item.Summary.Id == customCategoryId) is { } customCategoryRow)
+            {
+                customCategoryRow.SetUsageCount(_customCategoryUsages.Count);
+            }
+
+            await RefreshCategoriesViewAsync();
+        }
+        catch (Exception exception)
+        {
+            row.Fail(exception.Message);
+        }
     }
 
     private Task RequestCustomCategoryDelete(CustomCategoryRowState row)

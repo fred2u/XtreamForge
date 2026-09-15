@@ -341,8 +341,84 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.NotNull(payload);
         Assert.Collection(
             payload.OrderBy(item => item.SourceHost).ThenBy(item => item.UpstreamCategoryId),
-            first => Assert.Equal(("provider-a.com", "Vod", "10"), (first.SourceHost, first.ContentType, first.UpstreamCategoryId)),
-            second => Assert.Equal(("provider-b.net", "Vod", "20"), (second.SourceHost, second.ContentType, second.UpstreamCategoryId)));
+            first =>
+            {
+                Assert.True(first.UpstreamCategoryRecordId > 0);
+                Assert.Equal(("provider-a.com", 443, "Vod", "10", "Movies A"), (first.SourceHost, first.SourcePort, first.ContentType, first.UpstreamCategoryId, first.UpstreamCategoryName));
+                Assert.DoesNotContain("user", first.SourceHost, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("pass", first.SourceHost, StringComparison.OrdinalIgnoreCase);
+            },
+            second =>
+            {
+                Assert.True(second.UpstreamCategoryRecordId > 0);
+                Assert.Equal(("provider-b.net", 443, "Vod", "20", "Movies B"), (second.SourceHost, second.SourcePort, second.ContentType, second.UpstreamCategoryId, second.UpstreamCategoryName));
+                Assert.DoesNotContain("user", second.SourceHost, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("pass", second.SourceHost, StringComparison.OrdinalIgnoreCase);
+            });
+    }
+
+    [Fact]
+    public async Task UpdateCategoryMapping_ToOriginal_UnlinksCustomCategoryUsageWithoutDeletingCategory()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-admin-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        int customCategoryId;
+        int sourceCategoryToUnlinkId;
+        int sourceId;
+
+        await using (var scope = setupFactory.Services.CreateAsyncScope())
+        {
+            var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+
+            await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "provider-a.com", 443), ContentType.Vod, [new DiscoveredCategory("10", "Movies A")]);
+            await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "provider-b.net", 443), ContentType.Vod, [new DiscoveredCategory("20", "Movies B")]);
+
+            var sourceACategory = await dbContext.UpstreamCategories.SingleAsync(category => category.UpstreamCategoryId == "10");
+            var sourceBCategory = await dbContext.UpstreamCategories.SingleAsync(category => category.UpstreamCategoryId == "20");
+            sourceId = sourceACategory.XtreamSourceId;
+
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(sourceACategory.Id, sourceACategory.XtreamSourceId, ContentType.Vod, CategoryMappingSelection.Custom, null, "Movies Shared"));
+            customCategoryId = await dbContext.CustomCategories.Where(category => category.ContentType == ContentType.Vod).Select(category => category.Id).SingleAsync();
+            await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(sourceBCategory.Id, sourceBCategory.XtreamSourceId, ContentType.Vod, CategoryMappingSelection.Custom, customCategoryId, null));
+            sourceCategoryToUnlinkId = sourceACategory.Id;
+        }
+
+        using var factory = _factory.WithSqliteDatabase(databasePath);
+        using var client = factory.CreateClient();
+
+        var unlinkResponse = await client.PutAsJsonAsync(
+            $"/api/admin/categories/{sourceCategoryToUnlinkId}/mapping",
+            new AdminCategoryMappingRequest(sourceId, "Vod", "Original", null, null));
+
+        Assert.Equal(HttpStatusCode.OK, unlinkResponse.StatusCode);
+
+        var usagesResponse = await client.GetAsync($"/api/admin/custom-categories/{customCategoryId}/usages?contentType=Vod");
+        var usagesPayload = await usagesResponse.Content.ReadFromJsonAsync<List<AdminCustomCategoryUsageResponse>>();
+        Assert.Equal(HttpStatusCode.OK, usagesResponse.StatusCode);
+        Assert.NotNull(usagesPayload);
+        var remainingUsage = Assert.Single(usagesPayload);
+        Assert.Equal("20", remainingUsage.UpstreamCategoryId);
+
+        var categoriesResponse = await client.GetAsync($"/api/admin/categories?sourceId={sourceId}&contentType=Vod");
+        var categoriesPayload = await categoriesResponse.Content.ReadFromJsonAsync<AdminCategoriesResponse>();
+        Assert.Equal(HttpStatusCode.OK, categoriesResponse.StatusCode);
+        Assert.NotNull(categoriesPayload);
+        Assert.Equal(1, Assert.Single(categoriesPayload.CustomCategories).UsageCount);
+        Assert.Equal("Original", Assert.Single(categoriesPayload.UpstreamCategories, category => category.UpstreamCategoryId == "10").CurrentMappingSelection);
+
+        await using var verifyScope = setupFactory.Services.CreateAsyncScope();
+        var verifyContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var unlinkedCategory = await verifyContext.UpstreamCategories.AsNoTracking().SingleAsync(category => category.Id == sourceCategoryToUnlinkId);
+        var otherCategory = await verifyContext.UpstreamCategories.AsNoTracking().SingleAsync(category => category.UpstreamCategoryId == "20");
+        var persistedCustomCategory = await verifyContext.CustomCategories.AsNoTracking().SingleAsync(category => category.Id == customCategoryId);
+
+        Assert.False(unlinkedCategory.IsExcluded);
+        Assert.Null(unlinkedCategory.CustomCategoryId);
+        Assert.Equal(customCategoryId, otherCategory.CustomCategoryId);
+        Assert.Equal("Movies Shared", persistedCustomCategory.DisplayName);
     }
 
     private static async Task EnsureDatabaseCreatedAsync(WebApplicationFactory<Program> factory)

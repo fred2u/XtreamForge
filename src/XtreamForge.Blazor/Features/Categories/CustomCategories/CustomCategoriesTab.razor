@@ -80,11 +80,11 @@
                                 }
                             </td>
                             <td>
-                                @if (row.Summary.UsageCount > 0)
+                                @if (row.UsageCount > 0)
                                 {
                                     <div class="usage-cell">
                                         <button type="button" class="link-button" @onclick="() => OnOpenUsages.InvokeAsync(row)">
-                                            @row.Summary.UsageCount source categor@(row.Summary.UsageCount == 1 ? "y" : "ies")
+                                            @row.UsageCount source categor@(row.UsageCount == 1 ? "y" : "ies")
                                         </button>
                                         <button type="button" class="icon-button" title="View source category usage" aria-label="View source category usage" @onclick="() => OnOpenUsages.InvokeAsync(row)">
                                             <AppIcon Name="details" />
@@ -106,14 +106,14 @@
                                     }
                                     <button type="button"
                                             class="icon-button danger-button"
-                                            title="@(row.Summary.UsageCount > 0 ? "Delete unavailable while category is in use" : "Delete custom category")"
+                                            title="@(row.UsageCount > 0 ? "Delete unavailable while category is in use" : "Delete custom category")"
                                             aria-label="Delete custom category"
                                             @onclick="() => OnRequestDelete.InvokeAsync(row)"
-                                            disabled="@(row.IsBusy || row.Summary.UsageCount > 0)">
+                                            disabled="@(row.IsBusy || row.UsageCount > 0)">
                                         <AppIcon Name="trash" />
                                     </button>
                                 </div>
-                                @if (row.Summary.UsageCount > 0)
+                                @if (row.UsageCount > 0)
                                 {
                                     <div class="category-meta">Delete is available only when unused. Inspect Used By for details.</div>
                                 }

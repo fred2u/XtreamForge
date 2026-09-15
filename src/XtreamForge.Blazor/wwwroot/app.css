@@ -237,6 +237,15 @@ button:hover:enabled {
     height: 0.95rem;
 }
 
+.modal-header .icon-button {
+    color: var(--text-muted);
+}
+
+.modal-header .icon-button:hover:enabled,
+.modal-header .icon-button:focus-visible {
+    color: var(--text);
+}
+
 .link-button {
     min-height: auto;
     padding: 0;
@@ -250,6 +259,12 @@ button:hover:enabled {
     background: transparent;
     color: var(--primary-hover);
     text-decoration: underline;
+}
+
+.button-with-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
 }
 
 .toolbar-actions,
@@ -467,13 +482,22 @@ input[type="checkbox"] {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 1.5rem;
-    min-height: 1.5rem;
+    min-width: var(--control-height);
+    min-height: var(--control-height);
     color: var(--text-muted);
     cursor: grab;
 }
 
 .drag-handle:active {
+    cursor: grabbing;
+}
+
+.drag-handle[draggable="true"] {
+    cursor: grab;
+}
+
+.dragging-row .drag-handle,
+.drag-handle[draggable="true"]:active {
     cursor: grabbing;
 }
 
@@ -491,8 +515,84 @@ input[type="checkbox"] {
     background: #f8fafc;
 }
 
-.drop-target-row td {
+.drop-target-before td {
     box-shadow: inset 0 2px 0 var(--primary);
+}
+
+.drop-target-after td {
+    box-shadow: inset 0 -2px 0 var(--primary);
+}
+
+.disabled-rule-row {
+    color: var(--text-muted);
+}
+
+.disabled-rule-row .rule-sequence-cell,
+.disabled-rule-row .category-meta {
+    color: inherit;
+}
+
+.switch-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.switch-input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    pointer-events: none;
+}
+
+.switch-track {
+    position: relative;
+    width: 2.2rem;
+    height: 1.25rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: #cbd5e1;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.switch-track::after {
+    content: "";
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.2);
+    transition: transform 0.15s ease;
+}
+
+.switch-input:checked + .switch-track {
+    background: var(--primary);
+    border-color: var(--primary);
+}
+
+.switch-input:checked + .switch-track::after {
+    transform: translateX(0.95rem);
+}
+
+.switch-input:focus-visible + .switch-track {
+    box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.14);
+}
+
+.switch-input:disabled + .switch-track {
+    opacity: 0.65;
+}
+
+.switch-label {
+    min-width: 3.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.78rem;
 }
 
 .categories-skeleton-title,

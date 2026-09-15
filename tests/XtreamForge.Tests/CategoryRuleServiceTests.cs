@@ -265,6 +265,42 @@ public sealed class CategoryRuleServiceTests
     }
 
     [Fact]
+    public async Task UpdateRuleAsync_ReEnablingRule_RestoresItsPersistedPositionAndEvaluation()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var serviceProvider = CreateServiceProvider(connection);
+        await EnsureCreatedAsync(serviceProvider);
+
+        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
+        await SeedVodCategoriesAsync(mappingService);
+        var sourceId = await GetSourceIdAsync(serviceProvider);
+
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, false));
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Include, CategoryRuleOperator.Contains, "SPORT", false, true));
+
+        var disabledFirstRule = (await GetRulesAsync(serviceProvider)).Single(rule => rule.Sequence == 10);
+        Assert.Equal(CategoryInclusionDecision.Include, (await ruleService.PreviewAsync(sourceId, ContentType.Vod, "|FR| SPORT"))!.Evaluation.Decision);
+
+        await ruleService.UpdateRuleAsync(new CategoryRuleEditorCommand(
+            disabledFirstRule.Id,
+            sourceId,
+            ContentType.Vod,
+            disabledFirstRule.Action,
+            disabledFirstRule.Operator,
+            disabledFirstRule.Pattern,
+            disabledFirstRule.CaseSensitive,
+            true));
+
+        var reEnabledRules = await GetRulesAsync(serviceProvider);
+        Assert.Equal([10, 20], reEnabledRules.Select(rule => rule.Sequence).ToArray());
+        Assert.True(reEnabledRules.Single(rule => rule.Id == disabledFirstRule.Id).IsEnabled);
+        Assert.Equal(CategoryInclusionDecision.Exclude, (await ruleService.PreviewAsync(sourceId, ContentType.Vod, "|FR| SPORT"))!.Evaluation.Decision);
+        Assert.Equal(disabledFirstRule.Id, (await ruleService.PreviewAsync(sourceId, ContentType.Vod, "|FR| SPORT"))!.Evaluation.MatchedRuleId);
+    }
+
+    [Fact]
     public async Task ReorderRulesAsync_RejectsRulesFromDifferentScopes()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -302,6 +338,33 @@ public sealed class CategoryRuleServiceTests
         var wrongTypeException = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             ruleService.ReorderRulesAsync(new CategoryRuleOrderCommand(sourceId, ContentType.Vod, [targetRuleIds[0], wrongTypeRuleId])));
         Assert.Contains("selected source or content type", wrongTypeException.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ReorderRulesAsync_RejectsDuplicateAndIncompleteOrderPayloads()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var serviceProvider = CreateServiceProvider(connection);
+        await EnsureCreatedAsync(serviceProvider);
+
+        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
+        await SeedVodCategoriesAsync(mappingService);
+        var sourceId = await GetSourceIdAsync(serviceProvider);
+
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Include, CategoryRuleOperator.Contains, "DOCUMENTAIRE", false, true));
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
+
+        var ruleIds = (await GetRulesAsync(serviceProvider)).Select(rule => rule.Id).ToArray();
+
+        var duplicateException = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ruleService.ReorderRulesAsync(new CategoryRuleOrderCommand(sourceId, ContentType.Vod, [ruleIds[0], ruleIds[0]])));
+        Assert.Contains("unique", duplicateException.Message, StringComparison.OrdinalIgnoreCase);
+
+        var incompleteException = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ruleService.ReorderRulesAsync(new CategoryRuleOrderCommand(sourceId, ContentType.Vod, [ruleIds[0]])));
+        Assert.Contains("every category rule", incompleteException.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private static ServiceProvider CreateServiceProvider(SqliteConnection connection)

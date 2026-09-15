@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/XtreamForge/XtreamForge.csproj" />
+    <Project Path="src/XtreamForge.Blazor/XtreamForge.Blazor.csproj" />
+    <Project Path="src/XtreamForge.AppHost/XtreamForge.AppHost.csproj" />
+    <Project Path="src/XtreamForge.ServiceDefaults/XtreamForge.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/XtreamForge.Tests/XtreamForge.Tests.csproj" />
+  </Folder>
+</Solution>

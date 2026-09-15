@@ -1,0 +1,752 @@
+@page "/categories"
+@using System.Globalization
+@using Microsoft.AspNetCore.WebUtilities
+@using XtreamForge.Blazor.Components.Shared
+@using XtreamForge.Blazor.Features.Categories.CategoryRules
+@using XtreamForge.Blazor.Features.Categories.CustomCategories
+@using XtreamForge.Blazor.Features.Categories.SourceCategories
+@inject CategoriesClient CategoriesClient
+@inject NavigationManager NavigationManager
+
+<PageTitle>Categories - XtreamForge</PageTitle>
+
+<h1>Categories</h1>
+<p class="page-subtitle">Compact source-category administration backed by the existing XtreamForge APIs and PostgreSQL configuration.</p>
+
+@if (_isLoading)
+{
+    <section class="status-card categories-shell-card">
+        <div class="categories-skeleton-title"></div>
+        <div class="categories-skeleton-toolbar"></div>
+        <div class="categories-skeleton-block"></div>
+    </section>
+}
+else if (_categoryView is null || _rulesView is null)
+{
+    <section class="status-card categories-shell-card">
+        <h2>Unable to load category administration</h2>
+        <p>Try again after the backend and database are available.</p>
+        @if (!string.IsNullOrWhiteSpace(_pageErrorMessage))
+        {
+            <p class="inline-error">@_pageErrorMessage</p>
+        }
+    </section>
+}
+else if (_categoryView.Sources.Count == 0)
+{
+    <section class="status-card categories-shell-card">
+        <h2>No sources discovered yet</h2>
+        <p>Xtream sources appear after XtreamForge has synchronized categories from an upstream provider.</p>
+    </section>
+}
+else
+{
+    <section class="status-card categories-shell-card">
+        <div class="categories-toolbar">
+            <div class="category-selector-grid">
+                <label>
+                    Source
+                    <InputSelect @bind-Value="_selectedSourceId" @bind-Value:after="OnSourceChangedAsync">
+                        @foreach (var source in _categoryView.Sources)
+                        {
+                            <option value="@source.Id">@source.DisplayName</option>
+                        }
+                    </InputSelect>
+                </label>
+
+                <label>
+                    Content type
+                    <InputSelect @bind-Value="_selectedContentType" @bind-Value:after="OnContentTypeChangedAsync">
+                        <option value="@AdminContentType.Vod">VOD</option>
+                        <option value="@AdminContentType.Series">Series</option>
+                    </InputSelect>
+                </label>
+
+                <label>
+                    Search
+                    <DebouncedTextInput Value="@_searchText" ValueChanged="OnSearchChangedAsync" Placeholder="Search categories..." />
+                </label>
+
+                <label>
+                    Status
+                    <InputSelect @bind-Value="_statusFilter">
+                        <option value="@CategoryStatusFilter.All">All</option>
+                        <option value="@CategoryStatusFilter.Enabled">Enabled</option>
+                        <option value="@CategoryStatusFilter.Disabled">Disabled</option>
+                    </InputSelect>
+                </label>
+            </div>
+
+            <div class="categories-tab-strip" role="tablist" aria-label="Categories administration sections">
+                @foreach (var tab in _tabs)
+                {
+                    <button
+                        type="button"
+                        class="categories-tab-button @GetTabCssClass(tab.Value)"
+                        role="tab"
+                        aria-selected="@(_activeTab == tab.Value)"
+                        @onclick="() => ActivateTab(tab.Value)">
+                        @tab.Key
+                    </button>
+                }
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_pageErrorMessage))
+        {
+            <div class="inline-error categories-page-error">@_pageErrorMessage</div>
+        }
+
+        @switch (_activeTab)
+        {
+            case CategoriesTab.SourceCategories:
+                <SourceCategoriesTab
+                    Rows="FilteredCategoryRows"
+                    TotalCount="_categoryRows.Count"
+                    CustomCategories="_customCategoryRows"
+                    IsRefreshing="_isCategoryDataRefreshing"
+                    Message="@_categoryMessage"
+                    ErrorMessage="@_categoryErrorMessage"
+                    OnMappingChanged="OnMappingSelectionChangedAsync"
+                    OnCreateCustomCategory="CreateCustomCategoryAsync"
+                    OnCancelCustomCategory="CancelCustomCategoryCreate"
+                    OnRetry="RetryCategoryMappingAsync"
+                    OnRefresh="RefreshFromSourceAsync"
+                    OnOpenRule="OpenMatchedRuleAsync" />
+                break;
+            case CategoriesTab.CategoryRules:
+                <CategoryRulesTab
+                    Rows="_ruleRows"
+                    NewRule="_newRule"
+                    Tester="_ruleTester"
+                    IsCreating="_isRuleCreating"
+                    IsRefreshing="_isRulesRefreshing"
+                    SelectedSourceId="_selectedSourceId"
+                    HighlightedRuleId="_highlightedRuleId"
+                    Message="@_ruleMessage"
+                    ErrorMessage="@_ruleErrorMessage"
+                    OnCreate="CreateRuleAsync"
+                    OnRunTester="RunRuleTesterAsync"
+                    OnBeginEdit="BeginRuleEdit"
+                    OnCancelEdit="CancelRuleEdit"
+                    OnSave="SaveRuleAsync"
+                    OnDelete="DeleteRuleAsync"
+                    OnMoveUp="MoveRuleUpAsync"
+                    OnMoveDown="MoveRuleDownAsync"
+                    OnToggleEnabled="ToggleRuleEnabledAsync" />
+                break;
+            case CategoriesTab.GlobalCustomCategories:
+                <CustomCategoriesTab
+                    Rows="_customCategoryRows"
+                    NewCustomCategory="_newCustomCategory"
+                    IsCreating="_isCustomCategoryCreating"
+                    IsRefreshing="_isCategoryDataRefreshing"
+                    Message="@_customCategoryMessage"
+                    ErrorMessage="@_customCategoryErrorMessage"
+                    OnCreate="CreateStandaloneCustomCategoryAsync"
+                    OnBeginEdit="BeginCustomCategoryEdit"
+                    OnCancelEdit="CancelCustomCategoryEdit"
+                    OnSave="SaveCustomCategoryAsync"
+                    OnDelete="DeleteCustomCategoryAsync" />
+                break;
+        }
+    </section>
+}
+
+@code {
+    private static readonly IReadOnlyDictionary<string, CategoriesTab> _tabs = new Dictionary<string, CategoriesTab>
+    {
+        ["Source Categories"] = CategoriesTab.SourceCategories,
+        ["Category Rules"] = CategoriesTab.CategoryRules,
+        ["Global Custom Categories"] = CategoriesTab.GlobalCustomCategories
+    };
+
+    private AdminCategoriesPayload? _categoryView;
+    private AdminCategoryRulesPayload? _rulesView;
+    private List<CategoryRowState> _categoryRows = [];
+    private List<RuleRowState> _ruleRows = [];
+    private List<CustomCategoryRowState> _customCategoryRows = [];
+    private RuleEditorState _newRule = new() { IsEnabled = true };
+    private RuleTesterState _ruleTester = new();
+    private CustomCategoryEditorState _newCustomCategory = new();
+    private bool _isLoading = true;
+    private bool _isCategoryDataRefreshing;
+    private bool _isRulesRefreshing;
+    private int? _selectedSourceId;
+    private AdminContentType _selectedContentType = AdminContentType.Vod;
+    private string _searchText = string.Empty;
+    private CategoryStatusFilter _statusFilter = CategoryStatusFilter.All;
+    private CategoriesTab _activeTab = CategoriesTab.SourceCategories;
+    private int? _highlightedRuleId;
+    private bool _isRuleCreating;
+    private bool _isCustomCategoryCreating;
+    private string? _pageErrorMessage;
+    private string? _categoryMessage;
+    private string? _categoryErrorMessage;
+    private string? _ruleMessage;
+    private string? _ruleErrorMessage;
+    private string? _customCategoryMessage;
+    private string? _customCategoryErrorMessage;
+
+    private IReadOnlyList<CategoryRowState> FilteredCategoryRows => CategoriesPageState.FilterCategoryRows(_categoryRows, _searchText, _statusFilter);
+
+    protected override async Task OnInitializedAsync()
+    {
+        ApplyQueryString();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _isLoading = true;
+        _pageErrorMessage = null;
+        _categoryMessage = null;
+        _categoryErrorMessage = null;
+        _ruleMessage = null;
+        _ruleErrorMessage = null;
+        _customCategoryMessage = null;
+        _customCategoryErrorMessage = null;
+
+        try
+        {
+            await RefreshAllDataCoreAsync();
+        }
+        catch (Exception exception)
+        {
+            _pageErrorMessage = exception.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task RefreshAllDataCoreAsync()
+    {
+        var categoriesPayload = await CategoriesClient.GetCategoriesAsync(_selectedSourceId, _selectedContentType);
+        ApplyCategoryView(categoriesPayload);
+
+        var rulesPayload = await CategoriesClient.GetRulesAsync(_selectedSourceId, _selectedContentType);
+        ApplyRulesView(rulesPayload);
+    }
+
+    private async Task RefreshCategoriesViewAsync(int? markSavedCategoryId = null, string? message = null)
+    {
+        _isCategoryDataRefreshing = true;
+        _categoryErrorMessage = null;
+        _pageErrorMessage = null;
+
+        try
+        {
+            var payload = await CategoriesClient.GetCategoriesAsync(_selectedSourceId, _selectedContentType);
+            ApplyCategoryView(payload);
+
+            if (markSavedCategoryId is int savedCategoryId
+                && _categoryRows.SingleOrDefault(row => row.Summary.Id == savedCategoryId) is { } savedRow)
+            {
+                savedRow.CommitMapping(savedRow.MappingValue);
+            }
+
+            _categoryMessage = message;
+        }
+        catch (Exception exception)
+        {
+            _categoryErrorMessage = exception.Message;
+        }
+        finally
+        {
+            _isCategoryDataRefreshing = false;
+        }
+    }
+
+    private async Task RefreshRulesAndCategoryViewsAsync(string? message = null, int? highlightRuleId = null)
+    {
+        _isCategoryDataRefreshing = true;
+        _isRulesRefreshing = true;
+        _ruleErrorMessage = null;
+        _pageErrorMessage = null;
+
+        try
+        {
+            await RefreshAllDataCoreAsync();
+            _highlightedRuleId = highlightRuleId;
+            _ruleMessage = message;
+        }
+        catch (Exception exception)
+        {
+            _ruleErrorMessage = exception.Message;
+        }
+        finally
+        {
+            _isCategoryDataRefreshing = false;
+            _isRulesRefreshing = false;
+        }
+    }
+
+    private void ApplyCategoryView(AdminCategoriesPayload payload)
+    {
+        var selectedIds = _categoryRows.Where(row => row.IsSelected).Select(row => row.Summary.Id).ToHashSet();
+
+        _categoryView = payload;
+        _selectedSourceId = payload.SelectedSourceId;
+        _selectedContentType = Enum.TryParse<AdminContentType>(payload.SelectedContentType, true, out var parsedContentType)
+            ? parsedContentType
+            : _selectedContentType;
+        _customCategoryRows = payload.CustomCategories.Select(summary => new CustomCategoryRowState(summary)).ToList();
+        _categoryRows = payload.UpstreamCategories
+            .Select(summary =>
+            {
+                var row = new CategoryRowState(summary)
+                {
+                    IsSelected = selectedIds.Contains(summary.Id)
+                };
+                return row;
+            })
+            .ToList();
+    }
+
+    private void ApplyRulesView(AdminCategoryRulesPayload payload)
+    {
+        _rulesView = payload;
+        _ruleRows = payload.Rules.Select(summary => new RuleRowState(summary)).ToList();
+        if (_highlightedRuleId is int highlightedRuleId && _ruleRows.All(rule => rule.RuleId != highlightedRuleId))
+        {
+            _highlightedRuleId = null;
+        }
+    }
+
+    private void ApplyQueryString()
+    {
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+        var query = QueryHelpers.ParseQuery(uri.Query);
+
+        if (query.TryGetValue("sourceId", out var sourceValues)
+            && int.TryParse(sourceValues[0], NumberStyles.None, CultureInfo.InvariantCulture, out var parsedSourceId))
+        {
+            _selectedSourceId = parsedSourceId;
+        }
+
+        if (query.TryGetValue("contentType", out var contentTypeValues)
+            && Enum.TryParse<AdminContentType>(contentTypeValues[0], true, out var parsedContentType))
+        {
+            _selectedContentType = parsedContentType;
+        }
+    }
+
+    private Task OnSearchChangedAsync(string? value)
+    {
+        _searchText = value?.Trim() ?? string.Empty;
+        return Task.CompletedTask;
+    }
+
+    private void ActivateTab(CategoriesTab tab)
+    {
+        _activeTab = tab;
+    }
+
+    private string GetTabCssClass(CategoriesTab tab) => _activeTab == tab ? "active" : string.Empty;
+
+    private async Task OnSourceChangedAsync()
+    {
+        UpdateLocation();
+        await ReloadAsync();
+    }
+
+    private async Task OnContentTypeChangedAsync()
+    {
+        UpdateLocation();
+        await ReloadAsync();
+    }
+
+    private void UpdateLocation()
+    {
+        var uri = NavigationManager.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["sourceId"] = _selectedSourceId,
+            ["contentType"] = _selectedContentType.ToString()
+        });
+
+        if (!string.Equals(uri, NavigationManager.Uri, StringComparison.Ordinal))
+        {
+            NavigationManager.NavigateTo(uri, replace: true);
+        }
+    }
+
+    private async Task OnMappingSelectionChangedAsync(CategoryRowState row)
+    {
+        _categoryMessage = null;
+        _categoryErrorMessage = null;
+        row.ClearFeedback();
+
+        if (row.MappingValue == "new")
+        {
+            row.BeginCustomCategoryCreate();
+            return;
+        }
+
+        await SaveCategoryMappingAsync(row, row.MappingValue, null);
+    }
+
+    private Task CancelCustomCategoryCreate(CategoryRowState row)
+    {
+        row.CancelCustomCategoryCreate();
+        return Task.CompletedTask;
+    }
+
+    private Task RetryCategoryMappingAsync(CategoryRowState row) =>
+        SaveCategoryMappingAsync(
+            row,
+            row.PendingMappingValue ?? row.MappingValue,
+            row.PendingNewCustomCategoryName ?? row.NewCustomCategoryName);
+
+    private Task OpenMatchedRuleAsync(CategoryRowState row)
+    {
+        if (row.Summary.MatchedRuleId is int matchedRuleId)
+        {
+            _highlightedRuleId = matchedRuleId;
+            _activeTab = CategoriesTab.CategoryRules;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task CreateCustomCategoryAsync(CategoryRowState row) =>
+        SaveCategoryMappingAsync(row, "new", row.NewCustomCategoryName);
+
+    private async Task SaveCategoryMappingAsync(CategoryRowState row, string mappingValue, string? newCustomCategoryName)
+    {
+        if (_selectedSourceId is null)
+        {
+            row.Fail("A source must be selected.");
+            return;
+        }
+
+        try
+        {
+            row.BeginSave(mappingValue, newCustomCategoryName);
+
+            var request = mappingValue switch
+            {
+                "disabled" => new AdminCategoryMappingUpdate(_selectedSourceId.Value, _selectedContentType.ToString(), "Disabled", null, null),
+                "original" => new AdminCategoryMappingUpdate(_selectedSourceId.Value, _selectedContentType.ToString(), "Original", null, null),
+                "new" => new AdminCategoryMappingUpdate(_selectedSourceId.Value, _selectedContentType.ToString(), "Custom", null, newCustomCategoryName),
+                _ when mappingValue.StartsWith("custom:", StringComparison.Ordinal)
+                    && int.TryParse(mappingValue[7..], NumberStyles.None, CultureInfo.InvariantCulture, out var customCategoryId)
+                    => new AdminCategoryMappingUpdate(_selectedSourceId.Value, _selectedContentType.ToString(), "Custom", customCategoryId, null),
+                _ => throw new InvalidOperationException("Invalid category mapping selection.")
+            };
+
+            await CategoriesClient.UpdateCategoryMappingAsync(row.Summary.Id, request);
+            await RefreshCategoriesViewAsync(row.Summary.Id, "Mapping saved.");
+        }
+        catch (Exception exception)
+        {
+            row.Fail(exception.Message);
+        }
+    }
+
+    private async Task RefreshFromSourceAsync()
+    {
+        if (_selectedSourceId is null)
+        {
+            _categoryErrorMessage = "A source must be selected.";
+            return;
+        }
+
+        _categoryMessage = null;
+        _categoryErrorMessage = null;
+        _pageErrorMessage = null;
+        _isCategoryDataRefreshing = true;
+
+        try
+        {
+            await CategoriesClient.RefreshCategoriesAsync(new AdminCategoryRefreshRequest(_selectedSourceId.Value, _selectedContentType.ToString()));
+            await RefreshCategoriesViewAsync(message: "Source categories refreshed.");
+        }
+        catch (Exception exception)
+        {
+            _categoryErrorMessage = exception.Message;
+        }
+        finally
+        {
+            _isCategoryDataRefreshing = false;
+        }
+    }
+
+    private async Task CreateRuleAsync()
+    {
+        if (_selectedSourceId is null)
+        {
+            _ruleErrorMessage = "A source must be selected.";
+            return;
+        }
+
+        try
+        {
+            _isRuleCreating = true;
+            _ruleMessage = null;
+            _ruleErrorMessage = null;
+
+            await CategoriesClient.CreateRuleAsync(new AdminCategoryRuleUpdate(
+                _selectedSourceId.Value,
+                _selectedContentType.ToString(),
+                _newRule.Action.ToString(),
+                _newRule.Operator.ToString(),
+                _newRule.Pattern,
+                _newRule.CaseSensitive,
+                _newRule.IsEnabled));
+
+            _newRule = new RuleEditorState { IsEnabled = true };
+            await RefreshRulesAndCategoryViewsAsync("Rule created.");
+        }
+        catch (Exception exception)
+        {
+            _ruleErrorMessage = exception.Message;
+        }
+        finally
+        {
+            _isRuleCreating = false;
+        }
+    }
+
+    private Task BeginRuleEdit(RuleRowState rule)
+    {
+        rule.BeginEdit();
+        return Task.CompletedTask;
+    }
+
+    private Task CancelRuleEdit(RuleRowState rule)
+    {
+        rule.CancelEdit();
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveRuleAsync(RuleRowState rule)
+    {
+        if (_selectedSourceId is null)
+        {
+            rule.Fail("A source must be selected.");
+            return;
+        }
+
+        try
+        {
+            rule.BeginSave();
+            await CategoriesClient.UpdateRuleAsync(rule.RuleId, new AdminCategoryRuleUpdate(
+                _selectedSourceId.Value,
+                _selectedContentType.ToString(),
+                rule.Action.ToString(),
+                rule.Operator.ToString(),
+                rule.Pattern,
+                rule.CaseSensitive,
+                rule.IsEnabled));
+
+            rule.CommitSave();
+            await RefreshRulesAndCategoryViewsAsync("Rule saved.", rule.RuleId);
+        }
+        catch (Exception exception)
+        {
+            rule.Fail(exception.Message);
+        }
+    }
+
+    private async Task ToggleRuleEnabledAsync(RuleRowState rule)
+    {
+        if (_selectedSourceId is null)
+        {
+            rule.Fail("A source must be selected.");
+            return;
+        }
+
+        if (rule.IsEditing)
+        {
+            rule.Fail("Save or cancel the current edit before changing the rule state.");
+            return;
+        }
+
+        var originalValue = rule.IsEnabled;
+
+        try
+        {
+            rule.IsEnabled = !rule.IsEnabled;
+            rule.BeginSave();
+            await CategoriesClient.UpdateRuleAsync(rule.RuleId, new AdminCategoryRuleUpdate(
+                _selectedSourceId.Value,
+                _selectedContentType.ToString(),
+                rule.Action.ToString(),
+                rule.Operator.ToString(),
+                rule.Pattern,
+                rule.CaseSensitive,
+                rule.IsEnabled));
+
+            rule.SetSavedEnabled(rule.IsEnabled);
+            await RefreshRulesAndCategoryViewsAsync(rule.IsEnabled ? "Rule enabled." : "Rule disabled.", rule.RuleId);
+        }
+        catch (Exception exception)
+        {
+            rule.IsEnabled = originalValue;
+            rule.Fail(exception.Message);
+        }
+    }
+
+    private Task MoveRuleUpAsync(RuleRowState rule) => MoveRuleAsync(rule, moveUp: true);
+
+    private Task MoveRuleDownAsync(RuleRowState rule) => MoveRuleAsync(rule, moveUp: false);
+
+    private async Task MoveRuleAsync(RuleRowState rule, bool moveUp)
+    {
+        if (_selectedSourceId is null)
+        {
+            rule.Fail("A source must be selected.");
+            return;
+        }
+
+        if (rule.IsEditing)
+        {
+            rule.Fail("Save or cancel the current edit before reordering the rule.");
+            return;
+        }
+
+        try
+        {
+            rule.BeginSave();
+            await CategoriesClient.MoveRuleAsync(rule.RuleId, _selectedSourceId.Value, _selectedContentType, moveUp);
+            await RefreshRulesAndCategoryViewsAsync("Rule order updated.", rule.RuleId);
+        }
+        catch (Exception exception)
+        {
+            rule.Fail(exception.Message);
+        }
+    }
+
+    private async Task DeleteRuleAsync(RuleRowState rule)
+    {
+        if (_selectedSourceId is null)
+        {
+            rule.Fail("A source must be selected.");
+            return;
+        }
+
+        if (rule.IsEditing)
+        {
+            rule.Fail("Save or cancel the current edit before deleting the rule.");
+            return;
+        }
+
+        if (!rule.ConfirmDelete)
+        {
+            rule.Fail("Confirm delete before removing a rule.");
+            return;
+        }
+
+        try
+        {
+            rule.BeginSave();
+            await CategoriesClient.DeleteRuleAsync(rule.RuleId, _selectedSourceId.Value, _selectedContentType);
+            await RefreshRulesAndCategoryViewsAsync("Rule deleted.");
+        }
+        catch (Exception exception)
+        {
+            rule.Fail(exception.Message);
+        }
+    }
+
+    private async Task RunRuleTesterAsync()
+    {
+        if (_selectedSourceId is null)
+        {
+            _ruleTester.ErrorMessage = "A source must be selected.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_ruleTester.CategoryName))
+        {
+            _ruleTester.ErrorMessage = "Enter a category name to test.";
+            return;
+        }
+
+        _ruleTester.SaveState = MutationFeedbackState.Saving;
+        _ruleTester.ErrorMessage = null;
+
+        try
+        {
+            _ruleTester.Preview = await CategoriesClient.PreviewRuleAsync(_selectedSourceId.Value, _selectedContentType, _ruleTester.CategoryName);
+            _ruleTester.SaveState = MutationFeedbackState.Saved;
+        }
+        catch (Exception exception)
+        {
+            _ruleTester.Preview = null;
+            _ruleTester.ErrorMessage = exception.Message;
+            _ruleTester.SaveState = MutationFeedbackState.Failed;
+        }
+    }
+
+    private Task BeginCustomCategoryEdit(CustomCategoryRowState row)
+    {
+        row.BeginEdit();
+        return Task.CompletedTask;
+    }
+
+    private Task CancelCustomCategoryEdit(CustomCategoryRowState row)
+    {
+        row.CancelEdit();
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveCustomCategoryAsync(CustomCategoryRowState row)
+    {
+        try
+        {
+            row.BeginSave();
+            _customCategoryMessage = null;
+            _customCategoryErrorMessage = null;
+            await CategoriesClient.UpdateCustomCategoryAsync(row.Summary.Id, new AdminCustomCategoryUpdate(_selectedContentType.ToString(), row.DisplayName));
+            row.CommitSave();
+            _customCategoryMessage = "Custom category saved.";
+            await RefreshCategoriesViewAsync();
+        }
+        catch (Exception exception)
+        {
+            row.Fail(exception.Message);
+        }
+    }
+
+    private async Task CreateStandaloneCustomCategoryAsync()
+    {
+        try
+        {
+            _isCustomCategoryCreating = true;
+            _customCategoryMessage = null;
+            _customCategoryErrorMessage = null;
+            await CategoriesClient.CreateCustomCategoryAsync(new AdminCustomCategoryCreate(_selectedContentType.ToString(), _newCustomCategory.DisplayName));
+            _newCustomCategory = new CustomCategoryEditorState();
+            _customCategoryMessage = "Custom category created.";
+            await RefreshCategoriesViewAsync();
+        }
+        catch (Exception exception)
+        {
+            _customCategoryErrorMessage = exception.Message;
+        }
+        finally
+        {
+            _isCustomCategoryCreating = false;
+        }
+    }
+
+    private async Task DeleteCustomCategoryAsync(CustomCategoryRowState row)
+    {
+        try
+        {
+            row.BeginSave();
+            _customCategoryMessage = null;
+            _customCategoryErrorMessage = null;
+            await CategoriesClient.DeleteCustomCategoryAsync(row.Summary.Id, _selectedContentType);
+            _customCategoryMessage = "Custom category deleted.";
+            await RefreshCategoriesViewAsync();
+        }
+        catch (Exception exception)
+        {
+            row.Fail(exception.Message);
+        }
+    }
+}

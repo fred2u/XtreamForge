@@ -1,7 +1,8 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
 var postgres = builder.AddPostgres("postgres")
-    .WithDataVolume("xtreamforge-postgres-data");
+    .WithDataVolume("xtreamforge-postgres-data")
+    .WithPgAdmin();
 
 var database = postgres.AddDatabase("database", "xtreamforge");
 

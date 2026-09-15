@@ -1012,10 +1012,10 @@ else
                 _sourceDiscoveryForm.Password));
 
             _selectedSourceId = result.SourceId;
+            _activeTab = CategoriesTab.SourceCategories;
             UpdateLocation();
             await CloseAddSourceDialog();
             await ReloadAsync();
-            _activeTab = CategoriesTab.SourceCategories;
             _categoryMessage = $"Source imported. {result.VodCategoryCount} VOD and {result.SeriesCategoryCount} Series categories synchronized.";
         }
         catch (Exception exception)

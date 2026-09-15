@@ -2,7 +2,7 @@
 
 @if (IsOpen)
 {
-    <div class="modal-backdrop" @onclick="HandleBackdropClickAsync">
+    <div class="modal-backdrop" tabindex="-1" @onclick="HandleBackdropClickAsync" @onkeydown="HandleKeyDownAsync">
         <section
             class="modal-dialog"
             role="dialog"
@@ -10,8 +10,7 @@
             aria-labelledby="@_titleId"
             tabindex="-1"
             @ref="_dialogElement"
-            @onclick:stopPropagation="true"
-            @onkeydown="HandleKeyDownAsync">
+            @onclick:stopPropagation="true">
             <header class="modal-header">
                 <h2 id="@_titleId">@Title</h2>
                 <button type="button" class="icon-button" title="Close dialog" aria-label="Close dialog" @onclick="OnClose">

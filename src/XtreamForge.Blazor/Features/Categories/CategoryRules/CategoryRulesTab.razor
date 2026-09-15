@@ -1,4 +1,5 @@
 @namespace XtreamForge.Blazor.Features.Categories.CategoryRules
+@using XtreamForge.Blazor.Components.Shared
 
 <section class="categories-tab-panel">
     <header class="categories-panel-header">
@@ -11,6 +12,39 @@
             <div class="categories-count">Refreshing…</div>
         }
     </header>
+
+    <div class="categories-toolbar-grid">
+        <label>
+            Source
+            <InputSelect Value="SelectedSourceId" ValueChanged="OnSelectedSourceChangedAsync" disabled="@(Sources.Count == 0)">
+                @if (Sources.Count == 0)
+                {
+                    <option value="">No sources</option>
+                }
+                else
+                {
+                    @foreach (var source in Sources)
+                    {
+                        <option value="@source.Id">@source.DisplayName</option>
+                    }
+                }
+            </InputSelect>
+        </label>
+
+        <label>
+            Content Type
+            <InputSelect Value="SelectedContentType" ValueChanged="OnSelectedContentTypeChangedAsync">
+                <option value="@AdminContentType.Vod">VOD</option>
+                <option value="@AdminContentType.Series">Series</option>
+            </InputSelect>
+        </label>
+
+        <div class="toolbar-actions">
+            <button type="button" @onclick="() => OnToggleCreate.InvokeAsync()" disabled="@(!HasSelectedSource)">
+                @(ShowCreateEditor ? "Hide add rule" : "+ Add rule")
+            </button>
+        </div>
+    </div>
 
     @if (!string.IsNullOrWhiteSpace(Message) || !string.IsNullOrWhiteSpace(ErrorMessage))
     {
@@ -26,46 +60,49 @@
         </div>
     }
 
-    <div class="rule-editor-card">
-        <h3>Add rule</h3>
-        <div class="rule-editor-grid">
-            <label>
-                Action
-                <InputSelect @bind-Value="NewRule.Action" disabled="@(!HasSelectedSource || IsCreating)">
-                    <option value="@CategoryRuleActionOption.Include">Include</option>
-                    <option value="@CategoryRuleActionOption.Exclude">Exclude</option>
-                </InputSelect>
-            </label>
-            <label>
-                Match
-                <InputSelect @bind-Value="NewRule.Operator" disabled="@(!HasSelectedSource || IsCreating)">
-                    <option value="@CategoryRuleOperatorOption.Contains">Contains</option>
-                    <option value="@CategoryRuleOperatorOption.StartsWith">StartsWith</option>
-                </InputSelect>
-            </label>
-            <label>
-                Pattern
-                <InputText @bind-Value="NewRule.Pattern" maxlength="255" disabled="@(!HasSelectedSource || IsCreating)" />
-            </label>
-            <label>
-                Case
-                <InputSelect @bind-Value="NewRule.CaseSensitive" disabled="@(!HasSelectedSource || IsCreating)">
-                    <option value="false">Ignore case</option>
-                    <option value="true">Case sensitive</option>
-                </InputSelect>
-            </label>
-            <label>
-                Enabled
-                <InputSelect @bind-Value="NewRule.IsEnabled" disabled="@(!HasSelectedSource || IsCreating)">
-                    <option value="true">Yes</option>
-                    <option value="false">No</option>
-                </InputSelect>
-            </label>
-            <div class="rule-action-cell">
-                <button type="button" @onclick="() => OnCreate.InvokeAsync()" disabled="@(!HasSelectedSource || IsCreating)">@(IsCreating ? "Saving…" : "Create")</button>
+    @if (ShowCreateEditor)
+    {
+        <div class="rule-editor-card">
+            <h3>Add rule</h3>
+            <div class="rule-editor-grid">
+                <label>
+                    Action
+                    <InputSelect @bind-Value="NewRule.Action" disabled="@(!HasSelectedSource || IsCreating)">
+                        <option value="@CategoryRuleActionOption.Include">Include</option>
+                        <option value="@CategoryRuleActionOption.Exclude">Exclude</option>
+                    </InputSelect>
+                </label>
+                <label>
+                    Match
+                    <InputSelect @bind-Value="NewRule.Operator" disabled="@(!HasSelectedSource || IsCreating)">
+                        <option value="@CategoryRuleOperatorOption.Contains">Contains</option>
+                        <option value="@CategoryRuleOperatorOption.StartsWith">StartsWith</option>
+                    </InputSelect>
+                </label>
+                <label>
+                    Pattern
+                    <InputText @bind-Value="NewRule.Pattern" maxlength="255" disabled="@(!HasSelectedSource || IsCreating)" />
+                </label>
+                <label>
+                    Case
+                    <InputSelect @bind-Value="NewRule.CaseSensitive" disabled="@(!HasSelectedSource || IsCreating)">
+                        <option value="false">Ignore case</option>
+                        <option value="true">Case sensitive</option>
+                    </InputSelect>
+                </label>
+                <label>
+                    Enabled
+                    <InputSelect @bind-Value="NewRule.IsEnabled" disabled="@(!HasSelectedSource || IsCreating)">
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
+                    </InputSelect>
+                </label>
+                <div class="rule-action-cell">
+                    <button type="button" @onclick="() => OnCreate.InvokeAsync()" disabled="@(!HasSelectedSource || IsCreating)">@(IsCreating ? "Saving…" : "Create")</button>
+                </div>
             </div>
         </div>
-    </div>
+    }
 
     <div class="rule-editor-card">
         <h3>Rule Tester</h3>
@@ -117,7 +154,7 @@
             <table class="category-grid rules-grid">
                 <thead>
                     <tr>
-                        <th>Order</th>
+                        <th class="drag-column"></th>
                         <th>Action</th>
                         <th>Match</th>
                         <th>Pattern</th>
@@ -127,10 +164,35 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var rule in Rows)
+                    @for (var index = 0; index < Rows.Count; index++)
                     {
-                        <tr @key="rule.RuleId" class="@(HighlightedRuleId == rule.RuleId ? "highlighted-row" : null)">
-                            <td>@rule.Sequence</td>
+                        var rule = Rows[index];
+                        if (DraggedRuleId is not null)
+                        {
+                            <tr class="rule-drop-zone @(DropTargetIndex == index ? "active" : null)"
+                                @ondragover:preventDefault
+                                @ondragenter="() => OnDropTargetChanged.InvokeAsync(index)"
+                                @ondrop="() => OnDropAtIndex.InvokeAsync(index)">
+                                <td colspan="7">
+                                    <div class="rule-drop-indicator"></div>
+                                </td>
+                            </tr>
+                        }
+
+                        <tr @key="rule.RuleId"
+                            class="@(HighlightedRuleId == rule.RuleId ? "highlighted-row" : null)">
+                            <td class="drag-column">
+                                <button type="button"
+                                        class="icon-button drag-handle"
+                                        title="Drag to reorder"
+                                        aria-label="Drag to reorder"
+                                        draggable="@rule.CanRunSecondaryActions"
+                                        @ondragstart="() => OnDragStart.InvokeAsync(rule.RuleId)"
+                                        @ondragend="() => OnDragEnd.InvokeAsync()"
+                                        disabled="@(!rule.CanRunSecondaryActions)">
+                                    <AppIcon Name="drag" />
+                                </button>
+                            </td>
                             @if (rule.IsEditing)
                             {
                                 <td>
@@ -168,7 +230,7 @@
                                 <td>@(rule.IsEnabled ? "Yes" : "No")</td>
                             }
                             <td>
-                                <div class="inline-editor-actions">
+                                <div class="row-actions">
                                     @if (rule.IsEditing)
                                     {
                                         <button type="button" @onclick="() => OnSave.InvokeAsync(rule)" disabled="@rule.IsBusy">@(rule.IsBusy ? "Saving…" : "Save")</button>
@@ -176,23 +238,43 @@
                                     }
                                     else
                                     {
-                                        <button type="button" class="secondary-button" @onclick="() => OnBeginEdit.InvokeAsync(rule)" disabled="@rule.IsBusy">Edit</button>
+                                        <button type="button" class="icon-button" title="Edit rule" aria-label="Edit rule" @onclick="() => OnBeginEdit.InvokeAsync(rule)" disabled="@rule.IsBusy">
+                                            <AppIcon Name="edit" />
+                                        </button>
                                     }
-                                    <button type="button" class="secondary-button" @onclick="() => OnToggleEnabled.InvokeAsync(rule)" disabled="@(!rule.CanRunSecondaryActions)">@(rule.IsEnabled ? "Disable" : "Enable")</button>
-                                    <button type="button" class="secondary-button" @onclick="() => OnMoveUp.InvokeAsync(rule)" disabled="@(!rule.CanRunSecondaryActions)" aria-label="Move rule up">↑</button>
-                                    <button type="button" class="secondary-button" @onclick="() => OnMoveDown.InvokeAsync(rule)" disabled="@(!rule.CanRunSecondaryActions)" aria-label="Move rule down">↓</button>
-                                </div>
-                                <div class="inline-editor-actions">
-                                    <label class="checkbox-label compact-checkbox-label">
-                                        <InputCheckbox @bind-Value="rule.ConfirmDelete" disabled="@(!rule.CanRunSecondaryActions)" />
-                                        Confirm delete
-                                    </label>
-                                    <button type="button" class="danger-button" @onclick="() => OnDelete.InvokeAsync(rule)" disabled="@(!rule.CanRunSecondaryActions)">Delete</button>
+                                    <button type="button"
+                                            class="icon-button"
+                                            title="@(rule.IsEnabled ? "Disable rule" : "Enable rule")"
+                                            aria-label="@(rule.IsEnabled ? "Disable rule" : "Enable rule")"
+                                            @onclick="() => OnToggleEnabled.InvokeAsync(rule)"
+                                            disabled="@(!rule.CanRunSecondaryActions)">
+                                        <AppIcon Name="power" />
+                                    </button>
+                                    <button type="button"
+                                            class="icon-button danger-button"
+                                            title="Delete rule"
+                                            aria-label="Delete rule"
+                                            @onclick="() => OnRequestDelete.InvokeAsync(rule)"
+                                            disabled="@(!rule.CanRunSecondaryActions)">
+                                        <AppIcon Name="trash" />
+                                    </button>
                                 </div>
                                 @if (!string.IsNullOrWhiteSpace(rule.Message))
                                 {
                                     <div class="@(rule.SaveState == MutationFeedbackState.Failed ? "inline-error" : "category-meta")">@rule.Message</div>
                                 }
+                            </td>
+                        </tr>
+                    }
+
+                    @if (DraggedRuleId is not null)
+                    {
+                        <tr class="rule-drop-zone @(DropTargetIndex == Rows.Count ? "active" : null)"
+                            @ondragover:preventDefault
+                            @ondragenter="() => OnDropTargetChanged.InvokeAsync(Rows.Count)"
+                            @ondrop="() => OnDropAtIndex.InvokeAsync(Rows.Count)">
+                            <td colspan="7">
+                                <div class="rule-drop-indicator"></div>
                             </td>
                         </tr>
                     }
@@ -204,6 +286,15 @@
 
 @code {
     [Parameter]
+    public required IReadOnlyList<AdminSource> Sources { get; set; }
+
+    [Parameter]
+    public int? SelectedSourceId { get; set; }
+
+    [Parameter]
+    public AdminContentType SelectedContentType { get; set; }
+
+    [Parameter]
     public required IReadOnlyList<RuleRowState> Rows { get; set; }
 
     [Parameter]
@@ -213,16 +304,22 @@
     public required RuleTesterState Tester { get; set; }
 
     [Parameter]
+    public bool ShowCreateEditor { get; set; }
+
+    [Parameter]
     public bool IsCreating { get; set; }
 
     [Parameter]
     public bool IsRefreshing { get; set; }
 
     [Parameter]
-    public int? SelectedSourceId { get; set; }
+    public int? HighlightedRuleId { get; set; }
 
     [Parameter]
-    public int? HighlightedRuleId { get; set; }
+    public int? DraggedRuleId { get; set; }
+
+    [Parameter]
+    public int? DropTargetIndex { get; set; }
 
     [Parameter]
     public string? Message { get; set; }
@@ -232,6 +329,9 @@
 
     [Parameter]
     public EventCallback OnCreate { get; set; }
+
+    [Parameter]
+    public EventCallback OnToggleCreate { get; set; }
 
     [Parameter]
     public EventCallback OnRunTester { get; set; }
@@ -246,16 +346,32 @@
     public EventCallback<RuleRowState> OnSave { get; set; }
 
     [Parameter]
-    public EventCallback<RuleRowState> OnDelete { get; set; }
-
-    [Parameter]
-    public EventCallback<RuleRowState> OnMoveUp { get; set; }
-
-    [Parameter]
-    public EventCallback<RuleRowState> OnMoveDown { get; set; }
+    public EventCallback<RuleRowState> OnRequestDelete { get; set; }
 
     [Parameter]
     public EventCallback<RuleRowState> OnToggleEnabled { get; set; }
 
+    [Parameter]
+    public EventCallback<int?> OnSourceChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<AdminContentType> OnContentTypeChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<int> OnDragStart { get; set; }
+
+    [Parameter]
+    public EventCallback OnDragEnd { get; set; }
+
+    [Parameter]
+    public EventCallback<int> OnDropTargetChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<int> OnDropAtIndex { get; set; }
+
     private bool HasSelectedSource => SelectedSourceId is not null;
+
+    private Task OnSelectedSourceChangedAsync(int? value) => OnSourceChanged.InvokeAsync(value);
+
+    private Task OnSelectedContentTypeChangedAsync(AdminContentType value) => OnContentTypeChanged.InvokeAsync(value);
 }

@@ -61,6 +61,7 @@ builder.Services.AddSingleton(_ =>
 builder.Services.AddScoped<ForwarderService>();
 builder.Services.AddScoped<XtreamCategoryProxyService>();
 builder.Services.AddScoped<XtreamContentProxyService>();
+builder.Services.AddScoped<XtreamSourceDiscoveryService>();
 builder.Services.AddSingleton<XtreamUpstreamDestinationResolver>();
 builder.Services.AddSingleton<XtreamRequestClassifier>();
 

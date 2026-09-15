@@ -32,64 +32,24 @@ else if (_categoryView is null || _rulesView is null)
         }
     </section>
 }
-else if (_categoryView.Sources.Count == 0)
-{
-    <section class="status-card categories-shell-card">
-        <h2>No sources discovered yet</h2>
-        <p>Xtream sources appear after XtreamForge has synchronized categories from an upstream provider.</p>
-    </section>
-}
 else
 {
     <section class="status-card categories-shell-card">
-        <div class="categories-toolbar">
-            <div class="category-selector-grid">
-                <label>
-                    Source
-                    <InputSelect @bind-Value="_selectedSourceId" @bind-Value:after="OnSourceChangedAsync">
-                        @foreach (var source in _categoryView.Sources)
-                        {
-                            <option value="@source.Id">@source.DisplayName</option>
-                        }
-                    </InputSelect>
-                </label>
-
-                <label>
-                    Content type
-                    <InputSelect @bind-Value="_selectedContentType" @bind-Value:after="OnContentTypeChangedAsync">
-                        <option value="@AdminContentType.Vod">VOD</option>
-                        <option value="@AdminContentType.Series">Series</option>
-                    </InputSelect>
-                </label>
-
-                <label>
-                    Search
-                    <DebouncedTextInput Value="@_searchText" ValueChanged="OnSearchChangedAsync" Placeholder="Search categories..." />
-                </label>
-
-                <label>
-                    Status
-                    <InputSelect @bind-Value="_statusFilter">
-                        <option value="@CategoryStatusFilter.All">All</option>
-                        <option value="@CategoryStatusFilter.Enabled">Enabled</option>
-                        <option value="@CategoryStatusFilter.Disabled">Disabled</option>
-                    </InputSelect>
-                </label>
-            </div>
-
-            <div class="categories-tab-strip" role="tablist" aria-label="Categories administration sections">
-                @foreach (var tab in _tabs)
-                {
-                    <button
-                        type="button"
-                        class="categories-tab-button @GetTabCssClass(tab.Value)"
-                        role="tab"
-                        aria-selected="@(_activeTab == tab.Value)"
-                        @onclick="() => ActivateTab(tab.Value)">
-                        @tab.Key
-                    </button>
-                }
-            </div>
+        <div class="categories-tab-strip" role="tablist" aria-label="Categories administration sections">
+            @foreach (var tab in _tabs)
+            {
+                <button
+                    type="button"
+                    id="@GetTabId(tab.Value)"
+                    class="categories-tab-button @GetTabCssClass(tab.Value)"
+                    role="tab"
+                    aria-selected="@(_activeTab == tab.Value)"
+                    aria-controls="@GetPanelId(tab.Value)"
+                    tabindex="@(_activeTab == tab.Value ? 0 : -1)"
+                    @onclick="() => ActivateTab(tab.Value)">
+                    @tab.Key
+                </button>
+            }
         </div>
 
         @if (!string.IsNullOrWhiteSpace(_pageErrorMessage))
@@ -100,58 +60,199 @@ else
         @switch (_activeTab)
         {
             case CategoriesTab.SourceCategories:
-                <SourceCategoriesTab
-                    Rows="FilteredCategoryRows"
-                    TotalCount="_categoryRows.Count"
-                    CustomCategories="_customCategoryRows"
-                    IsRefreshing="_isCategoryDataRefreshing"
-                    Message="@_categoryMessage"
-                    ErrorMessage="@_categoryErrorMessage"
-                    OnMappingChanged="OnMappingSelectionChangedAsync"
-                    OnCreateCustomCategory="CreateCustomCategoryAsync"
-                    OnCancelCustomCategory="CancelCustomCategoryCreate"
-                    OnRetry="RetryCategoryMappingAsync"
-                    OnRefresh="RefreshFromSourceAsync"
-                    OnOpenRule="OpenMatchedRuleAsync" />
+                <div id="@GetPanelId(CategoriesTab.SourceCategories)" role="tabpanel" aria-labelledby="@GetTabId(CategoriesTab.SourceCategories)">
+                    <SourceCategoriesTab
+                        Sources="_categoryView.Sources"
+                        SelectedSourceId="_selectedSourceId"
+                        SelectedContentType="_selectedContentType"
+                        SearchText="_searchText"
+                        StatusFilter="_statusFilter"
+                        Rows="FilteredCategoryRows"
+                        TotalCount="_categoryRows.Count"
+                        CustomCategories="_customCategoryRows"
+                        Message="@_categoryMessage"
+                        ErrorMessage="@_categoryErrorMessage"
+                        OnSourceChanged="OnSourceChangedAsync"
+                        OnContentTypeChanged="OnContentTypeChangedAsync"
+                        OnSearchChanged="OnSearchChangedAsync"
+                        OnStatusFilterChanged="OnStatusFilterChangedAsync"
+                        OnOpenAddSource="OpenAddSourceDialog"
+                        OnMappingChanged="OnMappingSelectionChangedAsync"
+                        OnCreateCustomCategory="CreateCustomCategoryAsync"
+                        OnCancelCustomCategory="CancelCustomCategoryCreate"
+                        OnRetry="RetryCategoryMappingAsync"
+                        OnOpenRule="OpenMatchedRuleAsync" />
+                </div>
                 break;
             case CategoriesTab.CategoryRules:
-                <CategoryRulesTab
-                    Rows="_ruleRows"
-                    NewRule="_newRule"
-                    Tester="_ruleTester"
-                    IsCreating="_isRuleCreating"
-                    IsRefreshing="_isRulesRefreshing"
-                    SelectedSourceId="_selectedSourceId"
-                    HighlightedRuleId="_highlightedRuleId"
-                    Message="@_ruleMessage"
-                    ErrorMessage="@_ruleErrorMessage"
-                    OnCreate="CreateRuleAsync"
-                    OnRunTester="RunRuleTesterAsync"
-                    OnBeginEdit="BeginRuleEdit"
-                    OnCancelEdit="CancelRuleEdit"
-                    OnSave="SaveRuleAsync"
-                    OnDelete="DeleteRuleAsync"
-                    OnMoveUp="MoveRuleUpAsync"
-                    OnMoveDown="MoveRuleDownAsync"
-                    OnToggleEnabled="ToggleRuleEnabledAsync" />
+                <div id="@GetPanelId(CategoriesTab.CategoryRules)" role="tabpanel" aria-labelledby="@GetTabId(CategoriesTab.CategoryRules)">
+                    <CategoryRulesTab
+                        Sources="_categoryView.Sources"
+                        SelectedSourceId="_selectedSourceId"
+                        SelectedContentType="_selectedContentType"
+                        Rows="_ruleRows"
+                        NewRule="_newRule"
+                        Tester="_ruleTester"
+                        ShowCreateEditor="_showNewRuleEditor"
+                        IsCreating="_isRuleCreating"
+                        IsRefreshing="_isRulesRefreshing"
+                        HighlightedRuleId="_highlightedRuleId"
+                        DraggedRuleId="_draggedRuleId"
+                        DropTargetIndex="_dropTargetIndex"
+                        Message="@_ruleMessage"
+                        ErrorMessage="@_ruleErrorMessage"
+                        OnSourceChanged="OnSourceChangedAsync"
+                        OnContentTypeChanged="OnContentTypeChangedAsync"
+                        OnCreate="CreateRuleAsync"
+                        OnToggleCreate="ToggleRuleCreateEditor"
+                        OnRunTester="RunRuleTesterAsync"
+                        OnBeginEdit="BeginRuleEdit"
+                        OnCancelEdit="CancelRuleEdit"
+                        OnSave="SaveRuleAsync"
+                        OnRequestDelete="RequestRuleDelete"
+                        OnToggleEnabled="ToggleRuleEnabledAsync"
+                        OnDragStart="BeginRuleDrag"
+                        OnDragEnd="EndRuleDrag"
+                        OnDropTargetChanged="SetRuleDropTarget"
+                        OnDropAtIndex="DropRuleAtIndexAsync" />
+                </div>
                 break;
             case CategoriesTab.GlobalCustomCategories:
-                <CustomCategoriesTab
-                    Rows="_customCategoryRows"
-                    NewCustomCategory="_newCustomCategory"
-                    IsCreating="_isCustomCategoryCreating"
-                    IsRefreshing="_isCategoryDataRefreshing"
-                    Message="@_customCategoryMessage"
-                    ErrorMessage="@_customCategoryErrorMessage"
-                    OnCreate="CreateStandaloneCustomCategoryAsync"
-                    OnBeginEdit="BeginCustomCategoryEdit"
-                    OnCancelEdit="CancelCustomCategoryEdit"
-                    OnSave="SaveCustomCategoryAsync"
-                    OnDelete="DeleteCustomCategoryAsync" />
+                <div id="@GetPanelId(CategoriesTab.GlobalCustomCategories)" role="tabpanel" aria-labelledby="@GetTabId(CategoriesTab.GlobalCustomCategories)">
+                    <CustomCategoriesTab
+                        SelectedContentType="_selectedContentType"
+                        Rows="_customCategoryRows"
+                        NewCustomCategory="_newCustomCategory"
+                        ShowCreateEditor="_showNewCustomCategoryEditor"
+                        IsCreating="_isCustomCategoryCreating"
+                        IsRefreshing="_isCategoryDataRefreshing"
+                        Message="@_customCategoryMessage"
+                        ErrorMessage="@_customCategoryErrorMessage"
+                        OnContentTypeChanged="OnContentTypeChangedAsync"
+                        OnCreate="CreateStandaloneCustomCategoryAsync"
+                        OnToggleCreate="ToggleCustomCategoryCreateEditor"
+                        OnBeginEdit="BeginCustomCategoryEdit"
+                        OnCancelEdit="CancelCustomCategoryEdit"
+                        OnSave="SaveCustomCategoryAsync"
+                        OnOpenUsages="OpenCustomCategoryUsagesAsync"
+                        OnRequestDelete="RequestCustomCategoryDelete" />
+                </div>
                 break;
         }
     </section>
 }
+
+<ModalDialog IsOpen="@_isAddSourceDialogOpen" Title="Add Xtream source" OnClose="CloseAddSourceDialog">
+    <div class="dialog-form-grid">
+        <label>
+            Protocol
+            <InputSelect @bind-Value="_sourceDiscoveryForm.Protocol" @bind-Value:after="OnSourceDiscoveryProtocolChangedAsync" disabled="@_isSourceDiscoverySaving">
+                <option value="https">HTTPS</option>
+                <option value="http">HTTP</option>
+            </InputSelect>
+        </label>
+        <label>
+            Host / Base URL
+            <InputText @bind-Value="_sourceDiscoveryForm.HostOrBaseUrl" placeholder="example.com" disabled="@_isSourceDiscoverySaving" />
+        </label>
+        <label>
+            Port
+            <InputNumber @bind-Value="_sourceDiscoveryForm.Port" disabled="@_isSourceDiscoverySaving" />
+        </label>
+        <label>
+            Username
+            <InputText @bind-Value="_sourceDiscoveryForm.Username" disabled="@_isSourceDiscoverySaving" />
+        </label>
+        <label>
+            Password
+            <input class="blazor-password-input" type="password" @bind="_sourceDiscoveryForm.Password" disabled="@_isSourceDiscoverySaving" />
+        </label>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_sourceDiscoveryErrorMessage))
+    {
+        <div class="inline-error">@_sourceDiscoveryErrorMessage</div>
+    }
+
+    <FooterContent>
+        <button type="button" class="secondary-button" @onclick="CloseAddSourceDialog" disabled="@_isSourceDiscoverySaving">Cancel</button>
+        <button type="button" @onclick="DiscoverSourceAsync" disabled="@_isSourceDiscoverySaving">@( _isSourceDiscoverySaving ? "Connecting…" : "Connect & import")</button>
+    </FooterContent>
+</ModalDialog>
+
+<ModalDialog IsOpen="@(_pendingRuleDelete is not null)" Title="Delete category rule?" OnClose="CloseRuleDeleteDialog">
+    @if (_pendingRuleDelete is not null)
+    {
+        <p>@FormatRuleSummary(_pendingRuleDelete)</p>
+        <p class="category-meta">This rule will no longer affect matching source categories.</p>
+    }
+    @if (!string.IsNullOrWhiteSpace(_ruleDeleteErrorMessage))
+    {
+        <div class="inline-error">@_ruleDeleteErrorMessage</div>
+    }
+    <FooterContent>
+        <button type="button" class="secondary-button" @onclick="CloseRuleDeleteDialog" disabled="@_isRuleDeleteSaving">Cancel</button>
+        <button type="button" class="danger-button" @onclick="DeletePendingRuleAsync" disabled="@_isRuleDeleteSaving">@( _isRuleDeleteSaving ? "Deleting…" : "Delete")</button>
+    </FooterContent>
+</ModalDialog>
+
+<ModalDialog IsOpen="@_isCustomCategoryUsageDialogOpen" Title="@(_customCategoryUsageTitle ?? "Custom category usage")" OnClose="CloseCustomCategoryUsagesDialog">
+    @if (_isCustomCategoryUsageLoading)
+    {
+        <p>Loading usage…</p>
+    }
+    else if (!string.IsNullOrWhiteSpace(_customCategoryUsageErrorMessage))
+    {
+        <div class="inline-error">@_customCategoryUsageErrorMessage</div>
+    }
+    else
+    {
+        <p class="category-meta">Used by @_customCategoryUsages.Count source categor@(_customCategoryUsages.Count == 1 ? "y" : "ies").</p>
+        <div class="table-scroll">
+            <table class="category-grid">
+                <thead>
+                    <tr>
+                        <th>Source</th>
+                        <th>Type</th>
+                        <th>Source Category</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var usage in _customCategoryUsages)
+                    {
+                        <tr>
+                            <td>@usage.SourceDisplayName</td>
+                            <td>@usage.ContentType</td>
+                            <td>
+                                <div class="category-name">@usage.UpstreamCategoryName</div>
+                                <div class="category-meta">Upstream ID @usage.UpstreamCategoryId</div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    <FooterContent>
+        <button type="button" class="secondary-button" @onclick="CloseCustomCategoryUsagesDialog">Close</button>
+    </FooterContent>
+</ModalDialog>
+
+<ModalDialog IsOpen="@(_pendingCustomCategoryDelete is not null)" Title="Delete custom category?" OnClose="CloseCustomCategoryDeleteDialog">
+    @if (_pendingCustomCategoryDelete is not null)
+    {
+        <p>@_pendingCustomCategoryDelete.DisplayName</p>
+        <p class="category-meta">This custom category is unused and can be removed.</p>
+    }
+    @if (!string.IsNullOrWhiteSpace(_customCategoryDeleteErrorMessage))
+    {
+        <div class="inline-error">@_customCategoryDeleteErrorMessage</div>
+    }
+    <FooterContent>
+        <button type="button" class="secondary-button" @onclick="CloseCustomCategoryDeleteDialog" disabled="@_isCustomCategoryDeleteSaving">Cancel</button>
+        <button type="button" class="danger-button" @onclick="DeletePendingCustomCategoryAsync" disabled="@_isCustomCategoryDeleteSaving">@( _isCustomCategoryDeleteSaving ? "Deleting…" : "Delete")</button>
+    </FooterContent>
+</ModalDialog>
 
 @code {
     private static readonly IReadOnlyDictionary<string, CategoriesTab> _tabs = new Dictionary<string, CategoriesTab>
@@ -169,6 +270,7 @@ else
     private RuleEditorState _newRule = new() { IsEnabled = true };
     private RuleTesterState _ruleTester = new();
     private CustomCategoryEditorState _newCustomCategory = new();
+    private SourceDiscoveryFormState _sourceDiscoveryForm = SourceDiscoveryFormState.CreateDefault();
     private bool _isLoading = true;
     private bool _isCategoryDataRefreshing;
     private bool _isRulesRefreshing;
@@ -179,7 +281,9 @@ else
     private CategoriesTab _activeTab = CategoriesTab.SourceCategories;
     private int? _highlightedRuleId;
     private bool _isRuleCreating;
+    private bool _showNewRuleEditor = true;
     private bool _isCustomCategoryCreating;
+    private bool _showNewCustomCategoryEditor = true;
     private string? _pageErrorMessage;
     private string? _categoryMessage;
     private string? _categoryErrorMessage;
@@ -187,6 +291,22 @@ else
     private string? _ruleErrorMessage;
     private string? _customCategoryMessage;
     private string? _customCategoryErrorMessage;
+    private bool _isAddSourceDialogOpen;
+    private bool _isSourceDiscoverySaving;
+    private string? _sourceDiscoveryErrorMessage;
+    private RuleRowState? _pendingRuleDelete;
+    private bool _isRuleDeleteSaving;
+    private string? _ruleDeleteErrorMessage;
+    private bool _isCustomCategoryUsageDialogOpen;
+    private bool _isCustomCategoryUsageLoading;
+    private string? _customCategoryUsageTitle;
+    private string? _customCategoryUsageErrorMessage;
+    private List<AdminCustomCategoryUsage> _customCategoryUsages = [];
+    private CustomCategoryRowState? _pendingCustomCategoryDelete;
+    private bool _isCustomCategoryDeleteSaving;
+    private string? _customCategoryDeleteErrorMessage;
+    private int? _draggedRuleId;
+    private int? _dropTargetIndex;
 
     private IReadOnlyList<CategoryRowState> FilteredCategoryRows => CategoriesPageState.FilterCategoryRows(_categoryRows, _searchText, _statusFilter);
 
@@ -285,24 +405,13 @@ else
 
     private void ApplyCategoryView(AdminCategoriesPayload payload)
     {
-        var selectedIds = _categoryRows.Where(row => row.IsSelected).Select(row => row.Summary.Id).ToHashSet();
-
         _categoryView = payload;
         _selectedSourceId = payload.SelectedSourceId;
         _selectedContentType = Enum.TryParse<AdminContentType>(payload.SelectedContentType, true, out var parsedContentType)
             ? parsedContentType
             : _selectedContentType;
         _customCategoryRows = payload.CustomCategories.Select(summary => new CustomCategoryRowState(summary)).ToList();
-        _categoryRows = payload.UpstreamCategories
-            .Select(summary =>
-            {
-                var row = new CategoryRowState(summary)
-                {
-                    IsSelected = selectedIds.Contains(summary.Id)
-                };
-                return row;
-            })
-            .ToList();
+        _categoryRows = payload.UpstreamCategories.Select(summary => new CategoryRowState(summary)).ToList();
     }
 
     private void ApplyRulesView(AdminCategoryRulesPayload payload)
@@ -339,6 +448,12 @@ else
         return Task.CompletedTask;
     }
 
+    private Task OnStatusFilterChangedAsync(CategoryStatusFilter value)
+    {
+        _statusFilter = value;
+        return Task.CompletedTask;
+    }
+
     private void ActivateTab(CategoriesTab tab)
     {
         _activeTab = tab;
@@ -346,14 +461,20 @@ else
 
     private string GetTabCssClass(CategoriesTab tab) => _activeTab == tab ? "active" : string.Empty;
 
-    private async Task OnSourceChangedAsync()
+    private static string GetTabId(CategoriesTab tab) => $"categories-tab-{tab}";
+
+    private static string GetPanelId(CategoriesTab tab) => $"categories-panel-{tab}";
+
+    private async Task OnSourceChangedAsync(int? value)
     {
+        _selectedSourceId = value;
         UpdateLocation();
         await ReloadAsync();
     }
 
-    private async Task OnContentTypeChangedAsync()
+    private async Task OnContentTypeChangedAsync(AdminContentType value)
     {
+        _selectedContentType = value;
         UpdateLocation();
         await ReloadAsync();
     }
@@ -445,34 +566,6 @@ else
         }
     }
 
-    private async Task RefreshFromSourceAsync()
-    {
-        if (_selectedSourceId is null)
-        {
-            _categoryErrorMessage = "A source must be selected.";
-            return;
-        }
-
-        _categoryMessage = null;
-        _categoryErrorMessage = null;
-        _pageErrorMessage = null;
-        _isCategoryDataRefreshing = true;
-
-        try
-        {
-            await CategoriesClient.RefreshCategoriesAsync(new AdminCategoryRefreshRequest(_selectedSourceId.Value, _selectedContentType.ToString()));
-            await RefreshCategoriesViewAsync(message: "Source categories refreshed.");
-        }
-        catch (Exception exception)
-        {
-            _categoryErrorMessage = exception.Message;
-        }
-        finally
-        {
-            _isCategoryDataRefreshing = false;
-        }
-    }
-
     private async Task CreateRuleAsync()
     {
         if (_selectedSourceId is null)
@@ -497,6 +590,7 @@ else
                 _newRule.IsEnabled));
 
             _newRule = new RuleEditorState { IsEnabled = true };
+            _showNewRuleEditor = false;
             await RefreshRulesAndCategoryViewsAsync("Rule created.");
         }
         catch (Exception exception)
@@ -507,6 +601,12 @@ else
         {
             _isRuleCreating = false;
         }
+    }
+
+    private Task ToggleRuleCreateEditor()
+    {
+        _showNewRuleEditor = !_showNewRuleEditor;
+        return Task.CompletedTask;
     }
 
     private Task BeginRuleEdit(RuleRowState rule)
@@ -589,65 +689,51 @@ else
         }
     }
 
-    private Task MoveRuleUpAsync(RuleRowState rule) => MoveRuleAsync(rule, moveUp: true);
-
-    private Task MoveRuleDownAsync(RuleRowState rule) => MoveRuleAsync(rule, moveUp: false);
-
-    private async Task MoveRuleAsync(RuleRowState rule, bool moveUp)
+    private Task RequestRuleDelete(RuleRowState rule)
     {
-        if (_selectedSourceId is null)
-        {
-            rule.Fail("A source must be selected.");
-            return;
-        }
-
-        if (rule.IsEditing)
-        {
-            rule.Fail("Save or cancel the current edit before reordering the rule.");
-            return;
-        }
-
-        try
-        {
-            rule.BeginSave();
-            await CategoriesClient.MoveRuleAsync(rule.RuleId, _selectedSourceId.Value, _selectedContentType, moveUp);
-            await RefreshRulesAndCategoryViewsAsync("Rule order updated.", rule.RuleId);
-        }
-        catch (Exception exception)
-        {
-            rule.Fail(exception.Message);
-        }
-    }
-
-    private async Task DeleteRuleAsync(RuleRowState rule)
-    {
-        if (_selectedSourceId is null)
-        {
-            rule.Fail("A source must be selected.");
-            return;
-        }
-
         if (rule.IsEditing)
         {
             rule.Fail("Save or cancel the current edit before deleting the rule.");
-            return;
+            return Task.CompletedTask;
         }
 
-        if (!rule.ConfirmDelete)
+        _pendingRuleDelete = rule;
+        _ruleDeleteErrorMessage = null;
+        return Task.CompletedTask;
+    }
+
+    private Task CloseRuleDeleteDialog()
+    {
+        _pendingRuleDelete = null;
+        _ruleDeleteErrorMessage = null;
+        _isRuleDeleteSaving = false;
+        return Task.CompletedTask;
+    }
+
+    private async Task DeletePendingRuleAsync()
+    {
+        if (_pendingRuleDelete is null || _selectedSourceId is null)
         {
-            rule.Fail("Confirm delete before removing a rule.");
             return;
         }
 
         try
         {
-            rule.BeginSave();
-            await CategoriesClient.DeleteRuleAsync(rule.RuleId, _selectedSourceId.Value, _selectedContentType);
+            _isRuleDeleteSaving = true;
+            _ruleDeleteErrorMessage = null;
+            _pendingRuleDelete.BeginSave();
+            await CategoriesClient.DeleteRuleAsync(_pendingRuleDelete.RuleId, _selectedSourceId.Value, _selectedContentType);
+            await CloseRuleDeleteDialog();
             await RefreshRulesAndCategoryViewsAsync("Rule deleted.");
         }
         catch (Exception exception)
         {
-            rule.Fail(exception.Message);
+            _ruleDeleteErrorMessage = exception.Message;
+            _pendingRuleDelete.Fail(exception.Message);
+        }
+        finally
+        {
+            _isRuleDeleteSaving = false;
         }
     }
 
@@ -678,6 +764,72 @@ else
             _ruleTester.Preview = null;
             _ruleTester.ErrorMessage = exception.Message;
             _ruleTester.SaveState = MutationFeedbackState.Failed;
+        }
+    }
+
+    private void BeginRuleDrag(int ruleId)
+    {
+        _draggedRuleId = ruleId;
+        _dropTargetIndex = _ruleRows.FindIndex(rule => rule.RuleId == ruleId);
+    }
+
+    private Task EndRuleDrag()
+    {
+        _draggedRuleId = null;
+        _dropTargetIndex = null;
+        return Task.CompletedTask;
+    }
+
+    private Task SetRuleDropTarget(int index)
+    {
+        _dropTargetIndex = index;
+        return Task.CompletedTask;
+    }
+
+    private async Task DropRuleAtIndexAsync(int index)
+    {
+        if (_draggedRuleId is null || _selectedSourceId is null)
+        {
+            return;
+        }
+
+        var currentIndex = _ruleRows.FindIndex(rule => rule.RuleId == _draggedRuleId.Value);
+        if (currentIndex < 0)
+        {
+            await EndRuleDrag();
+            return;
+        }
+
+        var orderedIds = _ruleRows.Select(rule => rule.RuleId).ToList();
+        var draggedId = orderedIds[currentIndex];
+        orderedIds.RemoveAt(currentIndex);
+        if (index > currentIndex)
+        {
+            index--;
+        }
+
+        orderedIds.Insert(Math.Clamp(index, 0, orderedIds.Count), draggedId);
+
+        await EndRuleDrag();
+
+        if (orderedIds.SequenceEqual(_ruleRows.Select(rule => rule.RuleId)))
+        {
+            return;
+        }
+
+        try
+        {
+            _ruleMessage = null;
+            _ruleErrorMessage = null;
+            await CategoriesClient.ReorderRulesAsync(new AdminCategoryRuleOrderUpdate(
+                _selectedSourceId.Value,
+                _selectedContentType.ToString(),
+                orderedIds));
+            await RefreshRulesAndCategoryViewsAsync("Rule order updated.", draggedId);
+        }
+        catch (Exception exception)
+        {
+            _ruleErrorMessage = exception.Message;
         }
     }
 
@@ -720,6 +872,7 @@ else
             _customCategoryErrorMessage = null;
             await CategoriesClient.CreateCustomCategoryAsync(new AdminCustomCategoryCreate(_selectedContentType.ToString(), _newCustomCategory.DisplayName));
             _newCustomCategory = new CustomCategoryEditorState();
+            _showNewCustomCategoryEditor = false;
             _customCategoryMessage = "Custom category created.";
             await RefreshCategoriesViewAsync();
         }
@@ -733,20 +886,159 @@ else
         }
     }
 
-    private async Task DeleteCustomCategoryAsync(CustomCategoryRowState row)
+    private Task ToggleCustomCategoryCreateEditor()
     {
+        _showNewCustomCategoryEditor = !_showNewCustomCategoryEditor;
+        return Task.CompletedTask;
+    }
+
+    private async Task OpenCustomCategoryUsagesAsync(CustomCategoryRowState row)
+    {
+        _isCustomCategoryUsageDialogOpen = true;
+        _isCustomCategoryUsageLoading = true;
+        _customCategoryUsageTitle = row.Summary.DisplayName;
+        _customCategoryUsageErrorMessage = null;
+        _customCategoryUsages = [];
+
         try
         {
-            row.BeginSave();
+            _customCategoryUsages = (await CategoriesClient.GetCustomCategoryUsagesAsync(row.Summary.Id, _selectedContentType)).ToList();
+        }
+        catch (Exception exception)
+        {
+            _customCategoryUsageErrorMessage = exception.Message;
+        }
+        finally
+        {
+            _isCustomCategoryUsageLoading = false;
+        }
+    }
+
+    private Task CloseCustomCategoryUsagesDialog()
+    {
+        _isCustomCategoryUsageDialogOpen = false;
+        _customCategoryUsageTitle = null;
+        _customCategoryUsageErrorMessage = null;
+        _customCategoryUsages = [];
+        return Task.CompletedTask;
+    }
+
+    private Task RequestCustomCategoryDelete(CustomCategoryRowState row)
+    {
+        _pendingCustomCategoryDelete = row;
+        _customCategoryDeleteErrorMessage = null;
+        return Task.CompletedTask;
+    }
+
+    private Task CloseCustomCategoryDeleteDialog()
+    {
+        _pendingCustomCategoryDelete = null;
+        _customCategoryDeleteErrorMessage = null;
+        _isCustomCategoryDeleteSaving = false;
+        return Task.CompletedTask;
+    }
+
+    private async Task DeletePendingCustomCategoryAsync()
+    {
+        if (_pendingCustomCategoryDelete is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _isCustomCategoryDeleteSaving = true;
+            _pendingCustomCategoryDelete.BeginSave();
             _customCategoryMessage = null;
             _customCategoryErrorMessage = null;
-            await CategoriesClient.DeleteCustomCategoryAsync(row.Summary.Id, _selectedContentType);
+            await CategoriesClient.DeleteCustomCategoryAsync(_pendingCustomCategoryDelete.Summary.Id, _selectedContentType);
+            await CloseCustomCategoryDeleteDialog();
             _customCategoryMessage = "Custom category deleted.";
             await RefreshCategoriesViewAsync();
         }
         catch (Exception exception)
         {
-            row.Fail(exception.Message);
+            _customCategoryDeleteErrorMessage = exception.Message;
+            _pendingCustomCategoryDelete.Fail(exception.Message);
+        }
+        finally
+        {
+            _isCustomCategoryDeleteSaving = false;
+        }
+    }
+
+    private Task OpenAddSourceDialog()
+    {
+        _isAddSourceDialogOpen = true;
+        _sourceDiscoveryErrorMessage = null;
+        _sourceDiscoveryForm = SourceDiscoveryFormState.CreateDefault();
+        return Task.CompletedTask;
+    }
+
+    private Task CloseAddSourceDialog()
+    {
+        _isAddSourceDialogOpen = false;
+        _isSourceDiscoverySaving = false;
+        _sourceDiscoveryErrorMessage = null;
+        _sourceDiscoveryForm = SourceDiscoveryFormState.CreateDefault();
+        return Task.CompletedTask;
+    }
+
+    private Task OnSourceDiscoveryProtocolChangedAsync()
+    {
+        _sourceDiscoveryForm.ApplyDefaultPortForProtocol();
+        return Task.CompletedTask;
+    }
+
+    private async Task DiscoverSourceAsync()
+    {
+        try
+        {
+            _isSourceDiscoverySaving = true;
+            _sourceDiscoveryErrorMessage = null;
+            var result = await CategoriesClient.DiscoverSourceAsync(new AdminSourceDiscoveryCreate(
+                _sourceDiscoveryForm.Protocol,
+                _sourceDiscoveryForm.HostOrBaseUrl,
+                _sourceDiscoveryForm.Port,
+                _sourceDiscoveryForm.Username,
+                _sourceDiscoveryForm.Password));
+
+            _selectedSourceId = result.SourceId;
+            UpdateLocation();
+            await CloseAddSourceDialog();
+            await ReloadAsync();
+            _activeTab = CategoriesTab.SourceCategories;
+            _categoryMessage = $"Source imported. {result.VodCategoryCount} VOD and {result.SeriesCategoryCount} Series categories synchronized.";
+        }
+        catch (Exception exception)
+        {
+            _sourceDiscoveryErrorMessage = exception.Message;
+        }
+        finally
+        {
+            _isSourceDiscoverySaving = false;
+        }
+    }
+
+    private static string FormatRuleSummary(RuleRowState rule) => $"{rule.Action} categories {rule.Operator} \"{rule.Pattern}\"";
+
+    private sealed class SourceDiscoveryFormState
+    {
+        public string Protocol { get; set; } = "https";
+
+        public string? HostOrBaseUrl { get; set; }
+
+        public int? Port { get; set; } = 443;
+
+        public string? Username { get; set; }
+
+        public string? Password { get; set; }
+
+        public static SourceDiscoveryFormState CreateDefault() => new();
+
+        public void ApplyDefaultPortForProtocol()
+        {
+            Port = Protocol == "http" ? 80 : 443;
         }
     }
 }

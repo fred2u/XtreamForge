@@ -1,4 +1,5 @@
 @namespace XtreamForge.Blazor.Features.Categories.SourceCategories
+@using XtreamForge.Blazor.Components.Shared
 
 <section class="categories-tab-panel">
     <header class="categories-panel-header">
@@ -6,11 +7,55 @@
             <h2>Source Categories</h2>
             <p class="category-meta">Manual disabled wins first. Otherwise the first enabled rule match decides whether the source category stays enabled or is excluded.</p>
         </div>
-        <div class="categories-panel-actions">
-            <div class="categories-count">@Rows.Count of @TotalCount categories</div>
-            <button type="button" class="secondary-button" @onclick="() => OnRefresh.InvokeAsync()" disabled="@IsRefreshing">@(IsRefreshing ? "Refreshing…" : "Refresh from source")</button>
-        </div>
+        <div class="categories-count">@Rows.Count of @TotalCount categories</div>
     </header>
+
+    <div class="categories-toolbar-grid">
+        <label>
+            Source
+            <InputSelect Value="SelectedSourceId" ValueChanged="OnSelectedSourceChangedAsync" disabled="@(Sources.Count == 0)">
+                @if (Sources.Count == 0)
+                {
+                    <option value="">No sources</option>
+                }
+                else
+                {
+                    @foreach (var source in Sources)
+                    {
+                        <option value="@source.Id">@source.DisplayName</option>
+                    }
+                }
+            </InputSelect>
+        </label>
+
+        <label>
+            Content Type
+            <InputSelect Value="SelectedContentType" ValueChanged="OnSelectedContentTypeChangedAsync">
+                <option value="@AdminContentType.Vod">VOD</option>
+                <option value="@AdminContentType.Series">Series</option>
+            </InputSelect>
+        </label>
+
+        <div class="toolbar-actions">
+            <button type="button" @onclick="OnOpenAddSource">+ Add source</button>
+        </div>
+    </div>
+
+    <div class="categories-toolbar-grid categories-toolbar-grid-secondary">
+        <label>
+            Search
+            <DebouncedTextInput Value="@SearchText" ValueChanged="OnSearchChanged" Placeholder="Search categories..." />
+        </label>
+
+        <label>
+            Status
+            <InputSelect Value="StatusFilter" ValueChanged="OnStatusFilterChangedAsync">
+                <option value="@CategoryStatusFilter.All">All</option>
+                <option value="@CategoryStatusFilter.Enabled">Enabled</option>
+                <option value="@CategoryStatusFilter.Disabled">Disabled</option>
+            </InputSelect>
+        </label>
+    </div>
 
     @if (!string.IsNullOrWhiteSpace(Message) || !string.IsNullOrWhiteSpace(ErrorMessage))
     {
@@ -26,15 +71,13 @@
         </div>
     }
 
-    @if (Rows.Count > 0 && Rows.Any(row => row.IsSelected))
+    @if (Sources.Count == 0)
     {
-        <div class="selection-summary">
-            <span>@Rows.Count(row => row.IsSelected) selected</span>
-            <button type="button" class="link-button" @onclick="ClearSelection">Clear selection</button>
+        <div class="empty-state">
+            <p>No sources discovered yet. Add a source to import categories, then normal Xtream traffic will keep discovery fresh.</p>
         </div>
     }
-
-    @if (TotalCount == 0)
+    else if (TotalCount == 0)
     {
         <div class="empty-state">
             <p>No categories have been discovered for this source and content type yet.</p>
@@ -52,7 +95,6 @@
             <table class="category-grid">
                 <thead>
                     <tr>
-                        <th class="checkbox-column">Select</th>
                         <th>Source Category</th>
                         <th>Mapping</th>
                         <th>Status</th>
@@ -67,12 +109,9 @@
                         var matchedRuleDetails = CategoriesPageState.FormatMatchedRuleDetails(row.Summary);
 
                         <tr @key="row.Summary.Id">
-                            <td class="checkbox-column">
-                                <InputCheckbox @bind-Value="row.IsSelected" aria-label="@($"Select {row.Summary.UpstreamCategoryName}")" />
-                            </td>
                             <td>
                                 <div class="category-name">@row.Summary.UpstreamCategoryName</div>
-                                <div class="category-meta">Upstream ID @row.Summary.UpstreamCategoryId · Output @row.Summary.DedicatedXtreamForgeCategoryId</div>
+                                <div class="category-meta">Upstream ID @row.Summary.UpstreamCategoryId · XtreamForge ID @row.Summary.DedicatedXtreamForgeCategoryId</div>
                             </td>
                             <td>
                                 <InputSelect @bind-Value="row.MappingValue" @bind-Value:after="() => OnMappingChanged.InvokeAsync(row)" disabled="@row.IsBusy">
@@ -151,6 +190,21 @@
 
 @code {
     [Parameter]
+    public required IReadOnlyList<AdminSource> Sources { get; set; }
+
+    [Parameter]
+    public int? SelectedSourceId { get; set; }
+
+    [Parameter]
+    public AdminContentType SelectedContentType { get; set; }
+
+    [Parameter]
+    public string SearchText { get; set; } = string.Empty;
+
+    [Parameter]
+    public CategoryStatusFilter StatusFilter { get; set; }
+
+    [Parameter]
     public required IReadOnlyList<CategoryRowState> Rows { get; set; }
 
     [Parameter]
@@ -160,13 +214,25 @@
     public required IReadOnlyList<CustomCategoryRowState> CustomCategories { get; set; }
 
     [Parameter]
-    public bool IsRefreshing { get; set; }
-
-    [Parameter]
     public string? Message { get; set; }
 
     [Parameter]
     public string? ErrorMessage { get; set; }
+
+    [Parameter]
+    public EventCallback OnSourceChanged { get; set; }
+
+    [Parameter]
+    public EventCallback OnContentTypeChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<string?> OnSearchChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<CategoryStatusFilter> OnStatusFilterChanged { get; set; }
+
+    [Parameter]
+    public EventCallback OnOpenAddSource { get; set; }
 
     [Parameter]
     public EventCallback<CategoryRowState> OnMappingChanged { get; set; }
@@ -183,14 +249,9 @@
     [Parameter]
     public EventCallback<CategoryRowState> OnOpenRule { get; set; }
 
-    [Parameter]
-    public EventCallback OnRefresh { get; set; }
+    private Task OnSelectedSourceChangedAsync(int? value) => OnSourceChanged.InvokeAsync(value);
 
-    private void ClearSelection()
-    {
-        foreach (var row in Rows)
-        {
-            row.IsSelected = false;
-        }
-    }
+    private Task OnSelectedContentTypeChangedAsync(AdminContentType value) => OnContentTypeChanged.InvokeAsync(value);
+
+    private Task OnStatusFilterChangedAsync(CategoryStatusFilter value) => OnStatusFilterChanged.InvokeAsync(value);
 }

@@ -32,10 +32,10 @@ public sealed class CategoriesClient(HttpClient httpClient)
         await EnsureSuccessAsync(response, cancellationToken);
     }
 
-    public async Task RefreshCategoriesAsync(AdminCategoryRefreshRequest request, CancellationToken cancellationToken = default)
+    public async Task<AdminSourceDiscoveryResult> DiscoverSourceAsync(AdminSourceDiscoveryCreate request, CancellationToken cancellationToken = default)
     {
-        var response = await httpClient.PostAsJsonAsync("/api/admin/categories/refresh", request, cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        var response = await httpClient.PostAsJsonAsync("/api/admin/sources/discover", request, cancellationToken);
+        return await ReadResponseAsync<AdminSourceDiscoveryResult>(response, cancellationToken);
     }
 
     public async Task CreateRuleAsync(AdminCategoryRuleUpdate request, CancellationToken cancellationToken = default)
@@ -50,10 +50,9 @@ public sealed class CategoriesClient(HttpClient httpClient)
         await EnsureSuccessAsync(response, cancellationToken);
     }
 
-    public async Task MoveRuleAsync(int ruleId, int sourceId, AdminContentType contentType, bool moveUp, CancellationToken cancellationToken = default)
+    public async Task ReorderRulesAsync(AdminCategoryRuleOrderUpdate request, CancellationToken cancellationToken = default)
     {
-        var directionPath = moveUp ? "move-up" : "move-down";
-        var response = await httpClient.PostAsync($"/api/admin/category-rules/{ruleId}/{directionPath}?sourceId={sourceId}&contentType={contentType}", null, cancellationToken);
+        var response = await httpClient.PutAsJsonAsync("/api/admin/category-rules/order", request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
     }
 
@@ -86,6 +85,9 @@ public sealed class CategoriesClient(HttpClient httpClient)
         var response = await httpClient.DeleteAsync($"/api/admin/custom-categories/{customCategoryId}?contentType={contentType}", cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
     }
+
+    public Task<IReadOnlyList<AdminCustomCategoryUsage>> GetCustomCategoryUsagesAsync(int customCategoryId, AdminContentType contentType, CancellationToken cancellationToken = default) =>
+        ReadAsync<IReadOnlyList<AdminCustomCategoryUsage>>($"/api/admin/custom-categories/{customCategoryId}/usages?contentType={contentType}", cancellationToken);
 
     private Task<T> ReadAsync<T>(string requestUri, CancellationToken cancellationToken) =>
         ReadResponseAsync<T>(new HttpRequestMessage(HttpMethod.Get, requestUri), cancellationToken);

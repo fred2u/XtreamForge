@@ -1,0 +1,87 @@
+@using Microsoft.AspNetCore.Components.Web
+
+@if (IsOpen)
+{
+    <div class="modal-backdrop" @onclick="HandleBackdropClickAsync">
+        <section
+            class="modal-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="@_titleId"
+            tabindex="-1"
+            @ref="_dialogElement"
+            @onclick:stopPropagation="true"
+            @onkeydown="HandleKeyDownAsync">
+            <header class="modal-header">
+                <h2 id="@_titleId">@Title</h2>
+                <button type="button" class="icon-button" title="Close dialog" aria-label="Close dialog" @onclick="OnClose">
+                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                        <path d="M3.22 3.22a.75.75 0 0 1 1.06 0L8 6.94l3.72-3.72a.75.75 0 1 1 1.06 1.06L9.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L8 9.06l-3.72 3.72a.75.75 0 1 1-1.06-1.06L6.94 8 3.22 4.28a.75.75 0 0 1 0-1.06Z" fill="currentColor" />
+                    </svg>
+                </button>
+            </header>
+
+            <div class="modal-body">
+                @ChildContent
+            </div>
+
+            @if (FooterContent is not null)
+            {
+                <footer class="modal-footer">
+                    @FooterContent
+                </footer>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    private readonly string _titleId = $"dialog-title-{Guid.NewGuid():N}";
+    private ElementReference _dialogElement;
+    private bool _shouldFocus;
+
+    [Parameter]
+    public bool IsOpen { get; set; }
+
+    [Parameter]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public bool CloseOnBackdropClick { get; set; } = true;
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public RenderFragment? FooterContent { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (IsOpen)
+        {
+            _shouldFocus = true;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_shouldFocus && IsOpen)
+        {
+            _shouldFocus = false;
+            await _dialogElement.FocusAsync();
+        }
+    }
+
+    private Task HandleBackdropClickAsync() =>
+        CloseOnBackdropClick
+            ? OnClose.InvokeAsync()
+            : Task.CompletedTask;
+
+    private Task HandleKeyDownAsync(KeyboardEventArgs args) =>
+        args.Key == "Escape"
+            ? OnClose.InvokeAsync()
+            : Task.CompletedTask;
+}

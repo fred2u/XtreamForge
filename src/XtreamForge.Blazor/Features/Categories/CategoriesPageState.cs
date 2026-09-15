@@ -62,8 +62,6 @@ public sealed class CategoryRowState(AdminUpstreamCategory summary)
 {
     public AdminUpstreamCategory Summary { get; } = summary;
 
-    public bool IsSelected { get; set; }
-
     public string MappingValue { get; set; } = GetMappingValue(summary);
 
     public string SavedMappingValue { get; private set; } = GetMappingValue(summary);
@@ -169,8 +167,6 @@ public sealed class RuleRowState(AdminCategoryRule summary)
     public bool CaseSensitive { get; set; } = summary.CaseSensitive;
 
     public bool IsEnabled { get; set; } = summary.IsEnabled;
-
-    public bool ConfirmDelete { get; set; }
 
     public bool IsEditing { get; private set; }
 
@@ -420,10 +416,6 @@ public sealed record AdminCategoryMappingUpdate(
     int? CustomCategoryId,
     string? NewCustomCategoryName);
 
-public sealed record AdminCategoryRefreshRequest(
-    int SelectedSourceId,
-    string SelectedContentType);
-
 public sealed record AdminCategoryRuleUpdate(
     int SelectedSourceId,
     string SelectedContentType,
@@ -432,6 +424,11 @@ public sealed record AdminCategoryRuleUpdate(
     string? Pattern,
     bool CaseSensitive,
     bool IsEnabled);
+
+public sealed record AdminCategoryRuleOrderUpdate(
+    int SelectedSourceId,
+    string SelectedContentType,
+    IReadOnlyList<int> OrderedRuleIds);
 
 public sealed record AdminCategoryRulePreview(
     string CategoryName,
@@ -446,5 +443,30 @@ public sealed record AdminCategoryRulePreview(
 public sealed record AdminCustomCategoryCreate(string SelectedContentType, string? DisplayName);
 
 public sealed record AdminCustomCategoryUpdate(string SelectedContentType, string DisplayName);
+
+public sealed record AdminSourceDiscoveryCreate(
+    string? Protocol,
+    string? HostOrBaseUrl,
+    int? Port,
+    string? Username,
+    string? Password);
+
+public sealed record AdminSourceDiscoveryResult(
+    int SourceId,
+    int VodCategoryCount,
+    int SeriesCategoryCount);
+
+public sealed record AdminCustomCategoryUsage(
+    int UpstreamCategoryRecordId,
+    int SourceId,
+    string SourceProtocol,
+    string SourceHost,
+    int SourcePort,
+    string ContentType,
+    string UpstreamCategoryId,
+    string UpstreamCategoryName)
+{
+    public string SourceDisplayName => $"{SourceProtocol}://{SourceHost}:{SourcePort}";
+}
 
 internal sealed record AdminErrorResponse(string Message);

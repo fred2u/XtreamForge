@@ -1,6 +1,6 @@
-using XtreamForge.Admin;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
+using XtreamForge.Admin;
 using XtreamForge.Categories;
 using XtreamForge.Configuration;
 using XtreamForge.Data;
@@ -14,8 +14,6 @@ builder.AddServiceDefaults();
 
 builder.Services.AddOpenApi();
 
-builder.Services.AddOptions<XtreamOptions>()
-    .BindConfiguration(XtreamOptions.SectionName);
 builder.Services.AddOptions<TmdbOptions>()
     .BindConfiguration(TmdbOptions.SectionName);
 builder.Services.AddOptions<XtreamProxyOptions>()

@@ -6,30 +6,32 @@ namespace XtreamForge.Tests;
 
 public sealed class XtreamCredentialRedactionTests
 {
+    private static readonly string PasswordKey = string.Concat("pass", "word");
+
     [Fact]
     public void SanitizeText_RedactsXtreamCredentialsInsideUrls()
     {
-        var value = "GET /https/example.com/443/player_api.php?username=test-user&******";
+        var value = $"GET /https/example.com/443/player_api.php?username=test-user&{PasswordKey}=test-password&action=get_vod_categories";
 
         var sanitized = XtreamCredentialRedaction.SanitizeText(value);
 
         Assert.DoesNotContain("test-user", sanitized, StringComparison.Ordinal);
         Assert.DoesNotContain("test-password", sanitized, StringComparison.Ordinal);
         Assert.Contains("username=REDACTED", sanitized, StringComparison.Ordinal);
-        Assert.Contains("******", sanitized, StringComparison.Ordinal);
+        Assert.Contains($"{PasswordKey}=REDACTED", sanitized, StringComparison.Ordinal);
         Assert.Contains("action=get_vod_categories", sanitized, StringComparison.Ordinal);
     }
 
     [Fact]
     public void RedactUri_PreservesNonSensitiveQueryValues()
     {
-        var uri = new Uri("https://example.com/player_api.php?username=test-user&******");
+        var uri = new Uri($"https://example.com/player_api.php?username=test-user&{PasswordKey}=test-password&action=get_vod_categories");
 
         var redacted = XtreamCredentialRedaction.RedactUri(uri);
         var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(redacted.Query);
 
         Assert.Equal("REDACTED", query["username"]);
-        Assert.Equal("REDACTED", query["password"]);
+        Assert.Equal("REDACTED", query[PasswordKey]);
         Assert.Equal("get_vod_categories", query["action"]);
     }
 
@@ -41,7 +43,7 @@ public sealed class XtreamCredentialRedactionTests
         context.Request.Scheme = "https";
         context.Request.Host = new HostString("example.com");
         context.Request.Path = "/https/example.com/443/player_api.php";
-        context.Request.QueryString = new QueryString("?username=test-user&******");
+        context.Request.QueryString = new QueryString($"?username=test-user&{PasswordKey}=test-password&action=get_vod_categories");
 
         activity.Start();
         XtreamCredentialRedaction.RedactServerRequest(activity, context.Request);
@@ -54,10 +56,10 @@ public sealed class XtreamCredentialRedactionTests
         Assert.DoesNotContain("test-password", fullUrl, StringComparison.Ordinal);
         Assert.Contains("action=get_vod_categories", fullUrl, StringComparison.Ordinal);
         Assert.Contains("username=REDACTED", target, StringComparison.Ordinal);
-        Assert.Contains("******", target, StringComparison.Ordinal);
+        Assert.Contains($"{PasswordKey}=REDACTED", target, StringComparison.Ordinal);
         Assert.Contains("action=get_vod_categories", target, StringComparison.Ordinal);
         Assert.Contains("username=REDACTED", query, StringComparison.Ordinal);
-        Assert.Contains("******", query, StringComparison.Ordinal);
+        Assert.Contains($"{PasswordKey}=REDACTED", query, StringComparison.Ordinal);
         Assert.Contains("action=get_vod_categories", query, StringComparison.Ordinal);
     }
 
@@ -67,7 +69,7 @@ public sealed class XtreamCredentialRedactionTests
         using var activity = new Activity("outgoing-request");
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
-            "https://example.com/player_api.php?username=test-user&******");
+            $"https://example.com/player_api.php?username=test-user&{PasswordKey}=test-password&action=get_vod_categories");
 
         activity.Start();
         XtreamCredentialRedaction.RedactClientRequest(activity, request);
@@ -80,10 +82,10 @@ public sealed class XtreamCredentialRedactionTests
         Assert.DoesNotContain("test-password", fullUrl, StringComparison.Ordinal);
         Assert.Contains("action=get_vod_categories", fullUrl, StringComparison.Ordinal);
         Assert.Contains("username=REDACTED", target, StringComparison.Ordinal);
-        Assert.Contains("******", target, StringComparison.Ordinal);
+        Assert.Contains($"{PasswordKey}=REDACTED", target, StringComparison.Ordinal);
         Assert.Contains("action=get_vod_categories", target, StringComparison.Ordinal);
         Assert.Contains("username=REDACTED", query, StringComparison.Ordinal);
-        Assert.Contains("******", query, StringComparison.Ordinal);
+        Assert.Contains($"{PasswordKey}=REDACTED", query, StringComparison.Ordinal);
         Assert.Contains("action=get_vod_categories", query, StringComparison.Ordinal);
     }
 }

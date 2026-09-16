@@ -15,6 +15,10 @@ body {
     box-sizing: border-box;
 }
 
+fluent-select {
+    min-width: 150px;
+}
+
 .layout-shell {
     min-height: 100vh;
     display: grid;
@@ -288,7 +292,7 @@ h3 {
 
 .source-categories-toolbar .toolbar-filter-group {
     display: grid;
-    grid-template-columns: minmax(220px, 280px) minmax(140px, 170px) minmax(280px, 1fr) minmax(120px, 150px);
+    grid-template-columns: minmax(220px, 300px) minmax(120px, 150px) minmax(200px, 1fr) minmax(120px, 150px);
     column-gap: 1rem;
     row-gap: 0.75rem;
     flex: 1 1 auto;
@@ -719,11 +723,11 @@ h3 {
 }
 
 .categories-tabs::part(activeIndicator) {
-    width: calc(100% - 24px);
+    width: calc(100% - 20px);
 }
 
 .categories-tabs {
-    margin-bottom: 0.5rem;
+    margin-bottom: 0rem;
     padding-bottom: 0.125rem;
     border-bottom: 1px solid #e2e5e9;
 }

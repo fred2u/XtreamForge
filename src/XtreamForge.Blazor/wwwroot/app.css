@@ -237,7 +237,7 @@ p {
     grid-template-columns: 1fr;
 }
 
-.categories-tabs::deep fluent-tabs::part(activeIndicator) {
+.categories-tabs::part(activeIndicator) {
     width: calc(100% - 24px);
 }
 

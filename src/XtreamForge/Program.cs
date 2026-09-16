@@ -1,10 +1,11 @@
-using XtreamForge.Admin;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
+using XtreamForge.Admin;
 using XtreamForge.Categories;
 using XtreamForge.Configuration;
 using XtreamForge.Data;
 using XtreamForge.Endpoints;
+using XtreamForge.Items;
 using XtreamForge.Xtream;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,8 +14,6 @@ builder.AddServiceDefaults();
 
 builder.Services.AddOpenApi();
 
-builder.Services.AddOptions<XtreamOptions>()
-    .BindConfiguration(XtreamOptions.SectionName);
 builder.Services.AddOptions<TmdbOptions>()
     .BindConfiguration(TmdbOptions.SectionName);
 builder.Services.AddOptions<XtreamProxyOptions>()
@@ -45,7 +44,10 @@ builder.Services.AddHealthChecks()
     .AddDbContextCheck<XtreamForgeDbContext>(name: "database");
 
 builder.Services.AddSingleton<CategoryRuleEvaluator>();
+builder.Services.AddSingleton<ItemRuleEvaluator>();
 builder.Services.AddScoped<CategoryRuleService>();
+builder.Services.AddScoped<ItemRuleService>();
+builder.Services.AddSingleton<StreamTmdbMappingService>();
 builder.Services.AddScoped<XtreamCategoryMappingService>();
 builder.Services.AddSingleton(_ =>
 {
@@ -62,6 +64,8 @@ builder.Services.AddScoped<ForwarderService>();
 builder.Services.AddScoped<XtreamCategoryProxyService>();
 builder.Services.AddScoped<XtreamContentProxyService>();
 builder.Services.AddScoped<XtreamSourceDiscoveryService>();
+builder.Services.AddSingleton<TmdbResolutionQueue>();
+builder.Services.AddHostedService<TmdbResolutionBackgroundService>();
 builder.Services.AddSingleton<XtreamUpstreamDestinationResolver>();
 builder.Services.AddSingleton<XtreamRequestClassifier>();
 

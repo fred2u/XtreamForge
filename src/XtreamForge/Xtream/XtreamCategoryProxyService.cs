@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using System.Text.Json;
 using XtreamForge.Xtream;
 using XtreamForge.Categories;
@@ -35,7 +34,7 @@ public sealed class XtreamCategoryProxyService(
                 return Results.Empty;
             }
 
-            var upstreamCategories = await responseMessage.Content.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(cancellationToken: context.RequestAborted) ?? [];
+            var upstreamCategories = await upstreamClient.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(responseMessage.Content, context.RequestAborted) ?? [];
             var rewrittenCategories = await categoryMappingService.SyncCategoriesAsync(
                 new XtreamSourceDescriptor(destination.Protocol, destination.Host, destination.Port),
                 classification.ContentType.Value,

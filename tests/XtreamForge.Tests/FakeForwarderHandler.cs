@@ -1,4 +1,5 @@
 using System.Net;
+using System.IO.Compression;
 
 namespace XtreamForge.Tests;
 
@@ -30,6 +31,33 @@ internal sealed class FakeForwarderHandler(
         {
             Content = new StringContent(json)
         };
+    }
+
+    public static HttpResponseMessage CreateCompressedJsonResponse(HttpStatusCode statusCode, string json, string contentEncoding = "gzip")
+    {
+        var payloadBytes = System.Text.Encoding.UTF8.GetBytes(json);
+        using var buffer = new MemoryStream();
+
+        Stream compressionStream = contentEncoding switch
+        {
+            "gzip" => new GZipStream(buffer, CompressionLevel.SmallestSize, leaveOpen: true),
+            "deflate" => new DeflateStream(buffer, CompressionLevel.SmallestSize, leaveOpen: true),
+            "br" => new BrotliStream(buffer, CompressionLevel.SmallestSize, leaveOpen: true),
+            _ => throw new ArgumentOutOfRangeException(nameof(contentEncoding), contentEncoding, "Unsupported content encoding for test response.")
+        };
+
+        using (compressionStream)
+        {
+            compressionStream.Write(payloadBytes, 0, payloadBytes.Length);
+        }
+
+        var response = new HttpResponseMessage(statusCode)
+        {
+            Content = new ByteArrayContent(buffer.ToArray())
+        };
+        response.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+        response.Content.Headers.ContentEncoding.Add(contentEncoding);
+        return response;
     }
 }
 

@@ -219,6 +219,66 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
     }
 
     [Fact]
+    public async Task ItemRules_Endpoints_CreateUpdateMovePreviewAndDeleteRules()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-admin-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        var sourceId = await SeedSingleSourceAsync(setupFactory);
+
+        using var factory = _factory.WithSqliteDatabase(databasePath);
+        using var client = factory.CreateClient();
+
+        var createFirst = await client.PostAsJsonAsync("/api/admin/item-rules", new AdminItemRuleRequest(sourceId, "Vod", "Name", "Exclude", "Contains", "VOST", false, true));
+        var createSecond = await client.PostAsJsonAsync("/api/admin/item-rules", new AdminItemRuleRequest(sourceId, "Vod", "Name", "Include", "StartsWith", "Movie", false, true));
+        Assert.Equal(HttpStatusCode.OK, createFirst.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, createSecond.StatusCode);
+
+        var rulesResponse = await client.GetFromJsonAsync<AdminItemRulesResponse>($"/api/admin/item-rules?sourceId={sourceId}&contentType=Vod");
+        Assert.NotNull(rulesResponse);
+        Assert.Equal(sourceId, rulesResponse.SelectedSourceId);
+        Assert.Equal("Vod", rulesResponse.SelectedContentType);
+        Assert.Contains(rulesResponse.Sources, source => source.Id == sourceId);
+        Assert.Equal(2, rulesResponse.Rules.Count);
+        var firstRuleId = rulesResponse.Rules[0].Id;
+        var secondRuleId = rulesResponse.Rules[1].Id;
+
+        var updateResponse = await client.PutAsJsonAsync($"/api/admin/item-rules/{firstRuleId}", new AdminItemRuleRequest(sourceId, "Vod", "Name", "Exclude", "StartsWith", "|XXX|", true, true));
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+
+        var previewResponse = await client.GetAsync($"/api/admin/item-rules/preview?sourceId={sourceId}&contentType=Vod&itemName=%7CXXX%7C%20MOVIE");
+        var previewPayload = await previewResponse.Content.ReadFromJsonAsync<AdminItemRulePreviewResponse>();
+        Assert.Equal(HttpStatusCode.OK, previewResponse.StatusCode);
+        Assert.NotNull(previewPayload);
+        Assert.Equal("Exclude", previewPayload.Decision);
+        Assert.Equal("Name", previewPayload.MatchedRuleField);
+
+        var reorderResponse = await client.PutAsJsonAsync(
+            "/api/admin/item-rules/order",
+            new AdminItemRuleOrderRequest(sourceId, "Vod", [secondRuleId, firstRuleId]));
+        Assert.Equal(HttpStatusCode.OK, reorderResponse.StatusCode);
+
+        var movedRules = await client.GetFromJsonAsync<AdminItemRulesResponse>($"/api/admin/item-rules?sourceId={sourceId}&contentType=Vod");
+        Assert.NotNull(movedRules);
+        Assert.Equal(new[] { secondRuleId, firstRuleId }, movedRules.Rules.Select(rule => rule.Id).ToArray());
+        var updatedRule = movedRules.Rules.Single(rule => rule.Id == firstRuleId);
+        Assert.Equal("Name", updatedRule.Field);
+        Assert.Equal("|XXX|", updatedRule.Pattern);
+        Assert.True(updatedRule.CaseSensitive);
+        Assert.True(updatedRule.IsEnabled);
+
+        var deleteResponse = await client.DeleteAsync($"/api/admin/item-rules/{secondRuleId}?sourceId={sourceId}&contentType=Vod&confirmDelete=true");
+        Assert.Equal(HttpStatusCode.OK, deleteResponse.StatusCode);
+
+        var finalRules = await client.GetFromJsonAsync<AdminItemRulesResponse>($"/api/admin/item-rules?sourceId={sourceId}&contentType=Vod");
+        Assert.NotNull(finalRules);
+        var remainingRule = Assert.Single(finalRules.Rules);
+        Assert.Equal(firstRuleId, remainingRule.Id);
+        Assert.Equal(10, remainingRule.Sequence);
+    }
+
+    [Fact]
     public async Task CustomCategories_Endpoints_CreateRenameAndDeleteUnusedCategory()
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-admin-tests-{Guid.NewGuid():N}.db");

@@ -1,0 +1,550 @@
+@page "/items"
+@using System.Globalization
+@using Microsoft.AspNetCore.WebUtilities
+@using XtreamForge.Blazor.Features.Categories
+@using XtreamForge.Blazor.Features.Items.ItemRules
+@inject ItemRulesClient ItemRulesClient
+@inject IToastService ToastService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Items - XtreamForge</PageTitle>
+
+<h1>Items</h1>
+<p class="page-subtitle">Manage how movies and series are processed by XtreamForge.</p>
+
+@if (_isLoading)
+{
+    <FluentCard Class="status-card loading-card categories-shell-card">
+        <FluentProgressRing />
+        <span>Loading item administration…</span>
+    </FluentCard>
+}
+else if (_itemRulesView is null)
+{
+    <FluentCard Class="status-card categories-shell-card">
+        <FluentMessageBar Title="Unable to load item administration" Intent="@MessageIntent.Error" AllowDismiss="false">
+            Try again after the backend and database are available.
+            @if (!string.IsNullOrWhiteSpace(_pageErrorMessage))
+            {
+                <div>@_pageErrorMessage</div>
+            }
+        </FluentMessageBar>
+    </FluentCard>
+}
+else
+{
+    <section class="categories-page-content">
+        @if (!string.IsNullOrWhiteSpace(_pageErrorMessage))
+        {
+            <FluentMessageBar Title="Items" Intent="@MessageIntent.Error" AllowDismiss="false">@_pageErrorMessage</FluentMessageBar>
+        }
+
+        <FluentTabs @bind-ActiveTabId="ActiveTabId" Size="TabSize.Small" Class="categories-tabs">
+            <FluentTab Id="@ItemsTab.ItemRules.ToString()" Label="Item Rules">
+                <ItemRulesTab
+                    Sources="_itemRulesView.Sources"
+                    SelectedSourceId="_selectedSourceId"
+                    SelectedContentType="_selectedContentType"
+                    Rows="_itemRuleRows"
+                    Tester="_itemRuleTester"
+                    IsRefreshing="_isRefreshing"
+                    Message="@_message"
+                    ErrorMessage="@_errorMessage"
+                    OnSourceChanged="OnSourceChangedAsync"
+                    OnContentTypeChanged="OnContentTypeChangedAsync"
+                    OnOpenCreate="OpenAddRuleDialog"
+                    OnRunTester="RunRuleTesterAsync"
+                    OnBeginEdit="BeginRuleEdit"
+                    OnCancelEdit="CancelRuleEdit"
+                    OnSave="SaveRuleAsync"
+                    OnRequestDelete="RequestRuleDelete"
+                    OnToggleEnabled="ToggleRuleEnabledAsync"
+                    OnDropRequested="DropRuleAsync" />
+            </FluentTab>
+        </FluentTabs>
+    </section>
+}
+
+@if (_isAddRuleDialogOpen)
+{
+    <FluentDialog Modal="true" TrapFocus="true" @ondialogdismiss="CloseAddRuleDialog" aria-label="Add item rule">
+        <FluentDialogHeader>Add item rule</FluentDialogHeader>
+        <FluentDialogBody>
+            <div class="dialog-form-grid">
+                <FluentSelect TOption="string" Value="@_newRule.Field.ToString()" ValueChanged="value => _newRule.Field = ParseField(value)" Label="Field" Disabled="@_isRuleCreating">
+                    <FluentOption Value="@ItemRuleFieldOption.Name.ToString()">Name</FluentOption>
+                </FluentSelect>
+                <FluentSelect TOption="string" Value="@_newRule.Action.ToString()" ValueChanged="value => _newRule.Action = ParseAction(value)" Label="Action" Disabled="@_isRuleCreating">
+                    <FluentOption Value="@ItemRuleActionOption.Include.ToString()">Include</FluentOption>
+                    <FluentOption Value="@ItemRuleActionOption.Exclude.ToString()">Exclude</FluentOption>
+                </FluentSelect>
+                <FluentSelect TOption="string" Value="@_newRule.Operator.ToString()" ValueChanged="value => _newRule.Operator = ParseOperator(value)" Label="Match" Disabled="@_isRuleCreating">
+                    <FluentOption Value="@ItemRuleOperatorOption.Contains.ToString()">Contains</FluentOption>
+                    <FluentOption Value="@ItemRuleOperatorOption.StartsWith.ToString()">StartsWith</FluentOption>
+                </FluentSelect>
+                <FluentTextField @bind-Value="_newRule.Pattern" Maxlength="255" Label="Pattern" Disabled="@_isRuleCreating" />
+                <FluentSelect TOption="string" Value="@_newRule.CaseSensitive.ToString().ToLowerInvariant()" ValueChanged="value => _newRule.CaseSensitive = string.Equals(value, bool.TrueString, StringComparison.OrdinalIgnoreCase)" Label="Case" Disabled="@_isRuleCreating">
+                    <FluentOption Value="false">Ignore case</FluentOption>
+                    <FluentOption Value="true">Case sensitive</FluentOption>
+                </FluentSelect>
+            </div>
+            <FluentSwitch @bind-Value="_newRule.IsEnabled" CheckedMessage="On" UncheckedMessage="Off">Enabled</FluentSwitch>
+
+            @if (!string.IsNullOrWhiteSpace(_createErrorMessage))
+            {
+                <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_createErrorMessage</FluentMessageBar>
+            }
+        </FluentDialogBody>
+        <FluentDialogFooter>
+            <FluentButton Appearance="Appearance.Neutral" @onclick="CloseAddRuleDialog" Disabled="@_isRuleCreating">Cancel</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="CreateRuleAsync" Disabled="@_isRuleCreating" Loading="@_isRuleCreating">Add rule</FluentButton>
+        </FluentDialogFooter>
+    </FluentDialog>
+}
+
+@if (_pendingRuleDelete is not null)
+{
+    <FluentDialog Modal="true" TrapFocus="true" @ondialogdismiss="CloseRuleDeleteDialog" aria-label="Delete item rule">
+        <FluentDialogHeader>Delete item rule?</FluentDialogHeader>
+        <FluentDialogBody>
+            <p>@FormatRuleSummary(_pendingRuleDelete)</p>
+            <p class="category-meta">This rule will no longer affect matching VOD or series items.</p>
+            @if (!string.IsNullOrWhiteSpace(_deleteErrorMessage))
+            {
+                <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_deleteErrorMessage</FluentMessageBar>
+            }
+        </FluentDialogBody>
+        <FluentDialogFooter>
+            <FluentButton Appearance="Appearance.Neutral" @onclick="CloseRuleDeleteDialog" Disabled="@_isRuleDeleteSaving">Cancel</FluentButton>
+            <FluentButton Class="destructive-button" Appearance="Appearance.Accent" @onclick="DeletePendingRuleAsync" Disabled="@_isRuleDeleteSaving" Loading="@_isRuleDeleteSaving">Delete</FluentButton>
+        </FluentDialogFooter>
+    </FluentDialog>
+}
+
+@code {
+    private AdminItemRulesPayload? _itemRulesView;
+    private readonly List<ItemRuleRowState> _itemRuleRows = [];
+    private ItemRuleEditorState _newRule = new();
+    private ItemRuleTesterState _itemRuleTester = new();
+    private bool _isLoading = true;
+    private bool _isRefreshing;
+    private int? _selectedSourceId;
+    private AdminContentType _selectedContentType = AdminContentType.Vod;
+    private ItemsTab _activeTab = ItemsTab.ItemRules;
+    private bool _isRuleCreating;
+    private bool _isAddRuleDialogOpen;
+    private string? _createErrorMessage;
+    private string? _pageErrorMessage;
+    private string? _message;
+    private string? _errorMessage;
+    private ItemRuleRowState? _pendingRuleDelete;
+    private bool _isRuleDeleteSaving;
+    private string? _deleteErrorMessage;
+
+    private string ActiveTabId
+    {
+        get => _activeTab.ToString();
+        set
+        {
+            if (Enum.TryParse<ItemsTab>(value, true, out var tab))
+            {
+                _activeTab = tab;
+            }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        ApplyQueryString();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _isLoading = true;
+        _pageErrorMessage = null;
+        _message = null;
+        _errorMessage = null;
+        _createErrorMessage = null;
+
+        try
+        {
+            await RefreshViewCoreAsync();
+        }
+        catch (Exception exception)
+        {
+            _pageErrorMessage = exception.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task RefreshViewCoreAsync()
+    {
+        var payload = await ItemRulesClient.GetItemRulesAsync(_selectedSourceId, _selectedContentType);
+        _itemRulesView = payload;
+        _selectedSourceId = payload.SelectedSourceId;
+        _selectedContentType = Enum.TryParse<AdminContentType>(payload.SelectedContentType, true, out var parsedContentType)
+            ? parsedContentType
+            : _selectedContentType;
+        _itemRuleRows.Clear();
+        _itemRuleRows.AddRange(payload.Rules.Select(summary => new ItemRuleRowState(summary)));
+    }
+
+    private async Task RefreshViewAsync(string? message = null)
+    {
+        _isRefreshing = true;
+        _errorMessage = null;
+        _pageErrorMessage = null;
+
+        try
+        {
+            await RefreshViewCoreAsync();
+            _message = message;
+            _createErrorMessage = null;
+        }
+        catch (Exception exception)
+        {
+            _errorMessage = exception.Message;
+        }
+        finally
+        {
+            _isRefreshing = false;
+        }
+    }
+
+    private void ApplyQueryString()
+    {
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+        var query = QueryHelpers.ParseQuery(uri.Query);
+
+        if (query.TryGetValue("sourceId", out var sourceValues)
+            && int.TryParse(sourceValues[0], NumberStyles.None, CultureInfo.InvariantCulture, out var parsedSourceId))
+        {
+            _selectedSourceId = parsedSourceId;
+        }
+
+        if (query.TryGetValue("contentType", out var contentTypeValues)
+            && Enum.TryParse<AdminContentType>(contentTypeValues[0], true, out var parsedContentType))
+        {
+            _selectedContentType = parsedContentType;
+        }
+    }
+
+    private async Task OnSourceChangedAsync(int? value)
+    {
+        _selectedSourceId = value;
+        UpdateLocation();
+        await RefreshViewAsync();
+    }
+
+    private async Task OnContentTypeChangedAsync(AdminContentType value)
+    {
+        _selectedContentType = value;
+        UpdateLocation();
+        await RefreshViewAsync();
+    }
+
+    private void UpdateLocation()
+    {
+        var uri = NavigationManager.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["sourceId"] = _selectedSourceId,
+            ["contentType"] = _selectedContentType.ToString()
+        });
+
+        if (!string.Equals(uri, NavigationManager.Uri, StringComparison.Ordinal))
+        {
+            NavigationManager.NavigateTo(uri, replace: true);
+        }
+    }
+
+    private Task OpenAddRuleDialog()
+    {
+        if (_selectedSourceId is null)
+        {
+            _errorMessage = "Select a source to add a rule.";
+            return Task.CompletedTask;
+        }
+
+        _isAddRuleDialogOpen = true;
+        _createErrorMessage = null;
+        _newRule = new ItemRuleEditorState();
+        return Task.CompletedTask;
+    }
+
+    private Task CloseAddRuleDialog()
+    {
+        _isAddRuleDialogOpen = false;
+        _createErrorMessage = null;
+        _newRule = new ItemRuleEditorState();
+        return Task.CompletedTask;
+    }
+
+    private async Task CreateRuleAsync()
+    {
+        if (_selectedSourceId is null)
+        {
+            _createErrorMessage = "A source must be selected.";
+            return;
+        }
+
+        try
+        {
+            _isRuleCreating = true;
+            _message = null;
+            _errorMessage = null;
+            _createErrorMessage = null;
+
+            await ItemRulesClient.CreateRuleAsync(new AdminItemRuleUpdate(
+                _selectedSourceId.Value,
+                _selectedContentType.ToString(),
+                _newRule.Field.ToString(),
+                _newRule.Action.ToString(),
+                _newRule.Operator.ToString(),
+                _newRule.Pattern,
+                _newRule.CaseSensitive,
+                _newRule.IsEnabled));
+
+            await CloseAddRuleDialog();
+            await RefreshViewAsync("Rule created.");
+            ToastService.ShowToast(ToastIntent.Success, "Item rule created");
+        }
+        catch (Exception exception)
+        {
+            _createErrorMessage = exception.Message;
+        }
+        finally
+        {
+            _isRuleCreating = false;
+        }
+    }
+
+    private Task BeginRuleEdit(ItemRuleRowState rule)
+    {
+        rule.BeginEdit();
+        return Task.CompletedTask;
+    }
+
+    private Task CancelRuleEdit(ItemRuleRowState rule)
+    {
+        rule.CancelEdit();
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveRuleAsync(ItemRuleRowState rule)
+    {
+        if (_selectedSourceId is null)
+        {
+            rule.Fail("A source must be selected.");
+            return;
+        }
+
+        try
+        {
+            rule.BeginSave();
+            await ItemRulesClient.UpdateRuleAsync(rule.RuleId, new AdminItemRuleUpdate(
+                _selectedSourceId.Value,
+                _selectedContentType.ToString(),
+                rule.Field.ToString(),
+                rule.Action.ToString(),
+                rule.Operator.ToString(),
+                rule.Pattern,
+                rule.CaseSensitive,
+                rule.IsEnabled));
+
+            rule.CommitSave();
+            await RefreshViewAsync("Rule saved.");
+            ToastService.ShowToast(ToastIntent.Success, "Item rule saved");
+        }
+        catch (Exception exception)
+        {
+            rule.Fail(exception.Message);
+        }
+    }
+
+    private async Task ToggleRuleEnabledAsync(ItemRuleToggleRequest request)
+    {
+        var rule = request.Rule;
+        if (_selectedSourceId is null)
+        {
+            rule.Fail("A source must be selected.");
+            return;
+        }
+
+        if (rule.IsEditing)
+        {
+            rule.Fail("Save or cancel the current edit before changing the rule state.");
+            return;
+        }
+
+        var originalValue = rule.IsEnabled;
+
+        try
+        {
+            rule.IsEnabled = request.IsEnabled;
+            rule.BeginSave();
+            await ItemRulesClient.UpdateRuleAsync(rule.RuleId, new AdminItemRuleUpdate(
+                _selectedSourceId.Value,
+                _selectedContentType.ToString(),
+                rule.Field.ToString(),
+                rule.Action.ToString(),
+                rule.Operator.ToString(),
+                rule.Pattern,
+                rule.CaseSensitive,
+                rule.IsEnabled));
+
+            rule.SetSavedEnabled(rule.IsEnabled);
+            await RefreshViewAsync(rule.IsEnabled ? "Rule enabled." : "Rule disabled.");
+        }
+        catch (Exception exception)
+        {
+            rule.IsEnabled = originalValue;
+            rule.Fail(exception.Message);
+        }
+    }
+
+    private Task RequestRuleDelete(ItemRuleRowState rule)
+    {
+        if (rule.IsEditing)
+        {
+            rule.Fail("Save or cancel the current edit before deleting the rule.");
+            return Task.CompletedTask;
+        }
+
+        _pendingRuleDelete = rule;
+        _deleteErrorMessage = null;
+        return Task.CompletedTask;
+    }
+
+    private Task CloseRuleDeleteDialog()
+    {
+        _pendingRuleDelete = null;
+        _deleteErrorMessage = null;
+        _isRuleDeleteSaving = false;
+        return Task.CompletedTask;
+    }
+
+    private async Task DeletePendingRuleAsync()
+    {
+        if (_pendingRuleDelete is null || _selectedSourceId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _isRuleDeleteSaving = true;
+            _deleteErrorMessage = null;
+            _pendingRuleDelete.BeginSave();
+            await ItemRulesClient.DeleteRuleAsync(_pendingRuleDelete.RuleId, _selectedSourceId.Value, _selectedContentType);
+            await CloseRuleDeleteDialog();
+            await RefreshViewAsync("Rule deleted.");
+            ToastService.ShowToast(ToastIntent.Success, "Item rule deleted");
+        }
+        catch (Exception exception)
+        {
+            _deleteErrorMessage = exception.Message;
+            _pendingRuleDelete.Fail(exception.Message);
+        }
+        finally
+        {
+            _isRuleDeleteSaving = false;
+        }
+    }
+
+    private async Task RunRuleTesterAsync()
+    {
+        if (_selectedSourceId is null)
+        {
+            _itemRuleTester.ErrorMessage = "A source must be selected.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_itemRuleTester.ItemName))
+        {
+            _itemRuleTester.ErrorMessage = "Enter an item name to test.";
+            return;
+        }
+
+        _itemRuleTester.SaveState = MutationFeedbackState.Saving;
+        _itemRuleTester.ErrorMessage = null;
+
+        try
+        {
+            _itemRuleTester.Preview = await ItemRulesClient.PreviewRuleAsync(_selectedSourceId.Value, _selectedContentType, _itemRuleTester.ItemName);
+            _itemRuleTester.SaveState = MutationFeedbackState.Saved;
+        }
+        catch (Exception exception)
+        {
+            _itemRuleTester.Preview = null;
+            _itemRuleTester.ErrorMessage = exception.Message;
+            _itemRuleTester.SaveState = MutationFeedbackState.Failed;
+        }
+    }
+
+    private async Task DropRuleAsync(ItemRuleDropRequest request)
+    {
+        if (_selectedSourceId is null)
+        {
+            return;
+        }
+
+        var currentIndex = _itemRuleRows.FindIndex(rule => rule.RuleId == request.DraggedRuleId);
+        if (currentIndex < 0)
+        {
+            return;
+        }
+
+        var orderedIds = _itemRuleRows.Select(rule => rule.RuleId).ToList();
+        var originalOrder = orderedIds.ToList();
+        var draggedId = orderedIds[currentIndex];
+        orderedIds.RemoveAt(currentIndex);
+        var targetIndex = request.TargetIndex;
+        if (targetIndex > currentIndex)
+        {
+            targetIndex--;
+        }
+
+        orderedIds.Insert(Math.Clamp(targetIndex, 0, orderedIds.Count), draggedId);
+
+        if (orderedIds.SequenceEqual(originalOrder))
+        {
+            return;
+        }
+
+        try
+        {
+            _message = null;
+            _errorMessage = null;
+            await ItemRulesClient.ReorderRulesAsync(new AdminItemRuleOrderUpdate(
+                _selectedSourceId.Value,
+                _selectedContentType.ToString(),
+                orderedIds));
+            await RefreshViewAsync("Rule order updated.");
+        }
+        catch (Exception exception)
+        {
+            _errorMessage = exception.Message;
+        }
+    }
+
+    private static string FormatRuleSummary(ItemRuleRowState rule) => $"{rule.Action} items when {rule.Field} {rule.Operator} \"{rule.Pattern}\"";
+
+    private static ItemRuleFieldOption ParseField(string? value) =>
+        Enum.TryParse<ItemRuleFieldOption>(value, true, out var field)
+            ? field
+            : ItemRuleFieldOption.Name;
+
+    private static ItemRuleActionOption ParseAction(string? value) =>
+        Enum.TryParse<ItemRuleActionOption>(value, true, out var action)
+            ? action
+            : ItemRuleActionOption.Exclude;
+
+    private static ItemRuleOperatorOption ParseOperator(string? value) =>
+        Enum.TryParse<ItemRuleOperatorOption>(value, true, out var itemRuleOperator)
+            ? itemRuleOperator
+            : ItemRuleOperatorOption.Contains;
+}

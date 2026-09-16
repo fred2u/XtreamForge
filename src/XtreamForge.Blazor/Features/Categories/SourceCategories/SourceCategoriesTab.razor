@@ -8,7 +8,10 @@
                 <span class="section-count">@Rows.Count of @TotalCount categories</span>
             </div>
             <p class="section-description">Manage source categories, mappings, and matched rules.</p>
-            <p class="section-help">Manual disable overrides other outcomes; otherwise the first enabled matching rule decides inclusion.</p>
+            <div class="section-help">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Info())" />
+                <span>Manual disable overrides other outcomes; otherwise the first enabled matching rule decides inclusion.</span>
+            </div>
         </div>
     </header>
 

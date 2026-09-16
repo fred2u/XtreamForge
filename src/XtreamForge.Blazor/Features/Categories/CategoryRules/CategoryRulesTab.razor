@@ -12,7 +12,10 @@
                 <span class="section-count">@Rows.Count rule@(Rows.Count == 1 ? string.Empty : "s")</span>
             </div>
             <p class="section-description">Manage ordered include and exclude rules for the selected source.</p>
-            <p class="section-help">Rules are evaluated in sequence. The first enabled match wins.</p>
+            <div class="section-help">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Info())" />
+                <span>Rules are evaluated in sequence. The first enabled match wins.</span>
+            </div>
         </div>
         @if (IsRefreshing)
         {

@@ -109,7 +109,7 @@ else
     <FluentDialogHeader>Add Xtream source</FluentDialogHeader>
     <FluentDialogBody>
         <div class="dialog-form-grid">
-            <FluentSelect TOption="string" @bind-Value="_sourceDiscoveryForm.Protocol" @bind-Value:after="_sourceDiscoveryForm.ApplyDefaultPortForProtocol" Label="Protocol" Disabled="@_isSourceDiscoverySaving">
+            <FluentSelect TOption="string" Value="@_sourceDiscoveryForm.Protocol" ValueChanged="HandleSourceDiscoveryProtocolChangedAsync" Label="Protocol" Disabled="@_isSourceDiscoverySaving">
                 <FluentOption Value="https">HTTPS</FluentOption>
                 <FluentOption Value="http">HTTP</FluentOption>
             </FluentSelect>
@@ -1087,6 +1087,19 @@ else
         return Task.CompletedTask;
     }
 
+    private Task HandleSourceDiscoveryProtocolChangedAsync(string? value)
+    {
+        var previousDefaultPort = _sourceDiscoveryForm.Protocol == "http" ? 80 : 443;
+        _sourceDiscoveryForm.Protocol = value ?? "https";
+
+        if (_sourceDiscoveryForm.Port is null || _sourceDiscoveryForm.Port == previousDefaultPort)
+        {
+            _sourceDiscoveryForm.Port = _sourceDiscoveryForm.Protocol == "http" ? 80 : 443;
+        }
+
+        return Task.CompletedTask;
+    }
+
     private async Task DiscoverSourceAsync()
     {
         var didSucceed = false;
@@ -1170,11 +1183,6 @@ else
 
         public static SourceDiscoveryFormState CreateDefault() => new();
 
-        public Task ApplyDefaultPortForProtocol()
-        {
-            Port = Protocol == "http" ? 80 : 443;
-            return Task.CompletedTask;
-        }
     }
 
     private void ResetAddSourceDialogState()

@@ -82,7 +82,7 @@
                             </FluentButton>
                         }
                         <FluentButton Appearance="Appearance.Neutral"
-                                      Title="Delete custom category"
+                                      Title="@(context.UsageCount > 0 ? "Delete unavailable while category is in use" : "Delete custom category")"
                                       AriaLabel="Delete custom category"
                                       @onclick="() => OnRequestDelete.InvokeAsync(context)"
                                       Disabled="@(context.IsBusy || context.UsageCount > 0)">

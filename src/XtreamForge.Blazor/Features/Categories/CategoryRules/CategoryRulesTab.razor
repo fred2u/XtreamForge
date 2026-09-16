@@ -24,34 +24,34 @@
     </header>
 
     <div class="category-toolbar rules-toolbar">
-        <div class="toolbar-field toolbar-field-source">
-            <FluentSelect TOption="string" Value="@FormatNullableInt(SelectedSourceId)" ValueChanged="HandleSourceChangedAsync" Disabled="@(Sources.Count == 0)" Label="Source">
-                @if (Sources.Count == 0)
-                {
-                    <FluentOption Value="">No sources</FluentOption>
-                }
-                else
-                {
-                    @foreach (var source in Sources)
+        <div class="toolbar-filter-group">
+            <div class="toolbar-field toolbar-field-source">
+                <FluentSelect TOption="string" Value="@FormatNullableInt(SelectedSourceId)" ValueChanged="HandleSourceChangedAsync" Disabled="@(Sources.Count == 0)" Label="Source">
+                    @if (Sources.Count == 0)
                     {
-                        <FluentOption Value="@source.Id.ToString(CultureInfo.InvariantCulture)">@FormatSourceDisplayName(source.DisplayName)</FluentOption>
+                        <FluentOption Value="">No sources</FluentOption>
                     }
-                }
-            </FluentSelect>
-        </div>
-
-        <div class="toolbar-field toolbar-field-content-type">
-            <FluentSelect TOption="string" Value="@SelectedContentType.ToString()" ValueChanged="HandleContentTypeChangedAsync" Label="Content Type">
-                <FluentOption Value="@AdminContentType.Vod.ToString()">VOD</FluentOption>
-                <FluentOption Value="@AdminContentType.Series.ToString()">Series</FluentOption>
-            </FluentSelect>
-        </div>
-
-        <div class="toolbar-field toolbar-field-action">
-            <div class="toolbar-action-group">
-                <FluentButton Appearance="Appearance.Neutral" @onclick="OpenRuleTesterDialog" Disabled="@(!HasSelectedSource)">Test rules</FluentButton>
-                <FluentButton Class="primary-action-button" Appearance="Appearance.Accent" IconStart="@(new Icons.Regular.Size20.Add())" @onclick="() => OnOpenCreate.InvokeAsync()" Disabled="@(!HasSelectedSource)">Add rule</FluentButton>
+                    else
+                    {
+                        @foreach (var source in Sources)
+                        {
+                            <FluentOption Value="@source.Id.ToString(CultureInfo.InvariantCulture)">@FormatSourceDisplayName(source.DisplayName)</FluentOption>
+                        }
+                    }
+                </FluentSelect>
             </div>
+
+            <div class="toolbar-field toolbar-field-content-type">
+                <FluentSelect TOption="string" Value="@SelectedContentType.ToString()" ValueChanged="HandleContentTypeChangedAsync" Label="Content Type">
+                    <FluentOption Value="@AdminContentType.Vod.ToString()">VOD</FluentOption>
+                    <FluentOption Value="@AdminContentType.Series.ToString()">Series</FluentOption>
+                </FluentSelect>
+            </div>
+        </div>
+
+        <div class="toolbar-action-group">
+            <FluentButton Appearance="Appearance.Neutral" @onclick="OpenRuleTesterDialog" Disabled="@(!HasSelectedSource)">Test rules</FluentButton>
+            <FluentButton Class="primary-action-button" Appearance="Appearance.Accent" IconStart="@(new Icons.Regular.Size20.Add())" @onclick="() => OnOpenCreate.InvokeAsync()" Disabled="@(!HasSelectedSource)">Add rule</FluentButton>
         </div>
     </div>
 

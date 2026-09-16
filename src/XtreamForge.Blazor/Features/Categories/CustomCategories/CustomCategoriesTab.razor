@@ -16,14 +16,16 @@
     </header>
 
     <div class="category-toolbar custom-categories-toolbar">
-        <div class="toolbar-field toolbar-field-content-type">
-            <FluentSelect TOption="string" Value="@SelectedContentType.ToString()" ValueChanged="HandleContentTypeChangedAsync" Label="Content Type">
-                <FluentOption Value="@AdminContentType.Vod.ToString()">VOD</FluentOption>
-                <FluentOption Value="@AdminContentType.Series.ToString()">Series</FluentOption>
-            </FluentSelect>
+        <div class="toolbar-filter-group">
+            <div class="toolbar-field toolbar-field-content-type">
+                <FluentSelect TOption="string" Value="@SelectedContentType.ToString()" ValueChanged="HandleContentTypeChangedAsync" Label="Content Type">
+                    <FluentOption Value="@AdminContentType.Vod.ToString()">VOD</FluentOption>
+                    <FluentOption Value="@AdminContentType.Series.ToString()">Series</FluentOption>
+                </FluentSelect>
+            </div>
         </div>
 
-        <div class="toolbar-field toolbar-field-action">
+        <div class="toolbar-action-group">
             <FluentButton Class="primary-action-button" Appearance="Appearance.Accent" IconStart="@(new Icons.Regular.Size20.Add())" @onclick="() => OnOpenCreate.InvokeAsync()">New category</FluentButton>
         </div>
     </div>

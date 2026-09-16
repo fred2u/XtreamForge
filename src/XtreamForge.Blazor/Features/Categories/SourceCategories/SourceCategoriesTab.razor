@@ -16,47 +16,49 @@
     </header>
 
     <div class="category-toolbar source-categories-toolbar">
-        <div class="toolbar-field toolbar-field-source">
-            <FluentSelect TOption="string" Value="@FormatNullableInt(SelectedSourceId)" ValueChanged="HandleSourceChangedAsync" Disabled="@(Sources.Count == 0)" Label="Source">
-                @if (Sources.Count == 0)
-                {
-                    <FluentOption Value="">No sources</FluentOption>
-                }
-                else
-                {
-                    @foreach (var source in Sources)
+        <div class="toolbar-filter-group">
+            <div class="toolbar-field toolbar-field-source">
+                <FluentSelect TOption="string" Value="@FormatNullableInt(SelectedSourceId)" ValueChanged="HandleSourceChangedAsync" Disabled="@(Sources.Count == 0)" Label="Source">
+                    @if (Sources.Count == 0)
                     {
-                        <FluentOption Value="@source.Id.ToString(CultureInfo.InvariantCulture)">@FormatSourceDisplayName(source.DisplayName)</FluentOption>
+                        <FluentOption Value="">No sources</FluentOption>
                     }
-                }
-            </FluentSelect>
+                    else
+                    {
+                        @foreach (var source in Sources)
+                        {
+                            <FluentOption Value="@source.Id.ToString(CultureInfo.InvariantCulture)">@FormatSourceDisplayName(source.DisplayName)</FluentOption>
+                        }
+                    }
+                </FluentSelect>
+            </div>
+
+            <div class="toolbar-field toolbar-field-content-type">
+                <FluentSelect TOption="string" Value="@SelectedContentType.ToString()" ValueChanged="HandleContentTypeChangedAsync" Label="Content Type">
+                    <FluentOption Value="@AdminContentType.Vod.ToString()">VOD</FluentOption>
+                    <FluentOption Value="@AdminContentType.Series.ToString()">Series</FluentOption>
+                </FluentSelect>
+            </div>
+
+            <div class="toolbar-field toolbar-field-search">
+                <FluentSearch Value="@SearchText"
+                              ValueChanged="OnSearchChanged"
+                              Immediate="true"
+                              ImmediateDelay="200"
+                              Placeholder="Search categories..."
+                              Label="Search" />
+            </div>
+
+            <div class="toolbar-field toolbar-field-status">
+                <FluentSelect TOption="string" Value="@StatusFilter.ToString()" ValueChanged="HandleStatusFilterChangedAsync" Label="Status">
+                    <FluentOption Value="@CategoryStatusFilter.All.ToString()">All</FluentOption>
+                    <FluentOption Value="@CategoryStatusFilter.Enabled.ToString()">Enabled</FluentOption>
+                    <FluentOption Value="@CategoryStatusFilter.Disabled.ToString()">Disabled</FluentOption>
+                </FluentSelect>
+            </div>
         </div>
 
-        <div class="toolbar-field toolbar-field-content-type">
-            <FluentSelect TOption="string" Value="@SelectedContentType.ToString()" ValueChanged="HandleContentTypeChangedAsync" Label="Content Type">
-                <FluentOption Value="@AdminContentType.Vod.ToString()">VOD</FluentOption>
-                <FluentOption Value="@AdminContentType.Series.ToString()">Series</FluentOption>
-            </FluentSelect>
-        </div>
-
-        <div class="toolbar-field toolbar-field-search">
-            <FluentSearch Value="@SearchText"
-                          ValueChanged="OnSearchChanged"
-                          Immediate="true"
-                          ImmediateDelay="200"
-                          Placeholder="Search categories..."
-                          Label="Search" />
-        </div>
-
-        <div class="toolbar-field toolbar-field-status">
-            <FluentSelect TOption="string" Value="@StatusFilter.ToString()" ValueChanged="HandleStatusFilterChangedAsync" Label="Status">
-                <FluentOption Value="@CategoryStatusFilter.All.ToString()">All</FluentOption>
-                <FluentOption Value="@CategoryStatusFilter.Enabled.ToString()">Enabled</FluentOption>
-                <FluentOption Value="@CategoryStatusFilter.Disabled.ToString()">Disabled</FluentOption>
-            </FluentSelect>
-        </div>
-
-        <div class="toolbar-field toolbar-field-action">
+        <div class="toolbar-action-group">
             <FluentButton Class="primary-action-button" Appearance="Appearance.Accent" IconStart="@(new Icons.Regular.Size20.Add())" @onclick="OnOpenAddSource">Add source</FluentButton>
         </div>
     </div>

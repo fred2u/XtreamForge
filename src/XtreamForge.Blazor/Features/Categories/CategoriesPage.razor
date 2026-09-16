@@ -106,7 +106,7 @@ else
 }
 
 <FluentDialog Hidden="@(!_isAddSourceDialogOpen)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseAddSourceDialog" aria-label="Add Xtream source">
-    <FluentDialogHeader ShowDismiss="@(!_isSourceDiscoverySaving)">Add Xtream source</FluentDialogHeader>
+    <FluentDialogHeader>Add Xtream source</FluentDialogHeader>
     <FluentDialogBody>
         <div class="dialog-form-grid">
             <FluentSelect TOption="string" @bind-Value="_sourceDiscoveryForm.Protocol" @bind-Value:after="_sourceDiscoveryForm.ApplyDefaultPortForProtocol" Label="Protocol" Disabled="@_isSourceDiscoverySaving">
@@ -133,7 +133,7 @@ else
 </FluentDialog>
 
 <FluentDialog Hidden="@(!_isAddRuleDialogOpen)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseAddRuleDialog" aria-label="Add category rule">
-    <FluentDialogHeader ShowDismiss="@(!_isRuleCreating)">Add category rule</FluentDialogHeader>
+    <FluentDialogHeader>Add category rule</FluentDialogHeader>
     <FluentDialogBody>
         <div class="dialog-form-grid">
             <FluentSelect TOption="string" Value="@_newRule.Action.ToString()" ValueChanged="value => _newRule.Action = ParseAction(value)" Label="Action" Disabled="@_isRuleCreating">
@@ -164,7 +164,7 @@ else
 </FluentDialog>
 
 <FluentDialog Hidden="@(_pendingRuleDelete is null)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseRuleDeleteDialog" aria-label="Delete category rule">
-    <FluentDialogHeader ShowDismiss="@(!_isRuleDeleteSaving)">Delete category rule?</FluentDialogHeader>
+    <FluentDialogHeader>Delete category rule?</FluentDialogHeader>
     <FluentDialogBody>
         @if (_pendingRuleDelete is not null)
         {
@@ -256,7 +256,7 @@ else
 </FluentDialog>
 
 <FluentDialog Hidden="@(!_isNewCustomCategoryDialogOpen)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseNewCustomCategoryDialog" aria-label="Create custom category">
-    <FluentDialogHeader ShowDismiss="@(!_isCustomCategoryCreating)">Create custom category</FluentDialogHeader>
+    <FluentDialogHeader>Create custom category</FluentDialogHeader>
     <FluentDialogBody>
         <div class="dialog-form-grid dialog-form-grid-single">
             <FluentTextField Value="@_selectedContentType.ToString()" ReadOnly="true" Label="Content type" />
@@ -275,7 +275,7 @@ else
 </FluentDialog>
 
 <FluentDialog Hidden="@(_pendingCustomCategoryDelete is null)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseCustomCategoryDeleteDialog" aria-label="Delete custom category">
-    <FluentDialogHeader ShowDismiss="@(!_isCustomCategoryDeleteSaving)">Delete custom category?</FluentDialogHeader>
+    <FluentDialogHeader>Delete custom category?</FluentDialogHeader>
     <FluentDialogBody>
         @if (_pendingCustomCategoryDelete is not null)
         {
@@ -664,11 +664,6 @@ else
 
     private Task CloseAddRuleDialog()
     {
-        if (_isRuleCreating)
-        {
-            return Task.CompletedTask;
-        }
-
         ResetAddRuleDialogState();
         return Task.CompletedTask;
     }
@@ -770,11 +765,6 @@ else
 
     private Task CloseRuleDeleteDialog()
     {
-        if (_isRuleDeleteSaving)
-        {
-            return Task.CompletedTask;
-        }
-
         _pendingRuleDelete = null;
         _ruleDeleteErrorMessage = null;
         _isRuleDeleteSaving = false;
@@ -950,11 +940,6 @@ else
 
     private Task CloseNewCustomCategoryDialog()
     {
-        if (_isCustomCategoryCreating)
-        {
-            return Task.CompletedTask;
-        }
-
         ResetNewCustomCategoryDialogState();
         return Task.CompletedTask;
     }
@@ -1052,11 +1037,6 @@ else
 
     private Task CloseCustomCategoryDeleteDialog()
     {
-        if (_isCustomCategoryDeleteSaving)
-        {
-            return Task.CompletedTask;
-        }
-
         _pendingCustomCategoryDelete = null;
         _customCategoryDeleteErrorMessage = null;
         _isCustomCategoryDeleteSaving = false;
@@ -1103,11 +1083,6 @@ else
 
     private Task CloseAddSourceDialog()
     {
-        if (_isSourceDiscoverySaving)
-        {
-            return Task.CompletedTask;
-        }
-
         ResetAddSourceDialogState();
         return Task.CompletedTask;
     }

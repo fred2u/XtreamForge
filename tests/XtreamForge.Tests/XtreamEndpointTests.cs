@@ -650,6 +650,13 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
 
         Assert.DoesNotContain(handler.Requests, request => ParseQuery(request.RequestUri, "series_id") == "501");
 
+        await WaitForConditionAsync(async () =>
+        {
+            await using var verifyScope = setupFactory.Services.CreateAsyncScope();
+            var verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+            return await verifyDbContext.StreamTmdbMappings.AnyAsync(mapping => mapping.StreamId == "502" && mapping.TmdbId == 601);
+        });
+
         var secondResponse = await client.GetAsync(BuildProxyRequestUri("get_series"));
         var secondPayload = await secondResponse.Content.ReadFromJsonAsync<List<TmdbSeriesResponse>>();
 

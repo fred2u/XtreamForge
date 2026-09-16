@@ -715,8 +715,9 @@ else
         }
     }
 
-    private async Task ToggleRuleEnabledAsync(RuleRowState rule)
+    private async Task ToggleRuleEnabledAsync(RuleToggleRequest request)
     {
+        var rule = request.Rule;
         if (_selectedSourceId is null)
         {
             rule.Fail("A source must be selected.");
@@ -729,10 +730,11 @@ else
             return;
         }
 
-        var originalValue = !rule.IsEnabled;
+        var originalValue = rule.IsEnabled;
 
         try
         {
+            rule.IsEnabled = request.IsEnabled;
             rule.BeginSave();
             await CategoriesClient.UpdateRuleAsync(rule.RuleId, new AdminCategoryRuleUpdate(
                 _selectedSourceId.Value,
@@ -1167,6 +1169,7 @@ else
     {
         _pendingRuleDelete = null;
         _ruleDeleteErrorMessage = null;
+        _isRuleDeleteSaving = false;
         return Task.CompletedTask;
     }
 
@@ -1174,6 +1177,7 @@ else
     {
         _pendingCustomCategoryDelete = null;
         _customCategoryDeleteErrorMessage = null;
+        _isCustomCategoryDeleteSaving = false;
         return Task.CompletedTask;
     }
 

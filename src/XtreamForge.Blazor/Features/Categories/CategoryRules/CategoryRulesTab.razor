@@ -162,7 +162,7 @@
                                 <td>@rule.Pattern</td>
                                 <td>@(rule.CaseSensitive ? "Case sensitive" : "Ignore case")</td>
                                 <td>
-                                    <FluentSwitch @bind-Value="rule.IsEnabled" @bind-Value:after="() => OnToggleEnabled.InvokeAsync(rule)" Disabled="@rule.IsBusy" CheckedMessage="On" UncheckedMessage="Off" AriaLabel="Toggle rule enabled state" />
+                                    <FluentSwitch Value="@rule.IsEnabled" ValueChanged="value => OnToggleEnabled.InvokeAsync(new RuleToggleRequest(rule, value))" Disabled="@rule.IsBusy" CheckedMessage="On" UncheckedMessage="Off" AriaLabel="Toggle rule enabled state" />
                                 </td>
                             }
                             <td>
@@ -257,7 +257,7 @@
     public EventCallback<RuleRowState> OnRequestDelete { get; set; }
 
     [Parameter]
-    public EventCallback<RuleRowState> OnToggleEnabled { get; set; }
+    public EventCallback<RuleToggleRequest> OnToggleEnabled { get; set; }
 
     [Parameter]
     public EventCallback<int?> OnSourceChanged { get; set; }

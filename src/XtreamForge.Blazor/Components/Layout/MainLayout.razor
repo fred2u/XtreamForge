@@ -1,16 +1,31 @@
 @inherits LayoutComponentBase
 
-<div class="layout-shell">
-    <aside class="sidebar">
-        <div class="brand">XtreamForge</div>
-        <nav class="navigation" aria-label="Primary administration navigation">
-            <NavLink href="/" Match="NavLinkMatch.All">Dashboard</NavLink>
-            <NavLink href="/categories">Categories</NavLink>
-            <NavLink href="/settings">Settings</NavLink>
-        </nav>
-    </aside>
+<FluentDesignTheme Mode="@DesignThemeModes.Light">
+    <div class="layout-shell">
+        <aside class="sidebar">
+            <div class="brand-block">
+                <FluentIcon Value="@(new Icons.Regular.Size24.Apps())" Color="Color.Accent" />
+                <div>
+                    <div class="brand">XtreamForge</div>
+                    <div class="brand-subtitle">Administration</div>
+                </div>
+            </div>
 
-    <main class="content">
-        @Body
-    </main>
-</div>
+            <FluentNavMenu Width="250" Title="Primary administration navigation">
+                <FluentNavLink Href="/" Match="NavLinkMatch.All" Icon="@(new Icons.Regular.Size20.Home())">Dashboard</FluentNavLink>
+                <FluentNavLink Href="/categories" Icon="@(new Icons.Regular.Size20.Grid())">Categories</FluentNavLink>
+                <FluentNavLink Href="/settings" Icon="@(new Icons.Regular.Size20.Settings())">Settings</FluentNavLink>
+            </FluentNavMenu>
+        </aside>
+
+        <main class="content">
+            @Body
+        </main>
+    </div>
+
+    <FluentToastProvider />
+    <FluentDialogProvider />
+    <FluentTooltipProvider />
+    <FluentMessageBarProvider />
+    <FluentMenuProvider />
+</FluentDesignTheme>

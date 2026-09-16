@@ -1,11 +1,11 @@
 @page "/categories"
 @using System.Globalization
 @using Microsoft.AspNetCore.WebUtilities
-@using XtreamForge.Blazor.Components.Shared
 @using XtreamForge.Blazor.Features.Categories.CategoryRules
 @using XtreamForge.Blazor.Features.Categories.CustomCategories
 @using XtreamForge.Blazor.Features.Categories.SourceCategories
 @inject CategoriesClient CategoriesClient
+@inject IToastService ToastService
 @inject NavigationManager NavigationManager
 
 <PageTitle>Categories - XtreamForge</PageTitle>
@@ -15,206 +15,157 @@
 
 @if (_isLoading)
 {
-    <section class="status-card categories-shell-card">
-        <div class="categories-skeleton-title"></div>
-        <div class="categories-skeleton-toolbar"></div>
-        <div class="categories-skeleton-block"></div>
-    </section>
+    <FluentCard Class="status-card loading-card categories-shell-card">
+        <FluentProgressRing />
+        <span>Loading category administration…</span>
+    </FluentCard>
 }
 else if (_categoryView is null || _rulesView is null)
 {
-    <section class="status-card categories-shell-card">
-        <h2>Unable to load category administration</h2>
-        <p>Try again after the backend and database are available.</p>
-        @if (!string.IsNullOrWhiteSpace(_pageErrorMessage))
-        {
-            <p class="inline-error">@_pageErrorMessage</p>
-        }
-    </section>
+    <FluentCard Class="status-card categories-shell-card">
+        <FluentMessageBar Title="Unable to load category administration" Intent="@MessageIntent.Error" AllowDismiss="false">
+            Try again after the backend and database are available.
+            @if (!string.IsNullOrWhiteSpace(_pageErrorMessage))
+            {
+                <div>@_pageErrorMessage</div>
+            }
+        </FluentMessageBar>
+    </FluentCard>
 }
 else
 {
-    <section class="status-card categories-shell-card">
-        <div class="categories-tab-strip" role="tablist" aria-label="Categories administration sections">
-            @foreach (var tab in _tabs)
-            {
-                <button
-                    type="button"
-                    id="@GetTabId(tab.Value)"
-                    class="categories-tab-button @GetTabCssClass(tab.Value)"
-                    role="tab"
-                    aria-selected="@(_activeTab == tab.Value)"
-                    aria-controls="@GetPanelId(tab.Value)"
-                    tabindex="@(_activeTab == tab.Value ? 0 : -1)"
-                    @onclick="() => ActivateTab(tab.Value)">
-                    @tab.Key
-                </button>
-            }
-        </div>
-
+    <FluentCard Class="status-card categories-shell-card">
         @if (!string.IsNullOrWhiteSpace(_pageErrorMessage))
         {
-            <div class="inline-error categories-page-error">@_pageErrorMessage</div>
+            <FluentMessageBar Title="Categories" Intent="@MessageIntent.Error" AllowDismiss="false">@_pageErrorMessage</FluentMessageBar>
         }
 
-        @switch (_activeTab)
-        {
-            case CategoriesTab.SourceCategories:
-                <div id="@GetPanelId(CategoriesTab.SourceCategories)" role="tabpanel" aria-labelledby="@GetTabId(CategoriesTab.SourceCategories)">
-                    <SourceCategoriesTab
-                        Sources="_categoryView.Sources"
-                        SelectedSourceId="_selectedSourceId"
-                        SelectedContentType="_selectedContentType"
-                        SearchText="@_searchText"
-                        StatusFilter="_statusFilter"
-                        Rows="FilteredCategoryRows"
-                        TotalCount="_categoryRows.Count"
-                        CustomCategories="_customCategoryRows"
-                        Message="@_categoryMessage"
-                        ErrorMessage="@_categoryErrorMessage"
-                        OnSourceChanged="OnSourceChangedAsync"
-                        OnContentTypeChanged="OnContentTypeChangedAsync"
-                        OnSearchChanged="OnSearchChangedAsync"
-                        OnStatusFilterChanged="OnStatusFilterChangedAsync"
-                        OnOpenAddSource="OpenAddSourceDialog"
-                        OnMappingChanged="OnMappingSelectionChangedAsync"
-                        OnCreateCustomCategory="CreateCustomCategoryAsync"
-                        OnCancelCustomCategory="CancelCustomCategoryCreate"
-                        OnRetry="RetryCategoryMappingAsync"
-                        OnOpenRule="OpenMatchedRuleAsync" />
-                </div>
-                break;
-            case CategoriesTab.CategoryRules:
-                <div id="@GetPanelId(CategoriesTab.CategoryRules)" role="tabpanel" aria-labelledby="@GetTabId(CategoriesTab.CategoryRules)">
-                    <CategoryRulesTab
-                        Sources="_categoryView.Sources"
-                        SelectedSourceId="_selectedSourceId"
-                        SelectedContentType="_selectedContentType"
-                        Rows="_ruleRows"
-                        Tester="_ruleTester"
-                        IsRefreshing="_isRulesRefreshing"
-                        HighlightedRuleId="_highlightedRuleId"
-                        Message="@_ruleMessage"
-                        ErrorMessage="@_ruleErrorMessage"
-                        OnSourceChanged="OnSourceChangedAsync"
-                        OnContentTypeChanged="OnContentTypeChangedAsync"
-                        OnOpenCreate="OpenAddRuleDialog"
-                        OnRunTester="RunRuleTesterAsync"
-                        OnBeginEdit="BeginRuleEdit"
-                        OnCancelEdit="CancelRuleEdit"
-                        OnSave="SaveRuleAsync"
-                        OnRequestDelete="RequestRuleDelete"
-                        OnToggleEnabled="ToggleRuleEnabledAsync"
-                        OnDropRequested="DropRuleAsync" />
-                </div>
-                break;
-            case CategoriesTab.GlobalCustomCategories:
-                <div id="@GetPanelId(CategoriesTab.GlobalCustomCategories)" role="tabpanel" aria-labelledby="@GetTabId(CategoriesTab.GlobalCustomCategories)">
-                    <CustomCategoriesTab
-                        SelectedContentType="_selectedContentType"
-                        Rows="_customCategoryRows"
-                        IsRefreshing="_isCategoryDataRefreshing"
-                        Message="@_customCategoryMessage"
-                        ErrorMessage="@_customCategoryErrorMessage"
-                        OnContentTypeChanged="OnContentTypeChangedAsync"
-                        OnOpenCreate="OpenNewCustomCategoryDialog"
-                        OnBeginEdit="BeginCustomCategoryEdit"
-                        OnCancelEdit="CancelCustomCategoryEdit"
-                        OnSave="SaveCustomCategoryAsync"
-                        OnOpenUsages="OpenCustomCategoryUsagesAsync"
-                        OnRequestDelete="RequestCustomCategoryDelete" />
-                </div>
-                break;
-        }
-    </section>
+        <FluentTabs @bind-ActiveTabId="ActiveTabId" Size="TabSize.Small" Class="categories-tabs">
+            <FluentTab Id="@CategoriesTab.SourceCategories.ToString()" Label="Source Categories">
+                <SourceCategoriesTab
+                    Sources="_categoryView.Sources"
+                    SelectedSourceId="_selectedSourceId"
+                    SelectedContentType="_selectedContentType"
+                    SearchText="@_searchText"
+                    StatusFilter="_statusFilter"
+                    Rows="FilteredCategoryRows"
+                    TotalCount="_categoryRows.Count"
+                    CustomCategories="_customCategoryRows"
+                    Message="@_categoryMessage"
+                    ErrorMessage="@_categoryErrorMessage"
+                    OnSourceChanged="OnSourceChangedAsync"
+                    OnContentTypeChanged="OnContentTypeChangedAsync"
+                    OnSearchChanged="OnSearchChangedAsync"
+                    OnStatusFilterChanged="OnStatusFilterChangedAsync"
+                    OnOpenAddSource="OpenAddSourceDialog"
+                    OnMappingChanged="OnMappingSelectionChangedAsync"
+                    OnCreateCustomCategory="CreateCustomCategoryAsync"
+                    OnCancelCustomCategory="CancelCustomCategoryCreate"
+                    OnRetry="RetryCategoryMappingAsync"
+                    OnOpenRule="OpenMatchedRuleAsync" />
+            </FluentTab>
+            <FluentTab Id="@CategoriesTab.CategoryRules.ToString()" Label="Category Rules">
+                <CategoryRulesTab
+                    Sources="_categoryView.Sources"
+                    SelectedSourceId="_selectedSourceId"
+                    SelectedContentType="_selectedContentType"
+                    Rows="_ruleRows"
+                    Tester="_ruleTester"
+                    IsRefreshing="_isRulesRefreshing"
+                    HighlightedRuleId="_highlightedRuleId"
+                    Message="@_ruleMessage"
+                    ErrorMessage="@_ruleErrorMessage"
+                    OnSourceChanged="OnSourceChangedAsync"
+                    OnContentTypeChanged="OnContentTypeChangedAsync"
+                    OnOpenCreate="OpenAddRuleDialog"
+                    OnRunTester="RunRuleTesterAsync"
+                    OnBeginEdit="BeginRuleEdit"
+                    OnCancelEdit="CancelRuleEdit"
+                    OnSave="SaveRuleAsync"
+                    OnRequestDelete="RequestRuleDelete"
+                    OnToggleEnabled="ToggleRuleEnabledAsync"
+                    OnDropRequested="DropRuleAsync" />
+            </FluentTab>
+            <FluentTab Id="@CategoriesTab.GlobalCustomCategories.ToString()" Label="Global Custom Categories">
+                <CustomCategoriesTab
+                    SelectedContentType="_selectedContentType"
+                    Rows="_customCategoryRows"
+                    IsRefreshing="_isCategoryDataRefreshing"
+                    Message="@_customCategoryMessage"
+                    ErrorMessage="@_customCategoryErrorMessage"
+                    OnContentTypeChanged="OnContentTypeChangedAsync"
+                    OnOpenCreate="OpenNewCustomCategoryDialog"
+                    OnBeginEdit="BeginCustomCategoryEdit"
+                    OnCancelEdit="CancelCustomCategoryEdit"
+                    OnSave="SaveCustomCategoryAsync"
+                    OnOpenUsages="OpenCustomCategoryUsagesAsync"
+                    OnRequestDelete="RequestCustomCategoryDelete" />
+            </FluentTab>
+        </FluentTabs>
+    </FluentCard>
 }
 
-<ModalDialog IsOpen="@_isAddSourceDialogOpen" Title="Add Xtream source" OnClose="CloseAddSourceDialog">
-    <ChildContent>
+<FluentDialog Hidden="@(!_isAddSourceDialogOpen)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseAddSourceDialog" aria-label="Add Xtream source">
+    <FluentDialogHeader ShowDismiss="@(!_isSourceDiscoverySaving)">Add Xtream source</FluentDialogHeader>
+    <FluentDialogBody>
         <div class="dialog-form-grid">
-            <label>
-                Protocol
-                <select value="@_sourceDiscoveryForm.Protocol" @onchange="HandleSourceDiscoveryProtocolChangedAsync" disabled="@_isSourceDiscoverySaving">
-                    <option value="https">HTTPS</option>
-                    <option value="http">HTTP</option>
-                </select>
-            </label>
-            <label>
-                Host / Base URL
-                <InputText @bind-Value="_sourceDiscoveryForm.HostOrBaseUrl" placeholder="example.com" disabled="@_isSourceDiscoverySaving" />
-            </label>
-            <label>
-                Port
-                <InputNumber @bind-Value="_sourceDiscoveryForm.Port" disabled="@_isSourceDiscoverySaving" />
-            </label>
-            <label>
-                Username
-                <InputText @bind-Value="_sourceDiscoveryForm.Username" disabled="@_isSourceDiscoverySaving" />
-            </label>
-            <label>
-                Password
-                <input class="blazor-password-input" type="password" @bind="_sourceDiscoveryForm.Password" disabled="@_isSourceDiscoverySaving" />
-            </label>
+            <FluentSelect TOption="string" @bind-Value="_sourceDiscoveryForm.Protocol" @bind-Value:after="_sourceDiscoveryForm.ApplyDefaultPortForProtocol" Label="Protocol" Disabled="@_isSourceDiscoverySaving">
+                <FluentOption Value="https">HTTPS</FluentOption>
+                <FluentOption Value="http">HTTP</FluentOption>
+            </FluentSelect>
+            <FluentTextField @bind-Value="_sourceDiscoveryForm.HostOrBaseUrl" Placeholder="example.com" Label="Host / Base URL" Disabled="@_isSourceDiscoverySaving" />
+            <FluentNumberField TValue="int?" @bind-Value="_sourceDiscoveryForm.Port" Label="Port" Disabled="@_isSourceDiscoverySaving" />
+            <FluentTextField @bind-Value="_sourceDiscoveryForm.Username" Label="Username" Disabled="@_isSourceDiscoverySaving" />
+            <FluentTextField @bind-Value="_sourceDiscoveryForm.Password" TextFieldType="TextFieldType.Password" Label="Password" Disabled="@_isSourceDiscoverySaving" />
         </div>
 
         @if (!string.IsNullOrWhiteSpace(_sourceDiscoveryErrorMessage))
         {
-            <div class="inline-error">@_sourceDiscoveryErrorMessage</div>
+            <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_sourceDiscoveryErrorMessage</FluentMessageBar>
         }
-    </ChildContent>
-    <FooterContent>
-        <button type="button" class="secondary-button" @onclick="CloseAddSourceDialog" disabled="@_isSourceDiscoverySaving">Cancel</button>
-        <button type="button" @onclick="DiscoverSourceAsync" disabled="@_isSourceDiscoverySaving">@( _isSourceDiscoverySaving ? "Connecting…" : "Connect & import")</button>
-    </FooterContent>
-</ModalDialog>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Neutral" @onclick="CloseAddSourceDialog" Disabled="@_isSourceDiscoverySaving">Cancel</FluentButton>
+        <FluentButton Appearance="Appearance.Accent" @onclick="DiscoverSourceAsync" Disabled="@_isSourceDiscoverySaving" Loading="@_isSourceDiscoverySaving">
+            Connect &amp; Import
+        </FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
 
-<ModalDialog IsOpen="@_isAddRuleDialogOpen" Title="Add category rule" OnClose="CloseAddRuleDialog" IsBusy="@_isRuleCreating">
-    <ChildContent>
+<FluentDialog Hidden="@(!_isAddRuleDialogOpen)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseAddRuleDialog" aria-label="Add category rule">
+    <FluentDialogHeader ShowDismiss="@(!_isRuleCreating)">Add category rule</FluentDialogHeader>
+    <FluentDialogBody>
         <div class="dialog-form-grid">
-            <label>
-                Action
-                <InputSelect @bind-Value="_newRule.Action" disabled="@_isRuleCreating">
-                    <option value="@CategoryRuleActionOption.Include">Include</option>
-                    <option value="@CategoryRuleActionOption.Exclude">Exclude</option>
-                </InputSelect>
-            </label>
-            <label>
-                Match
-                <InputSelect @bind-Value="_newRule.Operator" disabled="@_isRuleCreating">
-                    <option value="@CategoryRuleOperatorOption.Contains">Contains</option>
-                    <option value="@CategoryRuleOperatorOption.StartsWith">StartsWith</option>
-                </InputSelect>
-            </label>
-            <label>
-                Pattern
-                <InputText @bind-Value="_newRule.Pattern" maxlength="255" disabled="@_isRuleCreating" />
-            </label>
-            <label>
-                Case
-                <InputSelect @bind-Value="_newRule.CaseSensitive" disabled="@_isRuleCreating">
-                    <option value="false">Ignore case</option>
-                    <option value="true">Case sensitive</option>
-                </InputSelect>
-            </label>
+            <FluentSelect TOption="string" Value="@_newRule.Action.ToString()" ValueChanged="value => _newRule.Action = ParseAction(value)" Label="Action" Disabled="@_isRuleCreating">
+                <FluentOption Value="@CategoryRuleActionOption.Include.ToString()">Include</FluentOption>
+                <FluentOption Value="@CategoryRuleActionOption.Exclude.ToString()">Exclude</FluentOption>
+            </FluentSelect>
+            <FluentSelect TOption="string" Value="@_newRule.Operator.ToString()" ValueChanged="value => _newRule.Operator = ParseOperator(value)" Label="Match" Disabled="@_isRuleCreating">
+                <FluentOption Value="@CategoryRuleOperatorOption.Contains.ToString()">Contains</FluentOption>
+                <FluentOption Value="@CategoryRuleOperatorOption.StartsWith.ToString()">StartsWith</FluentOption>
+            </FluentSelect>
+            <FluentTextField @bind-Value="_newRule.Pattern" Maxlength="255" Label="Pattern" Disabled="@_isRuleCreating" />
+            <FluentSelect TOption="string" Value="@_newRule.CaseSensitive.ToString().ToLowerInvariant()" ValueChanged="value => _newRule.CaseSensitive = string.Equals(value, bool.TrueString, StringComparison.OrdinalIgnoreCase)" Label="Case" Disabled="@_isRuleCreating">
+                <FluentOption Value="false">Ignore case</FluentOption>
+                <FluentOption Value="true">Case sensitive</FluentOption>
+            </FluentSelect>
         </div>
-        <label class="checkbox-label">
-            <InputCheckbox @bind-Value="_newRule.IsEnabled" disabled="@_isRuleCreating" />
-            Enabled
-        </label>
+        <FluentSwitch @bind-Value="_newRule.IsEnabled" CheckedMessage="On" UncheckedMessage="Off">Enabled</FluentSwitch>
 
         @if (!string.IsNullOrWhiteSpace(_ruleCreateErrorMessage))
         {
-            <div class="inline-error">@_ruleCreateErrorMessage</div>
+            <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_ruleCreateErrorMessage</FluentMessageBar>
         }
-    </ChildContent>
-    <FooterContent>
-        <button type="button" class="secondary-button" @onclick="CloseAddRuleDialog" disabled="@_isRuleCreating">Cancel</button>
-        <button type="button" @onclick="CreateRuleAsync" disabled="@_isRuleCreating">@( _isRuleCreating ? "Adding…" : "Add rule")</button>
-    </FooterContent>
-</ModalDialog>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Neutral" @onclick="CloseAddRuleDialog" Disabled="@_isRuleCreating">Cancel</FluentButton>
+        <FluentButton Appearance="Appearance.Accent" @onclick="CreateRuleAsync" Disabled="@_isRuleCreating" Loading="@_isRuleCreating">Add Rule</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
 
-<ModalDialog IsOpen="@(_pendingRuleDelete is not null)" Title="Delete category rule?" OnClose="CloseRuleDeleteDialog">
-    <ChildContent>
+<FluentDialog Hidden="@(_pendingRuleDelete is null)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseRuleDeleteDialog" aria-label="Delete category rule">
+    <FluentDialogHeader ShowDismiss="@(!_isRuleDeleteSaving)">Delete category rule?</FluentDialogHeader>
+    <FluentDialogBody>
         @if (_pendingRuleDelete is not null)
         {
             <p>@FormatRuleSummary(_pendingRuleDelete)</p>
@@ -222,24 +173,28 @@ else
         }
         @if (!string.IsNullOrWhiteSpace(_ruleDeleteErrorMessage))
         {
-            <div class="inline-error">@_ruleDeleteErrorMessage</div>
+            <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_ruleDeleteErrorMessage</FluentMessageBar>
         }
-    </ChildContent>
-    <FooterContent>
-        <button type="button" class="secondary-button" @onclick="CloseRuleDeleteDialog" disabled="@_isRuleDeleteSaving">Cancel</button>
-        <button type="button" class="danger-button" @onclick="DeletePendingRuleAsync" disabled="@_isRuleDeleteSaving">@( _isRuleDeleteSaving ? "Deleting…" : "Delete")</button>
-    </FooterContent>
-</ModalDialog>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Neutral" @onclick="CloseRuleDeleteDialog" Disabled="@_isRuleDeleteSaving">Cancel</FluentButton>
+        <FluentButton Appearance="Appearance.Accent" @onclick="DeletePendingRuleAsync" Disabled="@_isRuleDeleteSaving" Loading="@_isRuleDeleteSaving">Delete</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
 
-<ModalDialog IsOpen="@_isCustomCategoryUsageDialogOpen" Title="@(_customCategoryUsageTitle ?? "Custom category usage")" OnClose="CloseCustomCategoryUsagesDialog">
-    <ChildContent>
+<FluentDialog Hidden="@(!_isCustomCategoryUsageDialogOpen)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseCustomCategoryUsagesDialog" aria-label="Custom category usage">
+    <FluentDialogHeader>@(_customCategoryUsageTitle ?? "Custom category usage")</FluentDialogHeader>
+    <FluentDialogBody>
         @if (_isCustomCategoryUsageLoading)
         {
-            <p>Loading usage…</p>
+            <div class="loading-card compact-loading-card">
+                <FluentProgressRing />
+                <span>Loading usage…</span>
+            </div>
         }
         else if (!string.IsNullOrWhiteSpace(_customCategoryUsageErrorMessage))
         {
-            <div class="inline-error">@_customCategoryUsageErrorMessage</div>
+            <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_customCategoryUsageErrorMessage</FluentMessageBar>
         }
         else
         {
@@ -273,21 +228,19 @@ else
                                     {
                                         <div class="inline-editor-actions">
                                             <span class="category-meta">Return to Original?</span>
-                                            <button type="button" class="danger-button" @onclick="() => UnlinkCustomCategoryUsageAsync(usage)" disabled="@usage.IsBusy">@(usage.IsBusy ? "Unlinking…" : "Unlink")</button>
-                                            <button type="button" class="secondary-button" @onclick="() => CancelCustomCategoryUsageUnlink(usage)" disabled="@usage.IsBusy">Cancel</button>
+                                            <FluentButton Appearance="Appearance.Accent" @onclick="() => UnlinkCustomCategoryUsageAsync(usage)" Disabled="@usage.IsBusy">@(usage.IsBusy ? "Unlinking…" : "Unlink")</FluentButton>
+                                            <FluentButton Appearance="Appearance.Neutral" @onclick="() => CancelCustomCategoryUsageUnlink(usage)" Disabled="@usage.IsBusy">Cancel</FluentButton>
                                         </div>
                                     }
                                     else
                                     {
-                                        <button type="button"
-                                                class="secondary-button button-with-icon"
-                                                title="Unlink source category"
-                                                aria-label="Unlink source category"
-                                                @onclick="() => BeginCustomCategoryUsageUnlink(usage)"
-                                                disabled="@usage.IsBusy">
-                                            <AppIcon Name="unlink" />
+                                        <FluentButton Appearance="Appearance.Neutral"
+                                                      Title="Unlink source category"
+                                                      AriaLabel="Unlink source category"
+                                                      @onclick="() => BeginCustomCategoryUsageUnlink(usage)"
+                                                      Disabled="@usage.IsBusy">
                                             <span>Unlink</span>
-                                        </button>
+                                        </FluentButton>
                                     }
                                 </td>
                             </tr>
@@ -296,36 +249,34 @@ else
                 </table>
             </div>
         }
-    </ChildContent>
-    <FooterContent>
-        <button type="button" class="secondary-button" @onclick="CloseCustomCategoryUsagesDialog">Close</button>
-    </FooterContent>
-</ModalDialog>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Neutral" @onclick="CloseCustomCategoryUsagesDialog">Close</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
 
-<ModalDialog IsOpen="@_isNewCustomCategoryDialogOpen" Title="Create custom category" OnClose="CloseNewCustomCategoryDialog" IsBusy="@_isCustomCategoryCreating">
-    <ChildContent>
-        <label>
-            Content type
-            <input value="@_selectedContentType" readonly />
-        </label>
-        <label>
-            Name
-            <InputText @bind-Value="_newCustomCategory.DisplayName" maxlength="255" placeholder="Movies 4K" disabled="@_isCustomCategoryCreating" />
-        </label>
+<FluentDialog Hidden="@(!_isNewCustomCategoryDialogOpen)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseNewCustomCategoryDialog" aria-label="Create custom category">
+    <FluentDialogHeader ShowDismiss="@(!_isCustomCategoryCreating)">Create custom category</FluentDialogHeader>
+    <FluentDialogBody>
+        <div class="dialog-form-grid dialog-form-grid-single">
+            <FluentTextField Value="@_selectedContentType.ToString()" ReadOnly="true" Label="Content type" />
+            <FluentTextField @bind-Value="_newCustomCategory.DisplayName" Maxlength="255" Placeholder="Movies 4K" Label="Name" Disabled="@_isCustomCategoryCreating" />
+        </div>
 
         @if (!string.IsNullOrWhiteSpace(_customCategoryCreateErrorMessage))
         {
-            <div class="inline-error">@_customCategoryCreateErrorMessage</div>
+            <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_customCategoryCreateErrorMessage</FluentMessageBar>
         }
-    </ChildContent>
-    <FooterContent>
-        <button type="button" class="secondary-button" @onclick="CloseNewCustomCategoryDialog" disabled="@_isCustomCategoryCreating">Cancel</button>
-        <button type="button" @onclick="CreateStandaloneCustomCategoryAsync" disabled="@_isCustomCategoryCreating">@( _isCustomCategoryCreating ? "Creating…" : "Create")</button>
-    </FooterContent>
-</ModalDialog>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Neutral" @onclick="CloseNewCustomCategoryDialog" Disabled="@_isCustomCategoryCreating">Cancel</FluentButton>
+        <FluentButton Appearance="Appearance.Accent" @onclick="CreateStandaloneCustomCategoryAsync" Disabled="@_isCustomCategoryCreating" Loading="@_isCustomCategoryCreating">Create</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
 
-<ModalDialog IsOpen="@(_pendingCustomCategoryDelete is not null)" Title="Delete custom category?" OnClose="CloseCustomCategoryDeleteDialog">
-    <ChildContent>
+<FluentDialog Hidden="@(_pendingCustomCategoryDelete is null)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseCustomCategoryDeleteDialog" aria-label="Delete custom category">
+    <FluentDialogHeader ShowDismiss="@(!_isCustomCategoryDeleteSaving)">Delete custom category?</FluentDialogHeader>
+    <FluentDialogBody>
         @if (_pendingCustomCategoryDelete is not null)
         {
             <p>@_pendingCustomCategoryDelete.DisplayName</p>
@@ -333,14 +284,14 @@ else
         }
         @if (!string.IsNullOrWhiteSpace(_customCategoryDeleteErrorMessage))
         {
-            <div class="inline-error">@_customCategoryDeleteErrorMessage</div>
+            <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_customCategoryDeleteErrorMessage</FluentMessageBar>
         }
-    </ChildContent>
-    <FooterContent>
-        <button type="button" class="secondary-button" @onclick="CloseCustomCategoryDeleteDialog" disabled="@_isCustomCategoryDeleteSaving">Cancel</button>
-        <button type="button" class="danger-button" @onclick="DeletePendingCustomCategoryAsync" disabled="@_isCustomCategoryDeleteSaving">@( _isCustomCategoryDeleteSaving ? "Deleting…" : "Delete")</button>
-    </FooterContent>
-</ModalDialog>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Neutral" @onclick="CloseCustomCategoryDeleteDialog" Disabled="@_isCustomCategoryDeleteSaving">Cancel</FluentButton>
+        <FluentButton Appearance="Appearance.Accent" @onclick="DeletePendingCustomCategoryAsync" Disabled="@_isCustomCategoryDeleteSaving" Loading="@_isCustomCategoryDeleteSaving">Delete</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
 
 @code {
     private static readonly IReadOnlyDictionary<string, CategoriesTab> _tabs = new Dictionary<string, CategoriesTab>
@@ -398,6 +349,18 @@ else
     private string? _customCategoryDeleteErrorMessage;
 
     private IReadOnlyList<CategoryRowState> FilteredCategoryRows => CategoriesPageState.FilterCategoryRows(_categoryRows, _searchText, _statusFilter);
+
+    private string ActiveTabId
+    {
+        get => _activeTab.ToString();
+        set
+        {
+            if (Enum.TryParse<CategoriesTab>(value, true, out var tab))
+            {
+                _activeTab = tab;
+            }
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -546,17 +509,6 @@ else
         return Task.CompletedTask;
     }
 
-    private void ActivateTab(CategoriesTab tab)
-    {
-        _activeTab = tab;
-    }
-
-    private string GetTabCssClass(CategoriesTab tab) => _activeTab == tab ? "active" : string.Empty;
-
-    private static string GetTabId(CategoriesTab tab) => $"categories-tab-{tab}";
-
-    private static string GetPanelId(CategoriesTab tab) => $"categories-panel-{tab}";
-
     private async Task OnSourceChangedAsync(int? value)
     {
         _selectedSourceId = value;
@@ -684,6 +636,7 @@ else
 
             ResetAddRuleDialogState();
             await RefreshRulesAndCategoryViewsAsync("Rule created.");
+            ToastService.ShowToast(ToastIntent.Success, "Rule created");
         }
         catch (Exception exception)
         {
@@ -711,6 +664,11 @@ else
 
     private Task CloseAddRuleDialog()
     {
+        if (_isRuleCreating)
+        {
+            return Task.CompletedTask;
+        }
+
         ResetAddRuleDialogState();
         return Task.CompletedTask;
     }
@@ -749,6 +707,7 @@ else
 
             rule.CommitSave();
             await RefreshRulesAndCategoryViewsAsync("Rule saved.", rule.RuleId);
+            ToastService.ShowToast(ToastIntent.Success, "Rule saved");
         }
         catch (Exception exception)
         {
@@ -770,11 +729,10 @@ else
             return;
         }
 
-        var originalValue = rule.IsEnabled;
+        var originalValue = !rule.IsEnabled;
 
         try
         {
-            rule.IsEnabled = !rule.IsEnabled;
             rule.BeginSave();
             await CategoriesClient.UpdateRuleAsync(rule.RuleId, new AdminCategoryRuleUpdate(
                 _selectedSourceId.Value,
@@ -810,6 +768,11 @@ else
 
     private Task CloseRuleDeleteDialog()
     {
+        if (_isRuleDeleteSaving)
+        {
+            return Task.CompletedTask;
+        }
+
         _pendingRuleDelete = null;
         _ruleDeleteErrorMessage = null;
         _isRuleDeleteSaving = false;
@@ -829,8 +792,9 @@ else
             _ruleDeleteErrorMessage = null;
             _pendingRuleDelete.BeginSave();
             await CategoriesClient.DeleteRuleAsync(_pendingRuleDelete.RuleId, _selectedSourceId.Value, _selectedContentType);
-            await CloseRuleDeleteDialog();
+            await CloseRuleDeleteDialogCoreAsync();
             await RefreshRulesAndCategoryViewsAsync("Rule deleted.");
+            ToastService.ShowToast(ToastIntent.Success, "Rule deleted");
         }
         catch (Exception exception)
         {
@@ -942,6 +906,7 @@ else
             row.CommitSave();
             _customCategoryMessage = "Custom category saved.";
             await RefreshCategoriesViewAsync();
+            ToastService.ShowToast(ToastIntent.Success, "Custom category saved");
         }
         catch (Exception exception)
         {
@@ -961,6 +926,7 @@ else
             ResetNewCustomCategoryDialogState();
             _customCategoryMessage = "Custom category created.";
             await RefreshCategoriesViewAsync();
+            ToastService.ShowToast(ToastIntent.Success, "Custom category created");
         }
         catch (Exception exception)
         {
@@ -982,6 +948,11 @@ else
 
     private Task CloseNewCustomCategoryDialog()
     {
+        if (_isCustomCategoryCreating)
+        {
+            return Task.CompletedTask;
+        }
+
         ResetNewCustomCategoryDialogState();
         return Task.CompletedTask;
     }
@@ -1079,6 +1050,11 @@ else
 
     private Task CloseCustomCategoryDeleteDialog()
     {
+        if (_isCustomCategoryDeleteSaving)
+        {
+            return Task.CompletedTask;
+        }
+
         _pendingCustomCategoryDelete = null;
         _customCategoryDeleteErrorMessage = null;
         _isCustomCategoryDeleteSaving = false;
@@ -1099,9 +1075,10 @@ else
             _customCategoryMessage = null;
             _customCategoryErrorMessage = null;
             await CategoriesClient.DeleteCustomCategoryAsync(_pendingCustomCategoryDelete.Summary.Id, _selectedContentType);
-            await CloseCustomCategoryDeleteDialog();
+            await CloseCustomCategoryDeleteDialogCoreAsync();
             _customCategoryMessage = "Custom category deleted.";
             await RefreshCategoriesViewAsync();
+            ToastService.ShowToast(ToastIntent.Success, "Custom category deleted");
         }
         catch (Exception exception)
         {
@@ -1124,14 +1101,12 @@ else
 
     private Task CloseAddSourceDialog()
     {
-        ResetAddSourceDialogState();
-        return Task.CompletedTask;
-    }
+        if (_isSourceDiscoverySaving)
+        {
+            return Task.CompletedTask;
+        }
 
-    private Task HandleSourceDiscoveryProtocolChangedAsync(ChangeEventArgs args)
-    {
-        _sourceDiscoveryForm.Protocol = args.Value?.ToString() ?? "https";
-        _sourceDiscoveryForm.ApplyDefaultPortForProtocol();
+        ResetAddSourceDialogState();
         return Task.CompletedTask;
     }
 
@@ -1171,11 +1146,36 @@ else
             {
                 ResetAddSourceDialogState();
                 _categoryMessage = successMessage;
+                ToastService.ShowToast(ToastIntent.Success, "Source imported");
             }
         }
     }
 
     private static string FormatRuleSummary(RuleRowState rule) => $"{rule.Action} categories {rule.Operator} \"{rule.Pattern}\"";
+
+    private static CategoryRuleActionOption ParseAction(string? value) =>
+        Enum.TryParse<CategoryRuleActionOption>(value, true, out var action)
+            ? action
+            : CategoryRuleActionOption.Include;
+
+    private static CategoryRuleOperatorOption ParseOperator(string? value) =>
+        Enum.TryParse<CategoryRuleOperatorOption>(value, true, out var categoryRuleOperator)
+            ? categoryRuleOperator
+            : CategoryRuleOperatorOption.Contains;
+
+    private Task CloseRuleDeleteDialogCoreAsync()
+    {
+        _pendingRuleDelete = null;
+        _ruleDeleteErrorMessage = null;
+        return Task.CompletedTask;
+    }
+
+    private Task CloseCustomCategoryDeleteDialogCoreAsync()
+    {
+        _pendingCustomCategoryDelete = null;
+        _customCategoryDeleteErrorMessage = null;
+        return Task.CompletedTask;
+    }
 
     private sealed class SourceDiscoveryFormState
     {
@@ -1191,9 +1191,10 @@ else
 
         public static SourceDiscoveryFormState CreateDefault() => new();
 
-        public void ApplyDefaultPortForProtocol()
+        public Task ApplyDefaultPortForProtocol()
         {
             Port = Protocol == "http" ? 80 : 443;
+            return Task.CompletedTask;
         }
     }
 

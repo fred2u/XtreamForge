@@ -8,34 +8,41 @@
 
 @if (_isLoading)
 {
-    <section class="status-card">
-        <p>Loading dashboard…</p>
-    </section>
+    <FluentCard Class="status-card loading-card">
+        <FluentProgressRing />
+        <span>Loading dashboard…</span>
+    </FluentCard>
 }
 else if (_status is null)
 {
-    <section class="status-card validation-card">
-        <p>Unable to load dashboard status.</p>
-        @if (!string.IsNullOrWhiteSpace(_errorMessage))
-        {
-            <p>@_errorMessage</p>
-        }
-    </section>
+    <FluentCard Class="status-card">
+        <FluentMessageBar Title="Unable to load dashboard" Intent="@MessageIntent.Error" AllowDismiss="false">
+            Try again after the backend and database are available.
+            @if (!string.IsNullOrWhiteSpace(_errorMessage))
+            {
+                <div>@_errorMessage</div>
+            }
+        </FluentMessageBar>
+    </FluentCard>
 }
 else
 {
     <div class="dashboard-grid">
-        <section class="status-card">
-            <h2>Application status</h2>
-            <p class="status-value">@_status.Status</p>
+        <FluentCard Class="status-card">
+            <FluentLabel Typo="Typography.PaneHeader">Application status</FluentLabel>
+            <div class="status-row">
+                <FluentBadge Appearance="Appearance.Accent">@_status.Status</FluentBadge>
+            </div>
             <p>@_status.ApplicationName v@_status.ApplicationVersion</p>
-        </section>
+        </FluentCard>
 
-        <section class="status-card">
-            <h2>Database connectivity</h2>
-            <p class="status-value">@_status.DatabaseStatus</p>
+        <FluentCard Class="status-card">
+            <FluentLabel Typo="Typography.PaneHeader">Database connectivity</FluentLabel>
+            <div class="status-row">
+                <FluentBadge Appearance="Appearance.Neutral">@_status.DatabaseStatus</FluentBadge>
+            </div>
             <p>@_status.DatabaseDetails</p>
-        </section>
+        </FluentCard>
     </div>
 }
 

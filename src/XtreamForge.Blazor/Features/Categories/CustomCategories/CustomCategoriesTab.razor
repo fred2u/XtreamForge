@@ -1,5 +1,4 @@
 @namespace XtreamForge.Blazor.Features.Categories.CustomCategories
-@using XtreamForge.Blazor.Components.Shared
 
 <section class="categories-tab-panel">
     <header class="categories-panel-header">
@@ -9,123 +8,103 @@
         </div>
         @if (IsRefreshing)
         {
-            <div class="categories-count">Refreshing…</div>
+            <FluentProgressRing Width="20px" />
         }
     </header>
 
     <div class="categories-toolbar-grid">
-        <label>
-            Content Type
-            <select value="@SelectedContentType.ToString()" @onchange="HandleContentTypeChangedAsync">
-                <option value="@AdminContentType.Vod">VOD</option>
-                <option value="@AdminContentType.Series">Series</option>
-            </select>
-        </label>
+        <FluentSelect TOption="string" Value="@SelectedContentType.ToString()" ValueChanged="HandleContentTypeChangedAsync" Label="Content Type">
+            <FluentOption Value="@AdminContentType.Vod.ToString()">VOD</FluentOption>
+            <FluentOption Value="@AdminContentType.Series.ToString()">Series</FluentOption>
+        </FluentSelect>
 
         <div class="toolbar-actions">
-            <button type="button" @onclick="() => OnOpenCreate.InvokeAsync()">+ New category</button>
+            <FluentButton Appearance="Appearance.Accent" @onclick="() => OnOpenCreate.InvokeAsync()">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Add())" Slot="start" />
+                <span>New Category</span>
+            </FluentButton>
         </div>
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(Message) || !string.IsNullOrWhiteSpace(ErrorMessage))
+    @if (!string.IsNullOrWhiteSpace(Message))
     {
-        <div class="panel-feedback">
-            @if (!string.IsNullOrWhiteSpace(Message))
-            {
-                <div class="inline-success">@Message</div>
-            }
-            @if (!string.IsNullOrWhiteSpace(ErrorMessage))
-            {
-                <div class="inline-error">@ErrorMessage</div>
-            }
-        </div>
+        <FluentMessageBar Title="Custom categories" Intent="@MessageIntent.Success" AllowDismiss="false">@Message</FluentMessageBar>
+    }
+    @if (!string.IsNullOrWhiteSpace(ErrorMessage))
+    {
+        <FluentMessageBar Title="Custom categories" Intent="@MessageIntent.Error" AllowDismiss="false">@ErrorMessage</FluentMessageBar>
     }
 
     @if (Rows.Count == 0)
     {
-        <div class="empty-state">
+        <FluentCard Class="empty-state">
             <p>No custom categories created for this content type yet.</p>
-        </div>
+        </FluentCard>
     }
     else
     {
         <div class="table-scroll">
-            <table class="category-grid">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Used By</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var row in Rows)
+            <FluentDataGrid Items="@Rows.AsQueryable()"
+                            TGridItem="CustomCategoryRowState"
+                            DisplayMode="DataGridDisplayMode.Table"
+                            GridTemplateColumns="2fr 1.2fr 1fr"
+                            RowSize="DataGridRowSize.Small"
+                            MultiLine="true"
+                            Class="categories-grid">
+                <TemplateColumn Title="Name">
+                    <div class="category-name">@context.Summary.DisplayName</div>
+                    <div class="category-meta">XtreamForge ID @context.Summary.XtreamForgeCategoryId</div>
+                    @if (!string.IsNullOrWhiteSpace(context.Message))
                     {
-                        <tr @key="row.Summary.Id">
-                            <td>
-                                <div class="category-name">@row.Summary.DisplayName</div>
-                                <div class="category-meta">XtreamForge ID @row.Summary.XtreamForgeCategoryId</div>
-                                @if (row.IsEditing)
-                                {
-                                    <div class="inline-editor-box">
-                                        <label>
-                                            Name
-                                            <InputText @bind-Value="row.DisplayName" maxlength="255" disabled="@row.IsBusy" />
-                                        </label>
-                                        <div class="inline-editor-actions">
-                                            <button type="button" @onclick="() => OnSave.InvokeAsync(row)" disabled="@row.IsBusy">@(row.IsBusy ? "Saving…" : "Save")</button>
-                                            <button type="button" class="secondary-button" @onclick="() => OnCancelEdit.InvokeAsync(row)" disabled="@row.IsBusy">Cancel</button>
-                                        </div>
-                                    </div>
-                                }
-                            </td>
-                            <td>
-                                @if (row.UsageCount > 0)
-                                {
-                                    <div class="usage-cell">
-                                        <button type="button" class="link-button" @onclick="() => OnOpenUsages.InvokeAsync(row)">
-                                            @row.UsageCount source categor@(row.UsageCount == 1 ? "y" : "ies")
-                                        </button>
-                                        <button type="button" class="icon-button" title="View source category usage" aria-label="View source category usage" @onclick="() => OnOpenUsages.InvokeAsync(row)">
-                                            <AppIcon Name="details" />
-                                        </button>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <span class="category-meta">Unused</span>
-                                }
-                            </td>
-                            <td>
-                                <div class="row-actions">
-                                    @if (!row.IsEditing)
-                                    {
-                                        <button type="button" class="icon-button" title="Edit custom category" aria-label="Edit custom category" @onclick="() => OnBeginEdit.InvokeAsync(row)" disabled="@row.IsBusy">
-                                            <AppIcon Name="edit" />
-                                        </button>
-                                    }
-                                    <button type="button"
-                                            class="icon-button danger-button"
-                                            title="@(row.UsageCount > 0 ? "Delete unavailable while category is in use" : "Delete custom category")"
-                                            aria-label="Delete custom category"
-                                            @onclick="() => OnRequestDelete.InvokeAsync(row)"
-                                            disabled="@(row.IsBusy || row.UsageCount > 0)">
-                                        <AppIcon Name="trash" />
-                                    </button>
-                                </div>
-                                @if (row.UsageCount > 0)
-                                {
-                                    <div class="category-meta">Delete is available only when unused. Inspect Used By for details.</div>
-                                }
-                                @if (!string.IsNullOrWhiteSpace(row.Message))
-                                {
-                                    <div class="@(row.SaveState == MutationFeedbackState.Failed ? "inline-error" : "category-meta")">@row.Message</div>
-                                }
-                            </td>
-                        </tr>
+                        <div class="category-meta">@context.Message</div>
                     }
-                </tbody>
-            </table>
+                </TemplateColumn>
+                <TemplateColumn Title="Used By">
+                    @if (context.UsageCount > 0)
+                    {
+                        <div class="usage-cell">
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="() => OnOpenUsages.InvokeAsync(context)">
+                                @context.UsageCount source categor@(context.UsageCount == 1 ? "y" : "ies")
+                            </FluentButton>
+                        </div>
+                    }
+                    else
+                    {
+                        <span class="category-meta">Unused</span>
+                    }
+                </TemplateColumn>
+                <TemplateColumn Title="Actions">
+                    <div class="row-actions">
+                        @if (!context.IsEditing)
+                        {
+                            <FluentButton Appearance="Appearance.Neutral" Title="Edit custom category" AriaLabel="Edit custom category" @onclick="() => OnBeginEdit.InvokeAsync(context)" Disabled="@context.IsBusy">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.Edit())" />
+                            </FluentButton>
+                        }
+                        <FluentButton Appearance="Appearance.Neutral"
+                                      Title="Delete custom category"
+                                      AriaLabel="Delete custom category"
+                                      @onclick="() => OnRequestDelete.InvokeAsync(context)"
+                                      Disabled="@(context.IsBusy || context.UsageCount > 0)">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.Delete())" Color="Color.Error" />
+                        </FluentButton>
+                    </div>
+                    @if (context.IsEditing)
+                    {
+                        <div class="inline-editor-box">
+                            <FluentTextField @bind-Value="context.DisplayName" Maxlength="255" Label="Name" Disabled="@context.IsBusy" />
+                            <div class="inline-editor-actions">
+                                <FluentButton Appearance="Appearance.Accent" @onclick="() => OnSave.InvokeAsync(context)" Disabled="@context.IsBusy">Save</FluentButton>
+                                <FluentButton Appearance="Appearance.Neutral" @onclick="() => OnCancelEdit.InvokeAsync(context)" Disabled="@context.IsBusy">Cancel</FluentButton>
+                            </div>
+                        </div>
+                    }
+                    @if (context.UsageCount > 0)
+                    {
+                        <div class="category-meta">Delete is available only when unused. Inspect Used By for details.</div>
+                    }
+                </TemplateColumn>
+            </FluentDataGrid>
         </div>
     }
 </section>
@@ -167,8 +146,8 @@
     [Parameter]
     public EventCallback<CustomCategoryRowState> OnRequestDelete { get; set; }
 
-    private Task HandleContentTypeChangedAsync(ChangeEventArgs args) =>
-        Enum.TryParse<AdminContentType>(args.Value?.ToString(), true, out var value)
-            ? OnContentTypeChanged.InvokeAsync(value)
+    private Task HandleContentTypeChangedAsync(string? value) =>
+        Enum.TryParse<AdminContentType>(value, true, out var contentType)
+            ? OnContentTypeChanged.InvokeAsync(contentType)
             : Task.CompletedTask;
 }

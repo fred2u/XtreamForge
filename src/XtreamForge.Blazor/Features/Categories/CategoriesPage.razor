@@ -377,21 +377,21 @@ else
             {
                 _activeTab = tab;
             }
-
-            private static string FormatSourceDisplayName(string displayName)
-            {
-                if (!Uri.TryCreate(displayName, UriKind.Absolute, out var uri)
-                    || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-                {
-                    return displayName;
-                }
-
-                var path = uri.AbsolutePath.TrimEnd('/');
-                return string.IsNullOrEmpty(path) || path == "/"
-                    ? uri.Authority
-                    : $"{uri.Authority}{path}";
-            }
         }
+    }
+
+    private static string FormatSourceDisplayName(string displayName)
+    {
+        if (!Uri.TryCreate(displayName, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return displayName;
+        }
+
+        var path = uri.AbsolutePath.TrimEnd('/');
+        return string.IsNullOrEmpty(path) || path == "/"
+            ? uri.Authority
+            : $"{uri.Authority}{path}";
     }
 
     protected override async Task OnInitializedAsync()

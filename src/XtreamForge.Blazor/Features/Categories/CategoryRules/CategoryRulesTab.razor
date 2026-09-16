@@ -315,28 +315,6 @@
             return;
         }
 
-        private static string GetRuleTesterSummary(AdminCategoryRulePreview preview)
-        {
-            if (preview.MatchedRuleSequence is int matchedRuleSequence)
-            {
-                return $"{preview.Decision} by rule #{matchedRuleSequence}";
-            }
-
-            return string.Equals(preview.Decision, "Exclude", StringComparison.OrdinalIgnoreCase)
-                ? "Excluded"
-                : "Included by default";
-        }
-
-        private static string GetRuleTesterDetails(AdminCategoryRulePreview preview)
-        {
-            if (preview.MatchedRuleSequence is not int)
-            {
-                return "No matching rule.";
-            }
-
-            return $"{preview.MatchedRuleOperator} \"{preview.MatchedPattern}\" · {(preview.MatchedRuleCaseSensitive == true ? "Case sensitive" : "Ignore case")}";
-        }
-
         var signature = string.Join('|', Rows.Select(rule => $"{rule.RuleId}:{rule.Sequence}:{rule.IsEditing}:{rule.IsBusy}"));
         if (!firstRender && string.Equals(_lastDragDropSignature, signature, StringComparison.Ordinal))
         {
@@ -347,6 +325,28 @@
         _dotNetReference ??= DotNetObjectReference.Create(this);
         await _module.InvokeVoidAsync("initializeRuleDragDrop", _rulesTable, _dotNetReference);
         _lastDragDropSignature = signature;
+    }
+
+    private static string GetRuleTesterSummary(AdminCategoryRulePreview preview)
+    {
+        if (preview.MatchedRuleSequence is int matchedRuleSequence)
+        {
+            return $"{preview.Decision} by rule #{matchedRuleSequence}";
+        }
+
+        return string.Equals(preview.Decision, "Exclude", StringComparison.OrdinalIgnoreCase)
+            ? "Excluded"
+            : "Included by default";
+    }
+
+    private static string GetRuleTesterDetails(AdminCategoryRulePreview preview)
+    {
+        if (preview.MatchedRuleSequence is not int)
+        {
+            return "No matching rule.";
+        }
+
+        return $"{preview.MatchedRuleOperator} \"{preview.MatchedPattern}\" · {(preview.MatchedRuleCaseSensitive == true ? "Case sensitive" : "Ignore case")}";
     }
 
     [JSInvokable]

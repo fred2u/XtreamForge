@@ -476,6 +476,8 @@ public sealed record AdminCategoryRuleOrderUpdate(
 
 public sealed record RuleDropRequest(int DraggedRuleId, int TargetIndex);
 
+public sealed record RuleToggleRequest(RuleRowState Rule, bool IsEnabled);
+
 public sealed record AdminCategoryRulePreview(
     string CategoryName,
     string Decision,

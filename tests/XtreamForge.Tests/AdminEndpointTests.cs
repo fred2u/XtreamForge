@@ -33,6 +33,56 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.Equal("XtreamForge", payload.ApplicationName);
         Assert.Equal("Unavailable", payload.DatabaseStatus);
         Assert.Equal("The database connectivity check failed.", payload.DatabaseDetails);
+        Assert.Equal(0, payload.SourceCount);
+        Assert.Equal(0, payload.SourceCategoryCount);
+        Assert.Equal(0, payload.RuleCount);
+        Assert.Equal(0, payload.CustomCategoryCount);
+    }
+
+    [Fact]
+    public async Task GetAdminStatus_WithEmptyDatabase_ReturnsZeroCounts()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-admin-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        using var factory = _factory.WithSqliteDatabase(databasePath);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/admin/status");
+        var payload = await response.Content.ReadFromJsonAsync<AdminStatusResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Equal("Connected", payload.DatabaseStatus);
+        Assert.Equal(0, payload.SourceCount);
+        Assert.Equal(0, payload.SourceCategoryCount);
+        Assert.Equal(0, payload.RuleCount);
+        Assert.Equal(0, payload.CustomCategoryCount);
+    }
+
+    [Fact]
+    public async Task GetAdminStatus_WithSeededData_ReturnsSummaryCounts()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-admin-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        await SeedDashboardStatusDataAsync(setupFactory);
+
+        using var factory = _factory.WithSqliteDatabase(databasePath);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/admin/status");
+        var payload = await response.Content.ReadFromJsonAsync<AdminStatusResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Equal("Connected", payload.DatabaseStatus);
+        Assert.Equal(2, payload.SourceCount);
+        Assert.Equal(4, payload.SourceCategoryCount);
+        Assert.Equal(2, payload.RuleCount);
+        Assert.Equal(2, payload.CustomCategoryCount);
     }
 
     [Fact]
@@ -475,6 +525,45 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
         await using var scope = factory.Services.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
         return await dbContext.UpstreamCategories.Where(category => category.UpstreamCategoryId == upstreamCategoryId).Select(category => category.Id).SingleAsync();
+    }
+
+    private static async Task SeedDashboardStatusDataAsync(WebApplicationFactory<Program> factory)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var ruleService = scope.ServiceProvider.GetRequiredService<CategoryRuleService>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+
+        await mappingService.SyncCategoriesAsync(
+            new XtreamSourceDescriptor("https", "provider-a.com", 443),
+            ContentType.Vod,
+            [
+                new DiscoveredCategory("10", "Movies A"),
+                new DiscoveredCategory("20", "Sports A")
+            ]);
+
+        await mappingService.SyncCategoriesAsync(
+            new XtreamSourceDescriptor("https", "provider-b.net", 8080),
+            ContentType.Vod,
+            [
+                new DiscoveredCategory("30", "Movies B"),
+                new DiscoveredCategory("40", "Documentaries")
+            ]);
+
+        var sources = await dbContext.XtreamSources.OrderBy(source => source.Host).ToListAsync();
+        var sourceAId = sources[0].Id;
+        var sourceBId = sources[1].Id;
+
+        var moviesA = await dbContext.UpstreamCategories.SingleAsync(category => category.UpstreamCategoryId == "10");
+        var sportsA = await dbContext.UpstreamCategories.SingleAsync(category => category.UpstreamCategoryId == "20");
+        var moviesB = await dbContext.UpstreamCategories.SingleAsync(category => category.UpstreamCategoryId == "30");
+
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(moviesA.Id, sourceAId, ContentType.Vod, CategoryMappingSelection.Custom, null, "Movies Shared"));
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(moviesB.Id, sourceBId, ContentType.Vod, CategoryMappingSelection.Custom, null, "Documentaries Shared"));
+        await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(sportsA.Id, sourceAId, ContentType.Vod, CategoryMappingSelection.Disabled, null, null));
+
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceAId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
+        await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceBId, ContentType.Vod, CategoryRuleAction.Include, CategoryRuleOperator.StartsWith, "DOC", false, true));
     }
 
     private static string? ParseQuery(Uri? requestUri, string key)

@@ -8,6 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" />
+    <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components.Icons" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\XtreamForge.ServiceDefaults\XtreamForge.ServiceDefaults.csproj" />
   </ItemGroup>
 

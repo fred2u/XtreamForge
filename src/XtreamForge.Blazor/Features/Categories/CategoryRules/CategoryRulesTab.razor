@@ -1,115 +1,95 @@
 @namespace XtreamForge.Blazor.Features.Categories.CategoryRules
 @using System.Globalization
 @using Microsoft.JSInterop
-@using XtreamForge.Blazor.Components.Shared
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 
 <section class="categories-tab-panel">
-    <header class="categories-panel-header">
-        <div>
-            <h2>Category Rules</h2>
-            <p class="category-meta">Rules are evaluated in order. First match wins.</p>
+    <header class="section-header">
+        <div class="section-heading">
+            <div class="section-title-row">
+                <h2>Category Rules</h2>
+                <span class="section-count">@Rows.Count rule@(Rows.Count == 1 ? string.Empty : "s")</span>
+            </div>
+            <p class="section-description">Manage ordered include and exclude rules for the selected source.</p>
+            <div class="section-help">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Info())" />
+                <span>Rules are evaluated in sequence. The first enabled match wins.</span>
+            </div>
         </div>
         @if (IsRefreshing)
         {
-            <div class="categories-count">Refreshing…</div>
+            <FluentProgressRing Width="20px" />
         }
     </header>
 
-    <div class="categories-toolbar-grid">
-        <label>
-            Source
-            <select value="@FormatNullableInt(SelectedSourceId)" @onchange="HandleSourceChangedAsync" disabled="@(Sources.Count == 0)">
-                @if (Sources.Count == 0)
-                {
-                    <option value="">No sources</option>
-                }
-                else
-                {
-                    @foreach (var source in Sources)
+    <div class="category-toolbar rules-toolbar">
+        <div class="toolbar-filter-group">
+            <div class="toolbar-field toolbar-field-source">
+                <FluentSelect TOption="string" Value="@FormatNullableInt(SelectedSourceId)" ValueChanged="HandleSourceChangedAsync" Disabled="@(Sources.Count == 0)" Label="Source">
+                    @if (Sources.Count == 0)
                     {
-                        <option value="@source.Id">@source.DisplayName</option>
+                        <FluentOption Value="">No sources</FluentOption>
                     }
-                }
-            </select>
-        </label>
+                    else
+                    {
+                        @foreach (var source in Sources)
+                        {
+                            <FluentOption Value="@source.Id.ToString(CultureInfo.InvariantCulture)">@FormatSourceDisplayName(source.DisplayName)</FluentOption>
+                        }
+                    }
+                </FluentSelect>
+            </div>
 
-        <label>
-            Content Type
-            <select value="@SelectedContentType.ToString()" @onchange="HandleContentTypeChangedAsync">
-                <option value="@AdminContentType.Vod">VOD</option>
-                <option value="@AdminContentType.Series">Series</option>
-            </select>
-        </label>
+            <div class="toolbar-field toolbar-field-content-type">
+                <FluentSelect TOption="string" Value="@SelectedContentType.ToString()" ValueChanged="HandleContentTypeChangedAsync" Label="Content Type">
+                    <FluentOption Value="@AdminContentType.Vod.ToString()">VOD</FluentOption>
+                    <FluentOption Value="@AdminContentType.Series.ToString()">Series</FluentOption>
+                </FluentSelect>
+            </div>
+        </div>
 
-        <div class="toolbar-actions">
-            <button type="button" @onclick="() => OnOpenCreate.InvokeAsync()" disabled="@(!HasSelectedSource)">+ Add rule</button>
+        <div class="toolbar-action-group">
+            <FluentButton Appearance="Appearance.Neutral" @onclick="OpenRuleTesterDialog" Disabled="@(!HasSelectedSource)">Test rules</FluentButton>
+            <FluentButton Class="primary-action-button" Appearance="Appearance.Accent" IconStart="@(new Icons.Regular.Size20.Add())" @onclick="() => OnOpenCreate.InvokeAsync()" Disabled="@(!HasSelectedSource)">Add rule</FluentButton>
         </div>
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(Message) || !string.IsNullOrWhiteSpace(ErrorMessage))
+    @if (!string.IsNullOrWhiteSpace(Message))
     {
-        <div class="panel-feedback">
-            @if (!string.IsNullOrWhiteSpace(Message))
-            {
-                <div class="inline-success">@Message</div>
-            }
-            @if (!string.IsNullOrWhiteSpace(ErrorMessage))
-            {
-                <div class="inline-error">@ErrorMessage</div>
-            }
-        </div>
+        <FluentMessageBar Title="Category rules" Intent="@MessageIntent.Success" AllowDismiss="false">@Message</FluentMessageBar>
     }
-
-    <div class="rule-editor-card">
-        <h3>Rule Tester</h3>
-        <div class="rule-tester-grid">
-            <label>
-                Category name
-                <InputText @bind-Value="Tester.CategoryName" maxlength="255" placeholder="|FR| DOCUMENTAIRE SPORT" disabled="@(!HasSelectedSource || Tester.IsBusy)" />
-            </label>
-            <div class="rule-action-cell">
-                <button type="button" @onclick="() => OnRunTester.InvokeAsync()" disabled="@(!HasSelectedSource || Tester.IsBusy)">@(Tester.IsBusy ? "Testing…" : "Test rule")</button>
-            </div>
-        </div>
-
-        @if (!string.IsNullOrWhiteSpace(Tester.ErrorMessage))
-        {
-            <div class="inline-error">@Tester.ErrorMessage</div>
-        }
-        else if (Tester.Preview is not null)
-        {
-            <div class="rule-tester-result">
-                <strong>@(Tester.Preview.Decision == "Exclude" ? "Excluded" : "Included")</strong>
-                @if (Tester.Preview.MatchedRuleId is int && Tester.Preview.MatchedRuleSequence is int matchedRuleSequence)
-                {
-                    <div class="category-meta">Matched rule #@matchedRuleSequence · @Tester.Preview.MatchedRuleAction · @Tester.Preview.MatchedPattern</div>
-                }
-                else
-                {
-                    <div class="category-meta">No rule matched. Default include applies.</div>
-                }
-            </div>
-        }
-    </div>
+    @if (!string.IsNullOrWhiteSpace(ErrorMessage))
+    {
+        <FluentMessageBar Title="Category rules" Intent="@MessageIntent.Error" AllowDismiss="false">@ErrorMessage</FluentMessageBar>
+    }
 
     @if (!HasSelectedSource)
     {
-        <div class="empty-state">
+        <FluentCard Class="empty-state">
             <p>Select a source to manage rules.</p>
-        </div>
+        </FluentCard>
     }
     else if (Rows.Count == 0)
     {
-        <div class="empty-state">
+        <FluentCard Class="empty-state">
             <p>No rules configured for this source and content type.</p>
-        </div>
+        </FluentCard>
     }
     else
     {
         <div class="table-scroll">
             <table class="category-grid rules-grid" @ref="_rulesTable">
+                <colgroup>
+                    <col class="rules-drag-column" />
+                    <col class="rules-sequence-column" />
+                    <col class="rules-action-column" />
+                    <col class="rules-match-column" />
+                    <col class="rules-pattern-column" />
+                    <col class="rules-case-column" />
+                    <col class="rules-enabled-column" />
+                    <col class="rules-actions-column" />
+                </colgroup>
                 <thead>
                     <tr>
                         <th class="drag-column"></th>
@@ -131,84 +111,71 @@
                             data-rule-id="@rule.RuleId"
                             data-drop-index="@index">
                             <td class="drag-column">
-                                <button type="button"
-                                        class="drag-handle icon-button"
-                                        title="Drag to reorder"
-                                        aria-label="Drag to reorder"
-                                        data-drag-handle="true"
-                                        disabled="@(!rule.CanRunSecondaryActions)">
-                                    <AppIcon Name="drag" />
-                                </button>
+                                <FluentButton Appearance="Appearance.Stealth"
+                                              Class="drag-handle compact-icon-button"
+                                              Title="Drag to reorder"
+                                              AriaLabel="Drag to reorder"
+                                              data-drag-handle="true"
+                                              Disabled="@(!rule.CanRunSecondaryActions || rule.IsEditing)">
+                                    ⋮⋮
+                                </FluentButton>
                             </td>
                             <td class="rule-sequence-cell">@rule.Sequence</td>
                             @if (rule.IsEditing)
                             {
-                                <td>
-                                    <InputSelect @bind-Value="rule.Action" disabled="@rule.IsBusy">
-                                        <option value="@CategoryRuleActionOption.Include">Include</option>
-                                        <option value="@CategoryRuleActionOption.Exclude">Exclude</option>
-                                    </InputSelect>
+                                <td class="rule-edit-cell">
+                                    <FluentSelect Class="inline-edit-field" TOption="string" Value="@rule.Action.ToString()" ValueChanged="value => rule.Action = ParseAction(value)" Disabled="@rule.IsBusy" AriaLabel="Rule action">
+                                        <FluentOption Value="@CategoryRuleActionOption.Include.ToString()">Include</FluentOption>
+                                        <FluentOption Value="@CategoryRuleActionOption.Exclude.ToString()">Exclude</FluentOption>
+                                    </FluentSelect>
                                 </td>
-                                <td>
-                                    <InputSelect @bind-Value="rule.Operator" disabled="@rule.IsBusy">
-                                        <option value="@CategoryRuleOperatorOption.Contains">Contains</option>
-                                        <option value="@CategoryRuleOperatorOption.StartsWith">StartsWith</option>
-                                    </InputSelect>
+                                <td class="rule-edit-cell">
+                                    <FluentSelect Class="inline-edit-field" TOption="string" Value="@rule.Operator.ToString()" ValueChanged="value => rule.Operator = ParseOperator(value)" Disabled="@rule.IsBusy" AriaLabel="Rule match operator">
+                                        <FluentOption Value="@CategoryRuleOperatorOption.Contains.ToString()">Contains</FluentOption>
+                                        <FluentOption Value="@CategoryRuleOperatorOption.StartsWith.ToString()">StartsWith</FluentOption>
+                                    </FluentSelect>
                                 </td>
-                                <td><InputText @bind-Value="rule.Pattern" maxlength="255" disabled="@rule.IsBusy" /></td>
-                                <td>
-                                    <label class="checkbox-label compact-checkbox-label">
-                                        <InputCheckbox @bind-Value="rule.CaseSensitive" disabled="@rule.IsBusy" />
-                                        Case sensitive
-                                    </label>
+                                <td class="rule-edit-cell">
+                                    <FluentTextField Class="inline-edit-field" @bind-Value="rule.Pattern" Maxlength="255" Disabled="@rule.IsBusy" AriaLabel="Rule pattern" />
                                 </td>
-                                <td>
-                                    <label class="checkbox-label compact-checkbox-label">
-                                        <InputCheckbox @bind-Value="rule.IsEnabled" disabled="@rule.IsBusy" />
-                                        Enabled
-                                    </label>
+                                <td class="rule-edit-cell">
+                                    <FluentCheckbox Class="inline-edit-checkbox" @bind-Value="rule.CaseSensitive" Disabled="@rule.IsBusy">Case sensitive</FluentCheckbox>
+                                </td>
+                                <td class="rule-edit-cell">
+                                    <FluentSwitch Class="inline-edit-switch" @bind-Value="rule.IsEnabled" Disabled="@rule.IsBusy" CheckedMessage="On" UncheckedMessage="Off">Enabled</FluentSwitch>
                                 </td>
                             }
                             else
                             {
-                                <td>@rule.Action</td>
-                                <td>@rule.Operator</td>
-                                <td>@rule.Pattern</td>
-                                <td>@(rule.CaseSensitive ? "Case sensitive" : "Ignore case")</td>
+                                <td class="nowrap-cell">@rule.Action</td>
+                                <td class="nowrap-cell">@rule.Operator</td>
+                                <td class="rule-pattern-cell">@rule.Pattern</td>
+                                <td class="nowrap-cell">@(rule.CaseSensitive ? "Case sensitive" : "Ignore case")</td>
                                 <td>
-                                    <label class="switch-control" aria-label="@(rule.IsEnabled ? "Disable rule" : "Enable rule")">
-                                        <input type="checkbox"
-                                               class="switch-input"
-                                               checked="@rule.IsEnabled"
-                                               @onchange="() => OnToggleEnabled.InvokeAsync(rule)"
-                                               disabled="@rule.IsBusy"
-                                               aria-label="@(rule.IsEnabled ? "Disable rule" : "Enable rule")" />
-                                        <span class="switch-track" aria-hidden="true"></span>
-                                        <span class="switch-label">@(rule.IsBusy ? "Saving…" : rule.IsEnabled ? "On" : "Off")</span>
-                                    </label>
+                                    <FluentSwitch Value="@rule.IsEnabled" ValueChanged="value => OnToggleEnabled.InvokeAsync(new RuleToggleRequest(rule, value))" Disabled="@rule.IsBusy" CheckedMessage="On" UncheckedMessage="Off" AriaLabel="Toggle rule enabled state" />
                                 </td>
                             }
-                            <td>
-                                <div class="row-actions">
+                            <td class="rule-actions-cell">
+                                <div class="row-actions @(rule.IsEditing ? "inline-edit-actions" : string.Empty)">
                                     @if (rule.IsEditing)
                                     {
-                                        <button type="button" @onclick="() => OnSave.InvokeAsync(rule)" disabled="@rule.IsBusy">@(rule.IsBusy ? "Saving…" : "Save")</button>
-                                        <button type="button" class="secondary-button" @onclick="() => OnCancelEdit.InvokeAsync(rule)" disabled="@rule.IsBusy">Cancel</button>
+                                        <FluentButton Appearance="Appearance.Accent" @onclick="() => OnSave.InvokeAsync(rule)" Disabled="@rule.IsBusy">@(rule.IsBusy ? "Saving…" : "Save")</FluentButton>
+                                        <FluentButton Appearance="Appearance.Neutral" @onclick="() => OnCancelEdit.InvokeAsync(rule)" Disabled="@rule.IsBusy">Cancel</FluentButton>
                                     }
                                     else
                                     {
-                                        <button type="button" class="icon-button" title="Edit rule" aria-label="Edit rule" @onclick="() => OnBeginEdit.InvokeAsync(rule)" disabled="@rule.IsBusy">
-                                            <AppIcon Name="edit" />
-                                        </button>
+                                        <FluentButton Appearance="Appearance.Neutral" Class="compact-icon-button" Title="Edit rule" AriaLabel="Edit rule" @onclick="() => OnBeginEdit.InvokeAsync(rule)" Disabled="@rule.IsBusy">
+                                            <FluentIcon Value="@(new Icons.Regular.Size20.Edit())" />
+                                        </FluentButton>
+                                        <FluentButton Appearance="Appearance.Neutral"
+                                                      Class="compact-icon-button"
+                                                      Title="Delete rule"
+                                                      AriaLabel="Delete rule"
+                                                      @onclick="() => OnRequestDelete.InvokeAsync(rule)"
+                                                      Disabled="@(!rule.CanRunSecondaryActions)">
+                                            <FluentIcon Value="@(new Icons.Regular.Size20.Delete())" Color="Color.Error" />
+                                        </FluentButton>
                                     }
-                                    <button type="button"
-                                            class="icon-button danger-button"
-                                            title="Delete rule"
-                                            aria-label="Delete rule"
-                                            @onclick="() => OnRequestDelete.InvokeAsync(rule)"
-                                            disabled="@(!rule.CanRunSecondaryActions)">
-                                        <AppIcon Name="trash" />
-                                    </button>
                                 </div>
                                 @if (!string.IsNullOrWhiteSpace(rule.Message))
                                 {
@@ -229,11 +196,46 @@
     }
 </section>
 
+@if (_isRuleTesterDialogOpen)
+{
+    <FluentDialog Modal="true" TrapFocus="true" @ondialogdismiss="CloseRuleTesterDialog" aria-label="Test category rules">
+        <FluentDialogHeader>Test category rules</FluentDialogHeader>
+        <FluentDialogBody>
+            <div class="rule-tester-panel">
+                <p class="section-description">Preview how the current ordered rules evaluate a category name.</p>
+                <FluentTextField Class="rule-tester-input" @bind-Value="Tester.CategoryName" Maxlength="255" Placeholder="|FR| DOCUMENTAIRE SPORT" Label="Category name" Disabled="@Tester.IsBusy" />
+
+                @if (!string.IsNullOrWhiteSpace(Tester.ErrorMessage))
+                {
+                    <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@Tester.ErrorMessage</FluentMessageBar>
+                }
+                else if (Tester.Preview is not null)
+                {
+                    <div class="rule-tester-result">
+                        <div class="rule-tester-result-primary">
+                            <span class="@(Tester.Preview.Decision == "Exclude" ? "status-pill status-pill-manual" : "status-pill status-pill-enabled")">
+                                <span class="status-dot"></span>
+                                <span>@GetRuleTesterSummary(Tester.Preview)</span>
+                            </span>
+                        </div>
+                        <div class="rule-secondary">@GetRuleTesterDetails(Tester.Preview)</div>
+                    </div>
+                }
+            </div>
+        </FluentDialogBody>
+        <FluentDialogFooter>
+            <FluentButton Appearance="Appearance.Neutral" @onclick="CloseRuleTesterDialog" Disabled="@Tester.IsBusy">Close</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="() => OnRunTester.InvokeAsync()" Disabled="@Tester.IsBusy">@(Tester.IsBusy ? "Testing…" : "Test")</FluentButton>
+        </FluentDialogFooter>
+    </FluentDialog>
+}
+
 @code {
     private ElementReference _rulesTable;
     private IJSObjectReference? _module;
     private DotNetObjectReference<CategoryRulesTab>? _dotNetReference;
     private string? _lastDragDropSignature;
+    private bool _isRuleTesterDialogOpen;
 
     [Parameter]
     public required IReadOnlyList<AdminSource> Sources { get; set; }
@@ -281,7 +283,7 @@
     public EventCallback<RuleRowState> OnRequestDelete { get; set; }
 
     [Parameter]
-    public EventCallback<RuleRowState> OnToggleEnabled { get; set; }
+    public EventCallback<RuleToggleRequest> OnToggleEnabled { get; set; }
 
     [Parameter]
     public EventCallback<int?> OnSourceChanged { get; set; }
@@ -293,6 +295,20 @@
     public EventCallback<RuleDropRequest> OnDropRequested { get; set; }
 
     private bool HasSelectedSource => SelectedSourceId is not null;
+
+    private static string FormatSourceDisplayName(string displayName)
+    {
+        if (!Uri.TryCreate(displayName, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return displayName;
+        }
+
+        var path = uri.AbsolutePath.TrimEnd('/');
+        return string.IsNullOrEmpty(path) || path == "/"
+            ? uri.Authority
+            : $"{uri.Authority}{path}";
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -313,22 +329,71 @@
         _lastDragDropSignature = signature;
     }
 
+    private static string GetRuleTesterSummary(AdminCategoryRulePreview preview)
+    {
+        if (preview.MatchedRuleSequence is int matchedRuleSequence)
+        {
+            return $"{preview.Decision} by rule #{matchedRuleSequence}";
+        }
+
+        return string.Equals(preview.Decision, "Exclude", StringComparison.OrdinalIgnoreCase)
+            ? "Excluded"
+            : "Included by default";
+    }
+
+    private static string GetRuleTesterDetails(AdminCategoryRulePreview preview)
+    {
+        if (preview.MatchedRuleSequence is not int)
+        {
+            return "No matching rule.";
+        }
+
+        return $"{preview.MatchedRuleOperator} \"{preview.MatchedPattern}\" · {(preview.MatchedRuleCaseSensitive == true ? "Case sensitive" : "Ignore case")}";
+    }
+
+    private void OpenRuleTesterDialog()
+    {
+        ResetRuleTester();
+        _isRuleTesterDialogOpen = true;
+    }
+
+    private void CloseRuleTesterDialog()
+    {
+        ResetRuleTester();
+        _isRuleTesterDialogOpen = false;
+    }
+
+    private void ResetRuleTester()
+    {
+        Tester.CategoryName = string.Empty;
+        Tester.Preview = null;
+        Tester.ErrorMessage = null;
+        Tester.SaveState = MutationFeedbackState.None;
+    }
+
     [JSInvokable]
     public Task HandleRuleDropFromJs(int draggedRuleId, int targetIndex) =>
         OnDropRequested.InvokeAsync(new RuleDropRequest(draggedRuleId, targetIndex));
 
     private static string FormatNullableInt(int? value) => value?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
 
-    private Task HandleSourceChangedAsync(ChangeEventArgs args)
-    {
-        var value = args.Value?.ToString();
-        return OnSourceChanged.InvokeAsync(int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedValue) ? parsedValue : null);
-    }
+    private Task HandleSourceChangedAsync(string? value) =>
+        OnSourceChanged.InvokeAsync(int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedValue) ? parsedValue : null);
 
-    private Task HandleContentTypeChangedAsync(ChangeEventArgs args) =>
-        Enum.TryParse<AdminContentType>(args.Value?.ToString(), true, out var value)
-            ? OnContentTypeChanged.InvokeAsync(value)
+    private Task HandleContentTypeChangedAsync(string? value) =>
+        Enum.TryParse<AdminContentType>(value, true, out var contentType)
+            ? OnContentTypeChanged.InvokeAsync(contentType)
             : Task.CompletedTask;
+
+    private static CategoryRuleActionOption ParseAction(string? value) =>
+        Enum.TryParse<CategoryRuleActionOption>(value, true, out var action)
+            ? action
+            : CategoryRuleActionOption.Include;
+
+    private static CategoryRuleOperatorOption ParseOperator(string? value) =>
+        Enum.TryParse<CategoryRuleOperatorOption>(value, true, out var categoryRuleOperator)
+            ? categoryRuleOperator
+            : CategoryRuleOperatorOption.Contains;
 
     private string GetRowClass(RuleRowState rule)
     {

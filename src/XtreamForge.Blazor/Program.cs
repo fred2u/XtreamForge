@@ -1,6 +1,7 @@
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.FluentUI.AspNetCore.Components;
 using XtreamForge.Blazor.Components;
 using XtreamForge.Blazor.Configuration;
-using Microsoft.AspNetCore.Hosting;
 
 namespace XtreamForge.Blazor;
 
@@ -15,7 +16,8 @@ public sealed class Program
 
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
-
+        builder.Services.AddHttpClient();
+        builder.Services.AddFluentUIComponents();
         builder.Services.AddBackendApiClients();
 
         var app = builder.Build();

@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using XtreamForge.Xtream;
 using XtreamForge.Categories;
+using XtreamForge.ServiceDefaults;
 
 namespace XtreamForge.Xtream;
 
@@ -56,33 +57,36 @@ public sealed class XtreamCategoryProxyService(
         catch (OperationCanceledException exception)
         {
             logger.LogWarning(
-                exception,
-                "Timed out retrieving upstream categories for {Host}:{Port} and action {Action}.",
+                "Timed out retrieving upstream categories for {Host}:{Port} and action {Action}. ErrorType {ErrorType}. ErrorMessage {ErrorMessage}.",
                 ForwarderService.SanitizeForLog(destination.Host),
                 destination.Port,
-                ForwarderService.SanitizeForLog(classification.Action ?? "none"));
+                ForwarderService.SanitizeForLog(classification.Action ?? "none"),
+                exception.GetType().Name,
+                XtreamCredentialRedaction.SanitizeText(exception.Message));
 
             return Results.StatusCode(StatusCodes.Status504GatewayTimeout);
         }
         catch (HttpRequestException exception)
         {
             logger.LogWarning(
-                exception,
-                "Failed retrieving upstream categories for {Host}:{Port} and action {Action}.",
+                "Failed retrieving upstream categories for {Host}:{Port} and action {Action}. ErrorType {ErrorType}. ErrorMessage {ErrorMessage}.",
                 ForwarderService.SanitizeForLog(destination.Host),
                 destination.Port,
-                ForwarderService.SanitizeForLog(classification.Action ?? "none"));
+                ForwarderService.SanitizeForLog(classification.Action ?? "none"),
+                exception.GetType().Name,
+                XtreamCredentialRedaction.SanitizeText(exception.Message));
 
             return Results.StatusCode(StatusCodes.Status502BadGateway);
         }
         catch (JsonException exception)
         {
             logger.LogWarning(
-                exception,
-                "Received an invalid category payload from {Host}:{Port} for action {Action}.",
+                "Received an invalid category payload from {Host}:{Port} for action {Action}. ErrorType {ErrorType}. ErrorMessage {ErrorMessage}.",
                 ForwarderService.SanitizeForLog(destination.Host),
                 destination.Port,
-                ForwarderService.SanitizeForLog(classification.Action ?? "none"));
+                ForwarderService.SanitizeForLog(classification.Action ?? "none"),
+                exception.GetType().Name,
+                XtreamCredentialRedaction.SanitizeText(exception.Message));
 
             return Results.StatusCode(StatusCodes.Status502BadGateway);
         }

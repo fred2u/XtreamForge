@@ -1,15 +1,15 @@
-using System.Net;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
-using System.Text.RegularExpressions;
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using XtreamForge.Data;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using XtreamForge.Categories;
+using XtreamForge.Data;
 
 namespace XtreamForge.Tests;
 
@@ -964,7 +964,7 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
     public async Task UpstreamConnectionFailure_ReturnsBadGateway_WithoutLoggingCredentials()
     {
         var logSink = new TestLogSink();
-        var handler = new FakeForwarderHandler((_, _) => throw new HttpRequestException("Connection refused"));
+        var handler = new FakeForwarderHandler((_, _) => throw new HttpRequestException("Connection refused for https://example.com/player_api.php?username=test-user&******"));
 
         using var factory = _factory.WithForwarderHandler(handler, logSink);
         using var client = factory.CreateClient();
@@ -973,6 +973,7 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
 
         Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
         Assert.Contains(logSink.Messages, message => message.Contains("example.com:443", StringComparison.Ordinal));
+        Assert.Contains(logSink.Messages, message => message.Contains("username=***", StringComparison.Ordinal));
         Assert.DoesNotContain(logSink.Messages, message => message.Contains("test-password", StringComparison.Ordinal));
         Assert.DoesNotContain(logSink.Messages, message => message.Contains("username=test-user", StringComparison.Ordinal));
     }
@@ -982,7 +983,7 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
     {
         var logSink = new TestLogSink();
         var handler = new FakeForwarderHandler((_, _) =>
-            throw new TaskCanceledException("Timed out", new TimeoutException("upstream timeout")));
+            throw new TaskCanceledException("Timed out for http://example.com/player_api.php?username=user&******", new TimeoutException("upstream timeout")));
 
         using var factory = _factory.WithForwarderHandler(handler, logSink);
         using var client = factory.CreateClient();
@@ -991,6 +992,7 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
 
         Assert.Equal(HttpStatusCode.GatewayTimeout, response.StatusCode);
         Assert.Contains(logSink.Messages, message => message.Contains("example.com:8080", StringComparison.Ordinal));
+        Assert.Contains(logSink.Messages, message => message.Contains("username=***", StringComparison.Ordinal));
         Assert.DoesNotContain(logSink.Messages, message => message.Contains("very-secret", StringComparison.Ordinal));
         Assert.DoesNotContain(logSink.Messages, message => message.Contains("series_id=42", StringComparison.Ordinal));
     }

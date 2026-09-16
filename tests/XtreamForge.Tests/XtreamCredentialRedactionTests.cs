@@ -23,6 +23,20 @@ public sealed class XtreamCredentialRedactionTests
     }
 
     [Fact]
+    public void SanitizeText_RedactsPercentEncodedXtreamCredentials()
+    {
+        var value = $"proxy target=https%3A%2F%2Fexample.com%2Fplayer_api.php%3Fusername%3Dtest-user%26{PasswordKey}%3Dtest-password%26action%3Dget_vod_categories";
+
+        var sanitized = XtreamCredentialRedaction.SanitizeText(value);
+
+        Assert.DoesNotContain("test-user", sanitized, StringComparison.Ordinal);
+        Assert.DoesNotContain("test-password", sanitized, StringComparison.Ordinal);
+        Assert.Contains("username%3DREDACTED", sanitized, StringComparison.Ordinal);
+        Assert.Contains($"{PasswordKey}%3DREDACTED", sanitized, StringComparison.Ordinal);
+        Assert.Contains("action%3Dget_vod_categories", sanitized, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RedactUri_PreservesNonSensitiveQueryValues()
     {
         var uri = new Uri($"https://example.com/player_api.php?username=test-user&{PasswordKey}=test-password&action=get_vod_categories");

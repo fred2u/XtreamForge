@@ -23,7 +23,8 @@ public static partial class XtreamCredentialRedaction
             return value ?? string.Empty;
         }
 
-        return SensitiveQueryParameterPattern().Replace(value, $"${{1}}{RedactedValue}");
+        var sanitized = SensitiveQueryParameterPattern().Replace(value, $"${{1}}{RedactedValue}");
+        return EncodedSensitiveQueryParameterPattern().Replace(sanitized, $"${{1}}{RedactedValue}");
     }
 
     public static Uri RedactUri(Uri uri)
@@ -125,4 +126,7 @@ public static partial class XtreamCredentialRedaction
 
     [GeneratedRegex(@"((?:\?|&)(?:username|password)=)([^&#\s]*)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SensitiveQueryParameterPattern();
+
+    [GeneratedRegex(@"((?:%3[fF]|%26)(?:username|password)(?:=|%3[dD]))(.*?)(?=(?:%26|%23|&|#|\s|$))", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex EncodedSensitiveQueryParameterPattern();
 }

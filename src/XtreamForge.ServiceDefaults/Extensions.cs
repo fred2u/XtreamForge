@@ -53,13 +53,11 @@ public static class Extensions
                         options.Filter = context =>
                             !context.Request.Path.StartsWithSegments(HealthEndpointPath)
                             && !context.Request.Path.StartsWithSegments(AlivenessEndpointPath);
-                        options.RecordException = false;
                         options.EnrichWithHttpRequest = static (activity, request) =>
                             XtreamCredentialRedaction.RedactServerRequest(activity, request);
                     })
                     .AddHttpClientInstrumentation(options =>
                     {
-                        options.RecordException = false;
                         options.EnrichWithHttpRequestMessage = static (activity, request) =>
                             XtreamCredentialRedaction.RedactClientRequest(activity, request);
                     });

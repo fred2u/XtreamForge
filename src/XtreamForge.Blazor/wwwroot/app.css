@@ -266,7 +266,8 @@ h3 {
 }
 
 .source-categories-toolbar {
-    grid-template-columns: minmax(240px, 280px) minmax(140px, 160px) minmax(280px, 1fr) minmax(140px, 160px) auto;
+    grid-template-areas: "source content search status action";
+    grid-template-columns: minmax(0, 260px) minmax(0, 150px) minmax(280px, 2fr) minmax(0, 150px) max-content;
 }
 
 .rules-toolbar {
@@ -281,8 +282,28 @@ h3 {
     min-width: 0;
 }
 
+.source-categories-toolbar .toolbar-field-source {
+    grid-area: source;
+}
+
+.source-categories-toolbar .toolbar-field-content-type {
+    grid-area: content;
+}
+
+.source-categories-toolbar .toolbar-field-search {
+    grid-area: search;
+}
+
+.source-categories-toolbar .toolbar-field-status {
+    grid-area: status;
+}
+
 .toolbar-field-action {
     justify-self: end;
+}
+
+.source-categories-toolbar .toolbar-field-action {
+    grid-area: action;
 }
 
 .toolbar-field fluent-search,
@@ -372,6 +393,13 @@ h3 {
 
 .primary-action-button::part(control) {
     gap: 0.45rem;
+}
+
+.toolbar-action-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    flex-wrap: nowrap;
 }
 
 .mapping-select {
@@ -561,15 +589,33 @@ h3 {
     width: 4rem;
 }
 
-.rules-action-column,
-.rules-match-column,
-.rules-case-column,
+.rules-grid {
+    min-width: 1040px;
+}
+
+.rules-grid th,
+.rules-grid td {
+    vertical-align: middle;
+}
+
+.rules-action-column {
+    width: 8.5rem;
+}
+
+.rules-match-column {
+    width: 9.5rem;
+}
+
+.rules-case-column {
+    width: 10rem;
+}
+
 .rules-enabled-column {
-    width: 9rem;
+    width: 8.5rem;
 }
 
 .rules-actions-column {
-    width: 11rem;
+    width: 10rem;
 }
 
 .drag-column {
@@ -624,14 +670,20 @@ h3 {
 
 .rule-edit-cell {
     vertical-align: middle;
+    min-width: 0;
 }
 
 .inline-edit-field {
     width: 100%;
+    min-width: 0;
 }
 
 .inline-edit-checkbox {
     white-space: nowrap;
+}
+
+.inline-edit-switch {
+    min-width: 0;
 }
 
 .inline-edit-actions {
@@ -759,5 +811,28 @@ h3 {
     .inline-edit-actions {
         flex-wrap: wrap;
         white-space: normal;
+    }
+}
+
+@media (max-width: 1500px) {
+    .source-categories-toolbar {
+        grid-template-areas:
+            "source content search search"
+            "status . . action";
+        grid-template-columns: minmax(0, 1fr) minmax(0, 150px) minmax(240px, 1fr) max-content;
+    }
+}
+
+@media (max-width: 1150px) {
+    .source-categories-toolbar {
+        grid-template-areas:
+            "source content"
+            "search status"
+            "action action";
+        grid-template-columns: minmax(0, 1fr) minmax(0, 180px);
+    }
+
+    .toolbar-field-action {
+        justify-self: start;
     }
 }

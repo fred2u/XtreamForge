@@ -48,10 +48,10 @@
         </div>
 
         <div class="toolbar-field toolbar-field-action">
-            <FluentButton Class="primary-action-button" Appearance="Appearance.Accent" @onclick="() => OnOpenCreate.InvokeAsync()" Disabled="@(!HasSelectedSource)">
-                <FluentIcon Value="@(new Icons.Regular.Size20.Add())" Slot="start" />
-                <span>Add rule</span>
-            </FluentButton>
+            <div class="toolbar-action-group">
+                <FluentButton Appearance="Appearance.Neutral" @onclick="OpenRuleTesterDialog" Disabled="@(!HasSelectedSource)">Test rules</FluentButton>
+                <FluentButton Class="primary-action-button" Appearance="Appearance.Accent" IconStart="@(new Icons.Regular.Size20.Add())" @onclick="() => OnOpenCreate.InvokeAsync()" Disabled="@(!HasSelectedSource)">Add rule</FluentButton>
+            </div>
         </div>
     </div>
 
@@ -63,39 +63,6 @@
     {
         <FluentMessageBar Title="Category rules" Intent="@MessageIntent.Error" AllowDismiss="false">@ErrorMessage</FluentMessageBar>
     }
-
-    <section class="rule-tester-panel">
-        <div class="rule-tester-header">
-            <h3>Rule Tester</h3>
-            <span class="section-help">Preview a category against the current ordered rules.</span>
-        </div>
-
-        <div class="rule-tester-grid">
-            <FluentTextField Class="rule-tester-input" @bind-Value="Tester.CategoryName" Maxlength="255" Placeholder="|FR| DOCUMENTAIRE SPORT" Label="Category name" Disabled="@(!HasSelectedSource || Tester.IsBusy)" />
-            <div class="rule-action-cell">
-                <FluentButton Appearance="Appearance.Neutral" @onclick="() => OnRunTester.InvokeAsync()" Disabled="@(!HasSelectedSource || Tester.IsBusy)">
-                    @(Tester.IsBusy ? "Testing…" : "Test rule")
-                </FluentButton>
-            </div>
-        </div>
-
-        @if (!string.IsNullOrWhiteSpace(Tester.ErrorMessage))
-        {
-            <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@Tester.ErrorMessage</FluentMessageBar>
-        }
-        else if (Tester.Preview is not null)
-        {
-            <div class="rule-tester-result">
-                <div class="rule-tester-result-primary">
-                    <span class="@(Tester.Preview.Decision == "Exclude" ? "status-pill status-pill-manual" : "status-pill status-pill-enabled")">
-                        <span class="status-dot"></span>
-                        <span>@GetRuleTesterSummary(Tester.Preview)</span>
-                    </span>
-                </div>
-                <div class="rule-secondary">@GetRuleTesterDetails(Tester.Preview)</div>
-            </div>
-        }
-    </section>
 
     @if (!HasSelectedSource)
     {
@@ -175,7 +142,7 @@
                                     <FluentCheckbox Class="inline-edit-checkbox" @bind-Value="rule.CaseSensitive" Disabled="@rule.IsBusy">Case sensitive</FluentCheckbox>
                                 </td>
                                 <td class="rule-edit-cell">
-                                    <FluentSwitch @bind-Value="rule.IsEnabled" Disabled="@rule.IsBusy" CheckedMessage="On" UncheckedMessage="Off">Enabled</FluentSwitch>
+                                    <FluentSwitch Class="inline-edit-switch" @bind-Value="rule.IsEnabled" Disabled="@rule.IsBusy" CheckedMessage="On" UncheckedMessage="Off">Enabled</FluentSwitch>
                                 </td>
                             }
                             else
@@ -229,11 +196,46 @@
     }
 </section>
 
+@if (_isRuleTesterDialogOpen)
+{
+    <FluentDialog Modal="true" TrapFocus="true" @ondialogdismiss="CloseRuleTesterDialog" aria-label="Test category rules">
+        <FluentDialogHeader>Test category rules</FluentDialogHeader>
+        <FluentDialogBody>
+            <div class="rule-tester-panel">
+                <p class="section-description">Preview how the current ordered rules evaluate a category name.</p>
+                <FluentTextField Class="rule-tester-input" @bind-Value="Tester.CategoryName" Maxlength="255" Placeholder="|FR| DOCUMENTAIRE SPORT" Label="Category name" Disabled="@Tester.IsBusy" />
+
+                @if (!string.IsNullOrWhiteSpace(Tester.ErrorMessage))
+                {
+                    <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@Tester.ErrorMessage</FluentMessageBar>
+                }
+                else if (Tester.Preview is not null)
+                {
+                    <div class="rule-tester-result">
+                        <div class="rule-tester-result-primary">
+                            <span class="@(Tester.Preview.Decision == "Exclude" ? "status-pill status-pill-manual" : "status-pill status-pill-enabled")">
+                                <span class="status-dot"></span>
+                                <span>@GetRuleTesterSummary(Tester.Preview)</span>
+                            </span>
+                        </div>
+                        <div class="rule-secondary">@GetRuleTesterDetails(Tester.Preview)</div>
+                    </div>
+                }
+            </div>
+        </FluentDialogBody>
+        <FluentDialogFooter>
+            <FluentButton Appearance="Appearance.Neutral" @onclick="CloseRuleTesterDialog" Disabled="@Tester.IsBusy">Close</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="() => OnRunTester.InvokeAsync()" Disabled="@Tester.IsBusy">@(Tester.IsBusy ? "Testing…" : "Test")</FluentButton>
+        </FluentDialogFooter>
+    </FluentDialog>
+}
+
 @code {
     private ElementReference _rulesTable;
     private IJSObjectReference? _module;
     private DotNetObjectReference<CategoryRulesTab>? _dotNetReference;
     private string? _lastDragDropSignature;
+    private bool _isRuleTesterDialogOpen;
 
     [Parameter]
     public required IReadOnlyList<AdminSource> Sources { get; set; }
@@ -347,6 +349,26 @@
         }
 
         return $"{preview.MatchedRuleOperator} \"{preview.MatchedPattern}\" · {(preview.MatchedRuleCaseSensitive == true ? "Case sensitive" : "Ignore case")}";
+    }
+
+    private void OpenRuleTesterDialog()
+    {
+        ResetRuleTester();
+        _isRuleTesterDialogOpen = true;
+    }
+
+    private void CloseRuleTesterDialog()
+    {
+        ResetRuleTester();
+        _isRuleTesterDialogOpen = false;
+    }
+
+    private void ResetRuleTester()
+    {
+        Tester.CategoryName = string.Empty;
+        Tester.Preview = null;
+        Tester.ErrorMessage = null;
+        Tester.SaveState = MutationFeedbackState.None;
     }
 
     [JSInvokable]

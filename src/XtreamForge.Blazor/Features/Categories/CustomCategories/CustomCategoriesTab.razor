@@ -24,10 +24,7 @@
         </div>
 
         <div class="toolbar-field toolbar-field-action">
-            <FluentButton Class="primary-action-button" Appearance="Appearance.Accent" @onclick="() => OnOpenCreate.InvokeAsync()">
-                <FluentIcon Value="@(new Icons.Regular.Size20.Add())" Slot="start" />
-                <span>New category</span>
-            </FluentButton>
+            <FluentButton Class="primary-action-button" Appearance="Appearance.Accent" IconStart="@(new Icons.Regular.Size20.Add())" @onclick="() => OnOpenCreate.InvokeAsync()">New category</FluentButton>
         </div>
     </div>
 
@@ -70,7 +67,7 @@
                                 @if (context.IsEditing)
                                 {
                                     <div class="inline-editor-box">
-                                        <FluentTextField Class="inline-edit-field" @bind-Value="context.DisplayName" Maxlength="255" Label="Name" Disabled="@context.IsBusy" />
+                                        <FluentTextField Class="inline-edit-field" @bind-Value="context.DisplayName" Maxlength="255" AriaLabel="Category name" Disabled="@context.IsBusy" />
                                         <div class="category-meta category-meta-inline">
                                             <span>XF @context.Summary.XtreamForgeCategoryId</span>
                                         </div>

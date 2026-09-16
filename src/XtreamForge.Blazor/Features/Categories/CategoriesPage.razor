@@ -105,193 +105,205 @@ else
     </section>
 }
 
-<FluentDialog Hidden="@(!_isAddSourceDialogOpen)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseAddSourceDialog" aria-label="Add Xtream source">
-    <FluentDialogHeader>Add Xtream source</FluentDialogHeader>
-    <FluentDialogBody>
-        <div class="dialog-form-grid">
-            <FluentSelect TOption="string" Value="@_sourceDiscoveryForm.Protocol" ValueChanged="HandleSourceDiscoveryProtocolChangedAsync" Label="Protocol" Disabled="@_isSourceDiscoverySaving">
-                <FluentOption Value="https">HTTPS</FluentOption>
-                <FluentOption Value="http">HTTP</FluentOption>
-            </FluentSelect>
-            <FluentTextField @bind-Value="_sourceDiscoveryForm.HostOrBaseUrl" Placeholder="example.com" Label="Host / Base URL" Disabled="@_isSourceDiscoverySaving" />
-            <FluentNumberField TValue="int?" @bind-Value="_sourceDiscoveryForm.Port" Label="Port" Disabled="@_isSourceDiscoverySaving" />
-            <FluentTextField @bind-Value="_sourceDiscoveryForm.Username" Label="Username" Disabled="@_isSourceDiscoverySaving" />
-            <FluentTextField @bind-Value="_sourceDiscoveryForm.Password" TextFieldType="TextFieldType.Password" Label="Password" Disabled="@_isSourceDiscoverySaving" />
-        </div>
+@if (_isAddSourceDialogOpen)
+{
+    <FluentDialog Modal="true" TrapFocus="true" @ondialogdismiss="CloseAddSourceDialog" aria-label="Add Xtream source">
+        <FluentDialogHeader>Add Xtream source</FluentDialogHeader>
+        <FluentDialogBody>
+            <div class="dialog-form-grid">
+                <FluentSelect TOption="string" Value="@_sourceDiscoveryForm.Protocol" ValueChanged="HandleSourceDiscoveryProtocolChangedAsync" Label="Protocol" Disabled="@_isSourceDiscoverySaving">
+                    <FluentOption Value="https">HTTPS</FluentOption>
+                    <FluentOption Value="http">HTTP</FluentOption>
+                </FluentSelect>
+                <FluentTextField @bind-Value="_sourceDiscoveryForm.HostOrBaseUrl" Placeholder="example.com" Label="Host / Base URL" Disabled="@_isSourceDiscoverySaving" />
+                <FluentNumberField TValue="int?" @bind-Value="_sourceDiscoveryForm.Port" Label="Port" Disabled="@_isSourceDiscoverySaving" />
+                <FluentTextField @bind-Value="_sourceDiscoveryForm.Username" Label="Username" Disabled="@_isSourceDiscoverySaving" />
+                <FluentTextField @bind-Value="_sourceDiscoveryForm.Password" TextFieldType="TextFieldType.Password" Label="Password" Disabled="@_isSourceDiscoverySaving" />
+            </div>
 
-        @if (!string.IsNullOrWhiteSpace(_sourceDiscoveryErrorMessage))
-        {
-            <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_sourceDiscoveryErrorMessage</FluentMessageBar>
-        }
-    </FluentDialogBody>
-    <FluentDialogFooter>
-        <FluentButton Appearance="Appearance.Neutral" @onclick="CloseAddSourceDialog" Disabled="@_isSourceDiscoverySaving">Cancel</FluentButton>
-        <FluentButton Appearance="Appearance.Accent" @onclick="DiscoverSourceAsync" Disabled="@_isSourceDiscoverySaving" Loading="@_isSourceDiscoverySaving">
-            Connect &amp; Import
-        </FluentButton>
-    </FluentDialogFooter>
-</FluentDialog>
+            @if (!string.IsNullOrWhiteSpace(_sourceDiscoveryErrorMessage))
+            {
+                <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_sourceDiscoveryErrorMessage</FluentMessageBar>
+            }
+        </FluentDialogBody>
+        <FluentDialogFooter>
+            <FluentButton Appearance="Appearance.Neutral" @onclick="CloseAddSourceDialog" Disabled="@_isSourceDiscoverySaving">Cancel</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="DiscoverSourceAsync" Disabled="@_isSourceDiscoverySaving" Loading="@_isSourceDiscoverySaving">
+                Connect &amp; Import
+            </FluentButton>
+        </FluentDialogFooter>
+    </FluentDialog>
+}
 
-<FluentDialog Hidden="@(!_isAddRuleDialogOpen)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseAddRuleDialog" aria-label="Add category rule">
-    <FluentDialogHeader>Add category rule</FluentDialogHeader>
-    <FluentDialogBody>
-        <div class="dialog-form-grid">
-            <FluentSelect TOption="string" Value="@_newRule.Action.ToString()" ValueChanged="value => _newRule.Action = ParseAction(value)" Label="Action" Disabled="@_isRuleCreating">
-                <FluentOption Value="@CategoryRuleActionOption.Include.ToString()">Include</FluentOption>
-                <FluentOption Value="@CategoryRuleActionOption.Exclude.ToString()">Exclude</FluentOption>
-            </FluentSelect>
-            <FluentSelect TOption="string" Value="@_newRule.Operator.ToString()" ValueChanged="value => _newRule.Operator = ParseOperator(value)" Label="Match" Disabled="@_isRuleCreating">
-                <FluentOption Value="@CategoryRuleOperatorOption.Contains.ToString()">Contains</FluentOption>
-                <FluentOption Value="@CategoryRuleOperatorOption.StartsWith.ToString()">StartsWith</FluentOption>
-            </FluentSelect>
-            <FluentTextField @bind-Value="_newRule.Pattern" Maxlength="255" Label="Pattern" Disabled="@_isRuleCreating" />
-            <FluentSelect TOption="string" Value="@_newRule.CaseSensitive.ToString().ToLowerInvariant()" ValueChanged="value => _newRule.CaseSensitive = string.Equals(value, bool.TrueString, StringComparison.OrdinalIgnoreCase)" Label="Case" Disabled="@_isRuleCreating">
-                <FluentOption Value="false">Ignore case</FluentOption>
-                <FluentOption Value="true">Case sensitive</FluentOption>
-            </FluentSelect>
-        </div>
-        <FluentSwitch @bind-Value="_newRule.IsEnabled" CheckedMessage="On" UncheckedMessage="Off">Enabled</FluentSwitch>
+@if (_isAddRuleDialogOpen)
+{
+    <FluentDialog Modal="true" TrapFocus="true" @ondialogdismiss="CloseAddRuleDialog" aria-label="Add category rule">
+        <FluentDialogHeader>Add category rule</FluentDialogHeader>
+        <FluentDialogBody>
+            <div class="dialog-form-grid">
+                <FluentSelect TOption="string" Value="@_newRule.Action.ToString()" ValueChanged="value => _newRule.Action = ParseAction(value)" Label="Action" Disabled="@_isRuleCreating">
+                    <FluentOption Value="@CategoryRuleActionOption.Include.ToString()">Include</FluentOption>
+                    <FluentOption Value="@CategoryRuleActionOption.Exclude.ToString()">Exclude</FluentOption>
+                </FluentSelect>
+                <FluentSelect TOption="string" Value="@_newRule.Operator.ToString()" ValueChanged="value => _newRule.Operator = ParseOperator(value)" Label="Match" Disabled="@_isRuleCreating">
+                    <FluentOption Value="@CategoryRuleOperatorOption.Contains.ToString()">Contains</FluentOption>
+                    <FluentOption Value="@CategoryRuleOperatorOption.StartsWith.ToString()">StartsWith</FluentOption>
+                </FluentSelect>
+                <FluentTextField @bind-Value="_newRule.Pattern" Maxlength="255" Label="Pattern" Disabled="@_isRuleCreating" />
+                <FluentSelect TOption="string" Value="@_newRule.CaseSensitive.ToString().ToLowerInvariant()" ValueChanged="value => _newRule.CaseSensitive = string.Equals(value, bool.TrueString, StringComparison.OrdinalIgnoreCase)" Label="Case" Disabled="@_isRuleCreating">
+                    <FluentOption Value="false">Ignore case</FluentOption>
+                    <FluentOption Value="true">Case sensitive</FluentOption>
+                </FluentSelect>
+            </div>
+            <FluentSwitch @bind-Value="_newRule.IsEnabled" CheckedMessage="On" UncheckedMessage="Off">Enabled</FluentSwitch>
 
-        @if (!string.IsNullOrWhiteSpace(_ruleCreateErrorMessage))
-        {
-            <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_ruleCreateErrorMessage</FluentMessageBar>
-        }
-    </FluentDialogBody>
-    <FluentDialogFooter>
-        <FluentButton Appearance="Appearance.Neutral" @onclick="CloseAddRuleDialog" Disabled="@_isRuleCreating">Cancel</FluentButton>
-        <FluentButton Appearance="Appearance.Accent" @onclick="CreateRuleAsync" Disabled="@_isRuleCreating" Loading="@_isRuleCreating">Add Rule</FluentButton>
-    </FluentDialogFooter>
-</FluentDialog>
+            @if (!string.IsNullOrWhiteSpace(_ruleCreateErrorMessage))
+            {
+                <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_ruleCreateErrorMessage</FluentMessageBar>
+            }
+        </FluentDialogBody>
+        <FluentDialogFooter>
+            <FluentButton Appearance="Appearance.Neutral" @onclick="CloseAddRuleDialog" Disabled="@_isRuleCreating">Cancel</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="CreateRuleAsync" Disabled="@_isRuleCreating" Loading="@_isRuleCreating">Add Rule</FluentButton>
+        </FluentDialogFooter>
+    </FluentDialog>
+}
 
-<FluentDialog Hidden="@(_pendingRuleDelete is null)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseRuleDeleteDialog" aria-label="Delete category rule">
-    <FluentDialogHeader>Delete category rule?</FluentDialogHeader>
-    <FluentDialogBody>
-        @if (_pendingRuleDelete is not null)
-        {
+@if (_pendingRuleDelete is not null)
+{
+    <FluentDialog Modal="true" TrapFocus="true" @ondialogdismiss="CloseRuleDeleteDialog" aria-label="Delete category rule">
+        <FluentDialogHeader>Delete category rule?</FluentDialogHeader>
+        <FluentDialogBody>
             <p>@FormatRuleSummary(_pendingRuleDelete)</p>
             <p class="category-meta">This rule will no longer affect matching source categories.</p>
-        }
-        @if (!string.IsNullOrWhiteSpace(_ruleDeleteErrorMessage))
-        {
-            <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_ruleDeleteErrorMessage</FluentMessageBar>
-        }
-    </FluentDialogBody>
-    <FluentDialogFooter>
-        <FluentButton Appearance="Appearance.Neutral" @onclick="CloseRuleDeleteDialog" Disabled="@_isRuleDeleteSaving">Cancel</FluentButton>
-        <FluentButton Class="destructive-button" Appearance="Appearance.Accent" @onclick="DeletePendingRuleAsync" Disabled="@_isRuleDeleteSaving" Loading="@_isRuleDeleteSaving">Delete</FluentButton>
-    </FluentDialogFooter>
-</FluentDialog>
+            @if (!string.IsNullOrWhiteSpace(_ruleDeleteErrorMessage))
+            {
+                <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_ruleDeleteErrorMessage</FluentMessageBar>
+            }
+        </FluentDialogBody>
+        <FluentDialogFooter>
+            <FluentButton Appearance="Appearance.Neutral" @onclick="CloseRuleDeleteDialog" Disabled="@_isRuleDeleteSaving">Cancel</FluentButton>
+            <FluentButton Class="destructive-button" Appearance="Appearance.Accent" @onclick="DeletePendingRuleAsync" Disabled="@_isRuleDeleteSaving" Loading="@_isRuleDeleteSaving">Delete</FluentButton>
+        </FluentDialogFooter>
+    </FluentDialog>
+}
 
-<FluentDialog Hidden="@(!_isCustomCategoryUsageDialogOpen)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseCustomCategoryUsagesDialog" aria-label="Custom category usage">
-    <FluentDialogHeader>@(_customCategoryUsageTitle ?? "Custom category usage")</FluentDialogHeader>
-    <FluentDialogBody>
-        @if (_isCustomCategoryUsageLoading)
-        {
-            <div class="loading-card compact-loading-card">
-                <FluentProgressRing />
-                <span>Loading usage…</span>
-            </div>
-        }
-        else if (!string.IsNullOrWhiteSpace(_customCategoryUsageErrorMessage))
-        {
-            <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_customCategoryUsageErrorMessage</FluentMessageBar>
-        }
-        else
-        {
-            <p class="category-meta">Used by @_customCategoryUsages.Count source categor@(_customCategoryUsages.Count == 1 ? "y" : "ies").</p>
-            <div class="table-scroll">
-                <table class="category-grid">
-                    <thead>
-                        <tr>
-                            <th>Source</th>
-                            <th>Type</th>
-                            <th>Source Category</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var usage in _customCategoryUsages)
-                        {
+@if (_isCustomCategoryUsageDialogOpen)
+{
+    <FluentDialog Modal="true" TrapFocus="true" @ondialogdismiss="CloseCustomCategoryUsagesDialog" aria-label="Custom category usage">
+        <FluentDialogHeader>@(_customCategoryUsageTitle ?? "Custom category usage")</FluentDialogHeader>
+        <FluentDialogBody>
+            @if (_isCustomCategoryUsageLoading)
+            {
+                <div class="loading-card compact-loading-card">
+                    <FluentProgressRing />
+                    <span>Loading usage…</span>
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(_customCategoryUsageErrorMessage))
+            {
+                <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_customCategoryUsageErrorMessage</FluentMessageBar>
+            }
+            else
+            {
+                <p class="category-meta">Used by @_customCategoryUsages.Count source categor@(_customCategoryUsages.Count == 1 ? "y" : "ies").</p>
+                <div class="table-scroll">
+                    <table class="category-grid">
+                        <thead>
                             <tr>
-                                <td>@usage.Summary.SourceDisplayName</td>
-                                <td>@usage.Summary.ContentType</td>
-                                <td>
-                                    <div class="category-name">@usage.Summary.UpstreamCategoryName</div>
-                                    <div class="category-meta">Upstream ID @usage.Summary.UpstreamCategoryId</div>
-                                    @if (!string.IsNullOrWhiteSpace(usage.ErrorMessage))
-                                    {
-                                        <div class="inline-error">@usage.ErrorMessage</div>
-                                    }
-                                </td>
-                                <td>
-                                    @if (usage.IsConfirmingUnlink)
-                                    {
-                                        <div class="inline-editor-actions">
-                                            <span class="category-meta">Return to Original?</span>
-                                            <FluentButton Appearance="Appearance.Accent" @onclick="() => UnlinkCustomCategoryUsageAsync(usage)" Disabled="@usage.IsBusy">@(usage.IsBusy ? "Unlinking…" : "Unlink")</FluentButton>
-                                            <FluentButton Appearance="Appearance.Neutral" @onclick="() => CancelCustomCategoryUsageUnlink(usage)" Disabled="@usage.IsBusy">Cancel</FluentButton>
-                                        </div>
-                                    }
-                                    else
-                                    {
-                                        <FluentButton Appearance="Appearance.Neutral"
-                                                      Title="Unlink source category"
-                                                      AriaLabel="Unlink source category"
-                                                      @onclick="() => BeginCustomCategoryUsageUnlink(usage)"
-                                                      Disabled="@usage.IsBusy">
-                                            <span>Unlink</span>
-                                        </FluentButton>
-                                    }
-                                </td>
+                                <th>Source</th>
+                                <th>Type</th>
+                                <th>Source Category</th>
+                                <th>Action</th>
                             </tr>
-                        }
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            @foreach (var usage in _customCategoryUsages)
+                            {
+                                <tr>
+                                    <td>@usage.Summary.SourceDisplayName</td>
+                                    <td>@usage.Summary.ContentType</td>
+                                    <td>
+                                        <div class="category-name">@usage.Summary.UpstreamCategoryName</div>
+                                        <div class="category-meta">Upstream ID @usage.Summary.UpstreamCategoryId</div>
+                                        @if (!string.IsNullOrWhiteSpace(usage.ErrorMessage))
+                                        {
+                                            <div class="inline-error">@usage.ErrorMessage</div>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (usage.IsConfirmingUnlink)
+                                        {
+                                            <div class="inline-editor-actions">
+                                                <span class="category-meta">Return to Original?</span>
+                                                <FluentButton Appearance="Appearance.Accent" @onclick="() => UnlinkCustomCategoryUsageAsync(usage)" Disabled="@usage.IsBusy">@(usage.IsBusy ? "Unlinking…" : "Unlink")</FluentButton>
+                                                <FluentButton Appearance="Appearance.Neutral" @onclick="() => CancelCustomCategoryUsageUnlink(usage)" Disabled="@usage.IsBusy">Cancel</FluentButton>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <FluentButton Appearance="Appearance.Neutral"
+                                                          Title="Unlink source category"
+                                                          AriaLabel="Unlink source category"
+                                                          @onclick="() => BeginCustomCategoryUsageUnlink(usage)"
+                                                          Disabled="@usage.IsBusy">
+                                                <span>Unlink</span>
+                                            </FluentButton>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </FluentDialogBody>
+        <FluentDialogFooter>
+            <FluentButton Appearance="Appearance.Neutral" @onclick="CloseCustomCategoryUsagesDialog">Close</FluentButton>
+        </FluentDialogFooter>
+    </FluentDialog>
+}
+
+@if (_isNewCustomCategoryDialogOpen)
+{
+    <FluentDialog Modal="true" TrapFocus="true" @ondialogdismiss="CloseNewCustomCategoryDialog" aria-label="Create custom category">
+        <FluentDialogHeader>Create custom category</FluentDialogHeader>
+        <FluentDialogBody>
+            <div class="dialog-form-grid dialog-form-grid-single">
+                <FluentTextField Value="@_selectedContentType.ToString()" ReadOnly="true" Label="Content type" />
+                <FluentTextField @bind-Value="_newCustomCategory.DisplayName" Maxlength="255" Placeholder="Movies 4K" Label="Name" Disabled="@_isCustomCategoryCreating" />
             </div>
-        }
-    </FluentDialogBody>
-    <FluentDialogFooter>
-        <FluentButton Appearance="Appearance.Neutral" @onclick="CloseCustomCategoryUsagesDialog">Close</FluentButton>
-    </FluentDialogFooter>
-</FluentDialog>
 
-<FluentDialog Hidden="@(!_isNewCustomCategoryDialogOpen)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseNewCustomCategoryDialog" aria-label="Create custom category">
-    <FluentDialogHeader>Create custom category</FluentDialogHeader>
-    <FluentDialogBody>
-        <div class="dialog-form-grid dialog-form-grid-single">
-            <FluentTextField Value="@_selectedContentType.ToString()" ReadOnly="true" Label="Content type" />
-            <FluentTextField @bind-Value="_newCustomCategory.DisplayName" Maxlength="255" Placeholder="Movies 4K" Label="Name" Disabled="@_isCustomCategoryCreating" />
-        </div>
+            @if (!string.IsNullOrWhiteSpace(_customCategoryCreateErrorMessage))
+            {
+                <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_customCategoryCreateErrorMessage</FluentMessageBar>
+            }
+        </FluentDialogBody>
+        <FluentDialogFooter>
+            <FluentButton Appearance="Appearance.Neutral" @onclick="CloseNewCustomCategoryDialog" Disabled="@_isCustomCategoryCreating">Cancel</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="CreateStandaloneCustomCategoryAsync" Disabled="@_isCustomCategoryCreating" Loading="@_isCustomCategoryCreating">Create</FluentButton>
+        </FluentDialogFooter>
+    </FluentDialog>
+}
 
-        @if (!string.IsNullOrWhiteSpace(_customCategoryCreateErrorMessage))
-        {
-            <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_customCategoryCreateErrorMessage</FluentMessageBar>
-        }
-    </FluentDialogBody>
-    <FluentDialogFooter>
-        <FluentButton Appearance="Appearance.Neutral" @onclick="CloseNewCustomCategoryDialog" Disabled="@_isCustomCategoryCreating">Cancel</FluentButton>
-        <FluentButton Appearance="Appearance.Accent" @onclick="CreateStandaloneCustomCategoryAsync" Disabled="@_isCustomCategoryCreating" Loading="@_isCustomCategoryCreating">Create</FluentButton>
-    </FluentDialogFooter>
-</FluentDialog>
-
-<FluentDialog Hidden="@(_pendingCustomCategoryDelete is null)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseCustomCategoryDeleteDialog" aria-label="Delete custom category">
-    <FluentDialogHeader>Delete custom category?</FluentDialogHeader>
-    <FluentDialogBody>
-        @if (_pendingCustomCategoryDelete is not null)
-        {
+@if (_pendingCustomCategoryDelete is not null)
+{
+    <FluentDialog Modal="true" TrapFocus="true" @ondialogdismiss="CloseCustomCategoryDeleteDialog" aria-label="Delete custom category">
+        <FluentDialogHeader>Delete custom category?</FluentDialogHeader>
+        <FluentDialogBody>
             <p>@_pendingCustomCategoryDelete.DisplayName</p>
             <p class="category-meta">This custom category is unused and can be removed.</p>
-        }
-        @if (!string.IsNullOrWhiteSpace(_customCategoryDeleteErrorMessage))
-        {
-            <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_customCategoryDeleteErrorMessage</FluentMessageBar>
-        }
-    </FluentDialogBody>
-    <FluentDialogFooter>
-        <FluentButton Appearance="Appearance.Neutral" @onclick="CloseCustomCategoryDeleteDialog" Disabled="@_isCustomCategoryDeleteSaving">Cancel</FluentButton>
-        <FluentButton Class="destructive-button" Appearance="Appearance.Accent" @onclick="DeletePendingCustomCategoryAsync" Disabled="@_isCustomCategoryDeleteSaving" Loading="@_isCustomCategoryDeleteSaving">Delete</FluentButton>
-    </FluentDialogFooter>
-</FluentDialog>
+            @if (!string.IsNullOrWhiteSpace(_customCategoryDeleteErrorMessage))
+            {
+                <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@_customCategoryDeleteErrorMessage</FluentMessageBar>
+            }
+        </FluentDialogBody>
+        <FluentDialogFooter>
+            <FluentButton Appearance="Appearance.Neutral" @onclick="CloseCustomCategoryDeleteDialog" Disabled="@_isCustomCategoryDeleteSaving">Cancel</FluentButton>
+            <FluentButton Class="destructive-button" Appearance="Appearance.Accent" @onclick="DeletePendingCustomCategoryAsync" Disabled="@_isCustomCategoryDeleteSaving" Loading="@_isCustomCategoryDeleteSaving">Delete</FluentButton>
+        </FluentDialogFooter>
+    </FluentDialog>
+}
 
 @code {
     private static readonly IReadOnlyDictionary<string, CategoriesTab> _tabs = new Dictionary<string, CategoriesTab>

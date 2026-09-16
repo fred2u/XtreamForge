@@ -237,6 +237,9 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
 
         var rulesResponse = await client.GetFromJsonAsync<AdminItemRulesResponse>($"/api/admin/item-rules?sourceId={sourceId}&contentType=Vod");
         Assert.NotNull(rulesResponse);
+        Assert.Equal(sourceId, rulesResponse.SelectedSourceId);
+        Assert.Equal("Vod", rulesResponse.SelectedContentType);
+        Assert.Contains(rulesResponse.Sources, source => source.Id == sourceId);
         Assert.Equal(2, rulesResponse.Rules.Count);
         var firstRuleId = rulesResponse.Rules[0].Id;
         var secondRuleId = rulesResponse.Rules[1].Id;

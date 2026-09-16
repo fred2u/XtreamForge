@@ -398,10 +398,18 @@ public static class AdminEndpointExtensions
             var selectedContentType = ParseContentType(contentType);
             var view = await itemRuleService.GetAdministrationViewAsync(sourceId, selectedContentType, cancellationToken);
             return TypedResults.Ok(new AdminItemRulesResponse(
-                view.Sources.Select(ToResponse).ToList(),
+                view.Sources.Select(source => new AdminSourceResponse(source.Id, source.Protocol, source.Host, source.Port, source.LastSeenAtUtc)).ToList(),
                 view.SelectedSourceId,
                 view.SelectedContentType.ToString(),
-                view.Rules.Select(ToResponse).ToList()));
+                view.Rules.Select(rule => new AdminItemRuleResponse(
+                    rule.Id,
+                    rule.Sequence,
+                    rule.Field.ToString(),
+                    rule.Action.ToString(),
+                    rule.Operator.ToString(),
+                    rule.Pattern,
+                    rule.CaseSensitive,
+                    rule.IsEnabled)).ToList()));
         }
         catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
         {

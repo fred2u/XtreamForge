@@ -277,17 +277,21 @@ h3 {
 }
 
 .toolbar-action-group {
-    display: flex;
+    display: inline-flex;
     align-items: end;
     justify-content: flex-end;
     gap: 0.625rem;
     flex: 0 0 auto;
     margin-left: auto;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
 }
 
 .source-categories-toolbar .toolbar-filter-group {
-    flex: 1 1 900px;
+    display: grid;
+    grid-template-columns: minmax(220px, 280px) minmax(140px, 170px) minmax(280px, 1fr) minmax(120px, 150px);
+    column-gap: 1rem;
+    row-gap: 0.75rem;
+    flex: 1 1 auto;
 }
 
 .rules-toolbar .toolbar-filter-group {
@@ -300,27 +304,17 @@ h3 {
 
 .toolbar-field {
     min-width: 0;
+    width: 100%;
     box-sizing: border-box;
 }
 
-.source-categories-toolbar .toolbar-field-source,
 .rules-toolbar .toolbar-field-source {
     flex: 0 1 280px;
 }
 
-.source-categories-toolbar .toolbar-field-content-type,
 .rules-toolbar .toolbar-field-content-type,
 .custom-categories-toolbar .toolbar-field-content-type {
     flex: 0 0 160px;
-}
-
-.source-categories-toolbar .toolbar-field-search {
-    flex: 1 1 360px;
-    min-width: 240px;
-}
-
-.source-categories-toolbar .toolbar-field-status {
-    flex: 0 0 150px;
 }
 
 .toolbar-field fluent-search,
@@ -411,13 +405,6 @@ h3 {
 
 .primary-action-button::part(control) {
     gap: 0.45rem;
-}
-
-.toolbar-action-group {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.625rem;
-    flex-wrap: nowrap;
 }
 
 .mapping-select {
@@ -828,20 +815,20 @@ h3 {
         white-space: normal;
     }
 
-    .source-categories-toolbar .toolbar-field-source,
-    .source-categories-toolbar .toolbar-field-content-type,
-    .source-categories-toolbar .toolbar-field-search,
-    .source-categories-toolbar .toolbar-field-status,
     .rules-toolbar .toolbar-field-source,
     .rules-toolbar .toolbar-field-content-type,
     .custom-categories-toolbar .toolbar-field-content-type {
         flex: 1 1 220px;
     }
+
+    .source-categories-toolbar .toolbar-filter-group {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 1150px) {
     .source-categories-toolbar .toolbar-filter-group {
-        flex-basis: 100%;
+        grid-template-columns: minmax(220px, 1fr) minmax(140px, 170px);
     }
 
     .source-categories-toolbar .toolbar-action-group {

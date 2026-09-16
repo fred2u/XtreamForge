@@ -5,10 +5,14 @@
 @inject IJSRuntime JS
 
 <section class="categories-tab-panel">
-    <header class="categories-panel-header">
-        <div>
-            <h2>Category Rules</h2>
-            <p class="category-meta">Rules are evaluated in order. First match wins.</p>
+    <header class="section-header">
+        <div class="section-heading">
+            <div class="section-title-row">
+                <h2>Category Rules</h2>
+                <span class="section-count">@Rows.Count rule@(Rows.Count == 1 ? string.Empty : "s")</span>
+            </div>
+            <p class="section-description">Manage ordered include and exclude rules for the selected source.</p>
+            <p class="section-help">Rules are evaluated in sequence. The first enabled match wins.</p>
         </div>
         @if (IsRefreshing)
         {
@@ -16,30 +20,34 @@
         }
     </header>
 
-    <div class="categories-toolbar-grid">
-        <FluentSelect TOption="string" Value="@FormatNullableInt(SelectedSourceId)" ValueChanged="HandleSourceChangedAsync" Disabled="@(Sources.Count == 0)" Label="Source">
-            @if (Sources.Count == 0)
-            {
-                <FluentOption Value="">No sources</FluentOption>
-            }
-            else
-            {
-                @foreach (var source in Sources)
+    <div class="category-toolbar rules-toolbar">
+        <div class="toolbar-field toolbar-field-source">
+            <FluentSelect TOption="string" Value="@FormatNullableInt(SelectedSourceId)" ValueChanged="HandleSourceChangedAsync" Disabled="@(Sources.Count == 0)" Label="Source">
+                @if (Sources.Count == 0)
                 {
-                    <FluentOption Value="@source.Id.ToString(CultureInfo.InvariantCulture)">@source.DisplayName</FluentOption>
+                    <FluentOption Value="">No sources</FluentOption>
                 }
-            }
-        </FluentSelect>
+                else
+                {
+                    @foreach (var source in Sources)
+                    {
+                        <FluentOption Value="@source.Id.ToString(CultureInfo.InvariantCulture)">@FormatSourceDisplayName(source.DisplayName)</FluentOption>
+                    }
+                }
+            </FluentSelect>
+        </div>
 
-        <FluentSelect TOption="string" Value="@SelectedContentType.ToString()" ValueChanged="HandleContentTypeChangedAsync" Label="Content Type">
-            <FluentOption Value="@AdminContentType.Vod.ToString()">VOD</FluentOption>
-            <FluentOption Value="@AdminContentType.Series.ToString()">Series</FluentOption>
-        </FluentSelect>
+        <div class="toolbar-field toolbar-field-content-type">
+            <FluentSelect TOption="string" Value="@SelectedContentType.ToString()" ValueChanged="HandleContentTypeChangedAsync" Label="Content Type">
+                <FluentOption Value="@AdminContentType.Vod.ToString()">VOD</FluentOption>
+                <FluentOption Value="@AdminContentType.Series.ToString()">Series</FluentOption>
+            </FluentSelect>
+        </div>
 
-        <div class="toolbar-actions">
+        <div class="toolbar-field toolbar-field-action">
             <FluentButton Appearance="Appearance.Accent" @onclick="() => OnOpenCreate.InvokeAsync()" Disabled="@(!HasSelectedSource)">
                 <FluentIcon Value="@(new Icons.Regular.Size20.Add())" Slot="start" />
-                <span>Add Rule</span>
+                <span>Add rule</span>
             </FluentButton>
         </div>
     </div>
@@ -54,7 +62,8 @@
     }
 
     <FluentCard Class="rule-editor-card">
-        <FluentLabel Typo="Typography.PaneHeader">Rule Tester</FluentLabel>
+        <h3>Rule Tester</h3>
+        <p class="section-help">Preview how the current rules evaluate a category name.</p>
         <div class="rule-tester-grid">
             <FluentTextField @bind-Value="Tester.CategoryName" Maxlength="255" Placeholder="|FR| DOCUMENTAIRE SPORT" Label="Category name" Disabled="@(!HasSelectedSource || Tester.IsBusy)" />
             <div class="rule-action-cell">
@@ -102,6 +111,16 @@
     {
         <div class="table-scroll">
             <table class="category-grid rules-grid" @ref="_rulesTable">
+                <colgroup>
+                    <col class="rules-drag-column" />
+                    <col class="rules-sequence-column" />
+                    <col class="rules-action-column" />
+                    <col class="rules-match-column" />
+                    <col class="rules-pattern-column" />
+                    <col class="rules-case-column" />
+                    <col class="rules-enabled-column" />
+                    <col class="rules-actions-column" />
+                </colgroup>
                 <thead>
                     <tr>
                         <th class="drag-column"></th>
@@ -124,7 +143,7 @@
                             data-drop-index="@index">
                             <td class="drag-column">
                                 <FluentButton Appearance="Appearance.Stealth"
-                                              class="drag-handle"
+                                              Class="drag-handle compact-icon-button"
                                               Title="Drag to reorder"
                                               AriaLabel="Drag to reorder"
                                               data-drag-handle="true"
@@ -157,10 +176,10 @@
                             }
                             else
                             {
-                                <td>@rule.Action</td>
-                                <td>@rule.Operator</td>
-                                <td>@rule.Pattern</td>
-                                <td>@(rule.CaseSensitive ? "Case sensitive" : "Ignore case")</td>
+                                <td class="nowrap-cell">@rule.Action</td>
+                                <td class="nowrap-cell">@rule.Operator</td>
+                                <td class="rule-pattern-cell">@rule.Pattern</td>
+                                <td class="nowrap-cell">@(rule.CaseSensitive ? "Case sensitive" : "Ignore case")</td>
                                 <td>
                                     <FluentSwitch Value="@rule.IsEnabled" ValueChanged="value => OnToggleEnabled.InvokeAsync(new RuleToggleRequest(rule, value))" Disabled="@rule.IsBusy" CheckedMessage="On" UncheckedMessage="Off" AriaLabel="Toggle rule enabled state" />
                                 </td>
@@ -174,11 +193,12 @@
                                     }
                                     else
                                     {
-                                        <FluentButton Appearance="Appearance.Neutral" Title="Edit rule" AriaLabel="Edit rule" @onclick="() => OnBeginEdit.InvokeAsync(rule)" Disabled="@rule.IsBusy">
+                                        <FluentButton Appearance="Appearance.Neutral" Class="compact-icon-button" Title="Edit rule" AriaLabel="Edit rule" @onclick="() => OnBeginEdit.InvokeAsync(rule)" Disabled="@rule.IsBusy">
                                             <FluentIcon Value="@(new Icons.Regular.Size20.Edit())" />
                                         </FluentButton>
                                     }
                                     <FluentButton Appearance="Appearance.Neutral"
+                                                  Class="compact-icon-button"
                                                   Title="Delete rule"
                                                   AriaLabel="Delete rule"
                                                   @onclick="() => OnRequestDelete.InvokeAsync(rule)"
@@ -269,6 +289,20 @@
     public EventCallback<RuleDropRequest> OnDropRequested { get; set; }
 
     private bool HasSelectedSource => SelectedSourceId is not null;
+
+    private static string FormatSourceDisplayName(string displayName)
+    {
+        if (!Uri.TryCreate(displayName, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return displayName;
+        }
+
+        var path = uri.AbsolutePath.TrimEnd('/');
+        return string.IsNullOrEmpty(path) || path == "/"
+            ? uri.Authority
+            : $"{uri.Authority}{path}";
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

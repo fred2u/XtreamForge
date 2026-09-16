@@ -1,55 +1,64 @@
 @namespace XtreamForge.Blazor.Features.Categories.SourceCategories
 
 <section class="categories-tab-panel">
-    <header class="categories-panel-header">
-        <div>
-            <h2>Source Categories</h2>
-            <p class="category-meta">Manual disabled wins first. Otherwise the first enabled rule match decides whether the source category stays enabled or is excluded.</p>
+    <header class="section-header">
+        <div class="section-heading">
+            <div class="section-title-row">
+                <h2>Source Categories</h2>
+                <span class="section-count">@Rows.Count of @TotalCount categories</span>
+            </div>
+            <p class="section-description">Manage source categories, mappings, and matched rules.</p>
+            <p class="section-help">Manual disable overrides other outcomes; otherwise the first enabled matching rule decides inclusion.</p>
         </div>
-        <FluentBadge Appearance="Appearance.Neutral">@Rows.Count of @TotalCount categories</FluentBadge>
     </header>
 
-    <div class="categories-toolbar-grid">
-        <FluentSelect TOption="string" Value="@FormatNullableInt(SelectedSourceId)" ValueChanged="HandleSourceChangedAsync" Disabled="@(Sources.Count == 0)" Label="Source">
-            @if (Sources.Count == 0)
-            {
-                <FluentOption Value="">No sources</FluentOption>
-            }
-            else
-            {
-                @foreach (var source in Sources)
+    <div class="category-toolbar source-categories-toolbar">
+        <div class="toolbar-field toolbar-field-source">
+            <FluentSelect TOption="string" Value="@FormatNullableInt(SelectedSourceId)" ValueChanged="HandleSourceChangedAsync" Disabled="@(Sources.Count == 0)" Label="Source">
+                @if (Sources.Count == 0)
                 {
-                    <FluentOption Value="@source.Id.ToString(CultureInfo.InvariantCulture)">@source.DisplayName</FluentOption>
+                    <FluentOption Value="">No sources</FluentOption>
                 }
-            }
-        </FluentSelect>
+                else
+                {
+                    @foreach (var source in Sources)
+                    {
+                        <FluentOption Value="@source.Id.ToString(CultureInfo.InvariantCulture)">@FormatSourceDisplayName(source.DisplayName)</FluentOption>
+                    }
+                }
+            </FluentSelect>
+        </div>
 
-        <FluentSelect TOption="string" Value="@SelectedContentType.ToString()" ValueChanged="HandleContentTypeChangedAsync" Label="Content Type">
-            <FluentOption Value="@AdminContentType.Vod.ToString()">VOD</FluentOption>
-            <FluentOption Value="@AdminContentType.Series.ToString()">Series</FluentOption>
-        </FluentSelect>
+        <div class="toolbar-field toolbar-field-content-type">
+            <FluentSelect TOption="string" Value="@SelectedContentType.ToString()" ValueChanged="HandleContentTypeChangedAsync" Label="Content Type">
+                <FluentOption Value="@AdminContentType.Vod.ToString()">VOD</FluentOption>
+                <FluentOption Value="@AdminContentType.Series.ToString()">Series</FluentOption>
+            </FluentSelect>
+        </div>
 
-        <div class="toolbar-actions">
+        <div class="toolbar-field toolbar-field-search">
+            <FluentSearch Value="@SearchText"
+                          ValueChanged="OnSearchChanged"
+                          Immediate="true"
+                          ImmediateDelay="200"
+                          Placeholder="Search categories..."
+                          Label="Search" />
+        </div>
+
+        <div class="toolbar-field toolbar-field-status">
+            <FluentSelect TOption="string" Value="@StatusFilter.ToString()" ValueChanged="HandleStatusFilterChangedAsync" Label="Status">
+                <FluentOption Value="@CategoryStatusFilter.All.ToString()">All</FluentOption>
+                <FluentOption Value="@CategoryStatusFilter.Enabled.ToString()">Enabled</FluentOption>
+                <FluentOption Value="@CategoryStatusFilter.Disabled.ToString()">Disabled</FluentOption>
+            </FluentSelect>
+        </div>
+
+        <div class="toolbar-field toolbar-field-action">
             <FluentButton Appearance="Appearance.Accent" @onclick="OnOpenAddSource">
                 <FluentIcon Value="@(new Icons.Regular.Size20.Add())" Slot="start" />
-                <span>Add Source</span>
+                <span>Add source</span>
             </FluentButton>
         </div>
-    </div>
-
-    <div class="categories-toolbar-grid categories-toolbar-grid-secondary">
-        <FluentSearch Value="@SearchText"
-                      ValueChanged="OnSearchChanged"
-                      Immediate="true"
-                      ImmediateDelay="200"
-                      Placeholder="Search categories..."
-                      Label="Search" />
-
-        <FluentSelect TOption="string" Value="@StatusFilter.ToString()" ValueChanged="HandleStatusFilterChangedAsync" Label="Status">
-            <FluentOption Value="@CategoryStatusFilter.All.ToString()">All</FluentOption>
-            <FluentOption Value="@CategoryStatusFilter.Enabled.ToString()">Enabled</FluentOption>
-            <FluentOption Value="@CategoryStatusFilter.Disabled.ToString()">Disabled</FluentOption>
-        </FluentSelect>
     </div>
 
     @if (!string.IsNullOrWhiteSpace(Message))
@@ -82,85 +91,103 @@
     else
     {
         <div class="table-scroll">
-            <FluentDataGrid Items="@Rows.AsQueryable()"
-                            TGridItem="CategoryRowState"
-                            DisplayMode="DataGridDisplayMode.Table"
-                            GridTemplateColumns="2.2fr 2fr 1.1fr 1.4fr"
-                            RowSize="DataGridRowSize.Small"
-                            MultiLine="true"
-                            Class="categories-grid">
-                <TemplateColumn Title="Source Category">
-                    <div class="category-name">@context.Summary.UpstreamCategoryName</div>
-                    <div class="category-meta">Upstream ID @context.Summary.UpstreamCategoryId · XtreamForge ID @context.Summary.DedicatedXtreamForgeCategoryId</div>
-                </TemplateColumn>
-                <TemplateColumn Title="Mapping">
-                    <div class="mapping-cell">
-                        <div class="mapping-control-row">
-                            <FluentSelect TOption="string" @bind-Value="context.MappingValue" @bind-Value:after="() => OnMappingChanged.InvokeAsync(context)" Disabled="@context.IsBusy" AriaLabel="Category mapping">
-                                <FluentOption Value="disabled">Disabled</FluentOption>
-                                <FluentOption Value="original">Original</FluentOption>
-                                <FluentOption Value="new">New category</FluentOption>
-                                @foreach (var customCategory in CustomCategories)
-                                {
-                                    <FluentOption Value="@CategoryRowState.GetCustomMappingValue(customCategory.Summary.Id)">@customCategory.Summary.DisplayName</FluentOption>
-                                }
-                            </FluentSelect>
-
-                            @switch (context.SaveState)
-                            {
-                                case MutationFeedbackState.Saving:
-                                    <FluentProgressRing Width="18px" />
-                                    break;
-                                case MutationFeedbackState.Saved:
-                                    <FluentBadge Appearance="Appearance.Lightweight">Saved</FluentBadge>
-                                    break;
-                            }
-                        </div>
-
-                        @if (context.IsCreatingCustomCategory)
-                        {
-                            <div class="inline-editor-box">
-                                <FluentTextField @bind-Value="context.NewCustomCategoryName" Maxlength="255" Placeholder="Movies 4K" Label="New global custom category" Disabled="@context.IsBusy" />
-                                <div class="inline-editor-actions">
-                                    <FluentButton Appearance="Appearance.Accent" @onclick="() => OnCreateCustomCategory.InvokeAsync(context)" Disabled="@context.IsBusy">Create &amp; Map</FluentButton>
-                                    <FluentButton Appearance="Appearance.Neutral" @onclick="() => OnCancelCustomCategory.InvokeAsync(context)" Disabled="@context.IsBusy">Cancel</FluentButton>
+            <table class="category-grid source-category-grid">
+                <colgroup>
+                    <col class="source-category-column" />
+                    <col class="mapping-column" />
+                    <col class="status-column" />
+                    <col class="rule-column" />
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th>Source Category</th>
+                        <th>Mapping</th>
+                        <th>Status</th>
+                        <th>Rule</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var context in Rows)
+                    {
+                        <tr>
+                            <td>
+                                <div class="category-name">@context.Summary.UpstreamCategoryName</div>
+                                <div class="category-meta category-meta-inline">
+                                    <span>@context.Summary.UpstreamCategoryId</span>
+                                    <span>XF @context.Summary.DedicatedXtreamForgeCategoryId</span>
                                 </div>
-                            </div>
-                        }
+                            </td>
+                            <td>
+                                <div class="mapping-cell">
+                                    <div class="mapping-control-row">
+                                        <FluentSelect Class="mapping-select" TOption="string" @bind-Value="context.MappingValue" @bind-Value:after="() => OnMappingChanged.InvokeAsync(context)" Disabled="@context.IsBusy" AriaLabel="Category mapping">
+                                            <FluentOption Value="disabled">Disabled</FluentOption>
+                                            <FluentOption Value="original">Original</FluentOption>
+                                            <FluentOption Value="new">New category</FluentOption>
+                                            @foreach (var customCategory in CustomCategories)
+                                            {
+                                                <FluentOption Value="@CategoryRowState.GetCustomMappingValue(customCategory.Summary.Id)">@customCategory.Summary.DisplayName</FluentOption>
+                                            }
+                                        </FluentSelect>
 
-                        @if (context.SaveState == MutationFeedbackState.Failed && !string.IsNullOrWhiteSpace(context.ValidationError))
-                        {
-                            <div class="mapping-feedback">
-                                <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@context.ValidationError</FluentMessageBar>
-                                <FluentButton Appearance="Appearance.Stealth" @onclick="() => OnRetry.InvokeAsync(context)">Retry</FluentButton>
-                            </div>
-                        }
-                    </div>
-                </TemplateColumn>
-                <TemplateColumn Title="Status">
-                    <FluentBadge Appearance="@(context.Summary.IsEffectivelyIncluded ? Appearance.Accent : Appearance.Neutral)">
-                        @CategoriesPageState.FormatEffectiveStatus(context.Summary)
-                    </FluentBadge>
-                </TemplateColumn>
-                <TemplateColumn Title="Rule">
-                    @{
-                        var matchedRule = CategoriesPageState.FormatMatchedRule(context.Summary);
-                        var matchedRuleDetails = CategoriesPageState.FormatMatchedRuleDetails(context.Summary);
+                                        @switch (context.SaveState)
+                                        {
+                                            case MutationFeedbackState.Saving:
+                                                <FluentProgressRing Width="16px" />
+                                                break;
+                                            case MutationFeedbackState.Saved:
+                                                <span class="mutation-state">Saved</span>
+                                                break;
+                                        }
+                                    </div>
+
+                                    @if (context.IsCreatingCustomCategory)
+                                    {
+                                        <div class="inline-editor-box">
+                                            <FluentTextField @bind-Value="context.NewCustomCategoryName" Maxlength="255" Placeholder="Movies 4K" Label="New global custom category" Disabled="@context.IsBusy" />
+                                            <div class="inline-editor-actions">
+                                                <FluentButton Appearance="Appearance.Accent" @onclick="() => OnCreateCustomCategory.InvokeAsync(context)" Disabled="@context.IsBusy">Create &amp; Map</FluentButton>
+                                                <FluentButton Appearance="Appearance.Neutral" @onclick="() => OnCancelCustomCategory.InvokeAsync(context)" Disabled="@context.IsBusy">Cancel</FluentButton>
+                                            </div>
+                                        </div>
+                                    }
+
+                                    @if (context.SaveState == MutationFeedbackState.Failed && !string.IsNullOrWhiteSpace(context.ValidationError))
+                                    {
+                                        <div class="mapping-feedback">
+                                            <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@context.ValidationError</FluentMessageBar>
+                                            <FluentButton Appearance="Appearance.Stealth" @onclick="() => OnRetry.InvokeAsync(context)">Retry</FluentButton>
+                                        </div>
+                                    }
+                                </div>
+                            </td>
+                            <td>
+                                <span class="@GetStatusClass(context)">
+                                    <span class="status-dot"></span>
+                                    <span>@CategoriesPageState.FormatEffectiveStatus(context.Summary)</span>
+                                </span>
+                            </td>
+                            <td>
+                                @if (context.Summary.MatchedRuleId is not null && context.Summary.MatchedRuleSequence is int matchedRuleSequence)
+                                {
+                                    <button type="button" class="inline-link-button rule-link" title="@CategoriesPageState.FormatMatchedRuleDetails(context.Summary)" @onclick="() => OnOpenRule.InvokeAsync(context)">
+                                        <span class="rule-primary">
+                                            <span class="rule-sequence">#@matchedRuleSequence</span>
+                                            <span class="rule-fragment">@context.Summary.MatchedRuleAction</span>
+                                            <span class="rule-fragment">@context.Summary.MatchedPattern</span>
+                                        </span>
+                                        <span class="rule-secondary">@CategoriesPageState.FormatMatchedRuleDetails(context.Summary)</span>
+                                    </button>
+                                }
+                                else
+                                {
+                                    <span class="category-meta">—</span>
+                                }
+                            </td>
+                        </tr>
                     }
-                    @if (context.Summary.MatchedRuleId is not null && matchedRule is not null)
-                    {
-                        <FluentButton Appearance="Appearance.Stealth" Title="@matchedRuleDetails" @onclick="() => OnOpenRule.InvokeAsync(context)">@matchedRule</FluentButton>
-                        @if (!string.IsNullOrWhiteSpace(matchedRuleDetails))
-                        {
-                            <div class="category-meta">@matchedRuleDetails</div>
-                        }
-                    }
-                    else
-                    {
-                        <span class="category-meta">—</span>
-                    }
-                </TemplateColumn>
-            </FluentDataGrid>
+                </tbody>
+            </table>
         </div>
     }
 </section>
@@ -227,6 +254,28 @@
     public EventCallback<CategoryRowState> OnOpenRule { get; set; }
 
     private static string FormatNullableInt(int? value) => value?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+
+    private static string FormatSourceDisplayName(string displayName)
+    {
+        if (!Uri.TryCreate(displayName, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return displayName;
+        }
+
+        var path = uri.AbsolutePath.TrimEnd('/');
+        return string.IsNullOrEmpty(path) || path == "/"
+            ? uri.Authority
+            : $"{uri.Authority}{path}";
+    }
+
+    private static string GetStatusClass(CategoryRowState row) => row.Summary switch
+    {
+        { IsEffectivelyIncluded: true } => "status-pill status-pill-enabled",
+        { IsManuallyExcluded: true } => "status-pill status-pill-manual",
+        { MatchedRuleId: not null } => "status-pill status-pill-rule",
+        _ => "status-pill status-pill-disabled"
+    };
 
     private Task HandleSourceChangedAsync(string? value) =>
         OnSourceChanged.InvokeAsync(int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedValue) ? parsedValue : null);

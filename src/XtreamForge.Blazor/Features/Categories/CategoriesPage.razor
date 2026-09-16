@@ -11,7 +11,7 @@
 <PageTitle>Categories - XtreamForge</PageTitle>
 
 <h1>Categories</h1>
-<p class="page-subtitle">Compact source-category administration backed by the existing XtreamForge APIs and PostgreSQL configuration.</p>
+<p class="page-subtitle">Manage source categories, rules, and shared categories.</p>
 
 @if (_isLoading)
 {
@@ -34,7 +34,7 @@ else if (_categoryView is null || _rulesView is null)
 }
 else
 {
-    <FluentCard Class="status-card categories-shell-card">
+    <section class="categories-page-content">
         @if (!string.IsNullOrWhiteSpace(_pageErrorMessage))
         {
             <FluentMessageBar Title="Categories" Intent="@MessageIntent.Error" AllowDismiss="false">@_pageErrorMessage</FluentMessageBar>
@@ -102,7 +102,7 @@ else
                     OnRequestDelete="RequestCustomCategoryDelete" />
             </FluentTab>
         </FluentTabs>
-    </FluentCard>
+    </section>
 }
 
 <FluentDialog Hidden="@(!_isAddSourceDialogOpen)" Modal="true" TrapFocus="true" @ondialogdismiss="CloseAddSourceDialog" aria-label="Add Xtream source">

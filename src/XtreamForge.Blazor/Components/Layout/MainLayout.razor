@@ -11,7 +11,7 @@
                 </div>
             </div>
 
-            <FluentNavMenu Width="250" Title="Primary administration navigation">
+            <FluentNavMenu Width="232" Title="Primary administration navigation">
                 <FluentNavLink Href="/" Match="NavLinkMatch.All" Icon="@(new Icons.Regular.Size20.Home())">Dashboard</FluentNavLink>
                 <FluentNavLink Href="/categories" Icon="@(new Icons.Regular.Size20.Grid())">Categories</FluentNavLink>
                 <FluentNavLink Href="/settings" Icon="@(new Icons.Regular.Size20.Settings())">Settings</FluentNavLink>
@@ -19,7 +19,9 @@
         </aside>
 
         <main class="content">
-            @Body
+            <div class="content-frame">
+                @Body
+            </div>
         </main>
     </div>
 

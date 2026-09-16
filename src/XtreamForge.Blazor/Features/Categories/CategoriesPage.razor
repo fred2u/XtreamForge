@@ -164,7 +164,7 @@ else
         </FluentDialogBody>
         <FluentDialogFooter>
             <FluentButton Appearance="Appearance.Neutral" @onclick="CloseAddRuleDialog" Disabled="@_isRuleCreating">Cancel</FluentButton>
-            <FluentButton Appearance="Appearance.Accent" @onclick="CreateRuleAsync" Disabled="@_isRuleCreating" Loading="@_isRuleCreating">Add Rule</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="CreateRuleAsync" Disabled="@_isRuleCreating" Loading="@_isRuleCreating">Add rule</FluentButton>
         </FluentDialogFooter>
     </FluentDialog>
 }
@@ -190,7 +190,7 @@ else
 
 @if (_isCustomCategoryUsageDialogOpen)
 {
-    <FluentDialog Modal="true" TrapFocus="true" @ondialogdismiss="CloseCustomCategoryUsagesDialog" aria-label="Custom category usage">
+    <FluentDialog Class="usage-dialog" Modal="true" TrapFocus="true" @ondialogdismiss="CloseCustomCategoryUsagesDialog" aria-label="Custom category usage">
         <FluentDialogHeader>@(_customCategoryUsageTitle ?? "Custom category usage")</FluentDialogHeader>
         <FluentDialogBody>
             @if (_isCustomCategoryUsageLoading)
@@ -208,7 +208,13 @@ else
             {
                 <p class="category-meta">Used by @_customCategoryUsages.Count source categor@(_customCategoryUsages.Count == 1 ? "y" : "ies").</p>
                 <div class="table-scroll">
-                    <table class="category-grid">
+                    <table class="category-grid usage-grid">
+                        <colgroup>
+                            <col class="usage-source-column" />
+                            <col class="usage-type-column" />
+                            <col class="usage-category-column" />
+                            <col class="usage-action-column" />
+                        </colgroup>
                         <thead>
                             <tr>
                                 <th>Source</th>
@@ -221,8 +227,8 @@ else
                             @foreach (var usage in _customCategoryUsages)
                             {
                                 <tr>
-                                    <td>@usage.Summary.SourceDisplayName</td>
-                                    <td>@usage.Summary.ContentType</td>
+                                    <td class="nowrap-cell">@FormatSourceDisplayName(usage.Summary.SourceDisplayName)</td>
+                                    <td class="nowrap-cell">@usage.Summary.ContentType</td>
                                     <td>
                                         <div class="category-name">@usage.Summary.UpstreamCategoryName</div>
                                         <div class="category-meta">Upstream ID @usage.Summary.UpstreamCategoryId</div>
@@ -370,6 +376,20 @@ else
             if (Enum.TryParse<CategoriesTab>(value, true, out var tab))
             {
                 _activeTab = tab;
+            }
+
+            private static string FormatSourceDisplayName(string displayName)
+            {
+                if (!Uri.TryCreate(displayName, UriKind.Absolute, out var uri)
+                    || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                {
+                    return displayName;
+                }
+
+                var path = uri.AbsolutePath.TrimEnd('/');
+                return string.IsNullOrEmpty(path) || path == "/"
+                    ? uri.Authority
+                    : $"{uri.Authority}{path}";
             }
         }
     }

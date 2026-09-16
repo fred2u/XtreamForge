@@ -27,23 +27,71 @@ else if (_status is null)
 }
 else
 {
-    <div class="dashboard-grid">
-        <FluentCard Class="status-card">
-            <FluentLabel Typo="Typography.PaneHeader">Application status</FluentLabel>
-            <div class="status-row">
-                <FluentBadge Appearance="Appearance.Accent">@_status.Status</FluentBadge>
-            </div>
-            <p>@_status.ApplicationName v@_status.ApplicationVersion</p>
-        </FluentCard>
+    <section class="dashboard-overview">
+        <div class="dashboard-metrics-grid">
+            <FluentCard Class="dashboard-metric-card">
+                <div class="dashboard-metric-label">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.PlugConnected())" />
+                    <span>Sources</span>
+                </div>
+                <div class="dashboard-metric-value">@_status.SourceCount</div>
+            </FluentCard>
 
-        <FluentCard Class="status-card">
-            <FluentLabel Typo="Typography.PaneHeader">Database connectivity</FluentLabel>
-            <div class="status-row">
-                <FluentBadge Appearance="Appearance.Neutral">@_status.DatabaseStatus</FluentBadge>
+            <FluentCard Class="dashboard-metric-card">
+                <div class="dashboard-metric-label">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.Grid())" />
+                    <span>Source categories</span>
+                </div>
+                <div class="dashboard-metric-value">@_status.SourceCategoryCount</div>
+            </FluentCard>
+
+            <FluentCard Class="dashboard-metric-card">
+                <div class="dashboard-metric-label">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.Filter())" />
+                    <span>Category rules</span>
+                </div>
+                <div class="dashboard-metric-value">@_status.RuleCount</div>
+            </FluentCard>
+
+            <FluentCard Class="dashboard-metric-card">
+                <div class="dashboard-metric-label">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.Tag())" />
+                    <span>Custom categories</span>
+                </div>
+                <div class="dashboard-metric-value">@_status.CustomCategoryCount</div>
+            </FluentCard>
+        </div>
+
+        <FluentCard Class="dashboard-health-card">
+            <div class="dashboard-section-heading">
+                <h2>System health</h2>
+                <span class="section-count">Live administration summary</span>
             </div>
-            <p>@_status.DatabaseDetails</p>
+
+            <div class="dashboard-health-grid">
+                <div class="dashboard-health-row">
+                    <div class="dashboard-health-label">Application</div>
+                    <div class="@GetStatusClass(_status.Status)">
+                        <span class="status-dot"></span>
+                        <span>@_status.Status</span>
+                    </div>
+                    <div class="dashboard-health-meta">
+                        <span>@_status.ApplicationName</span>
+                        <span>Version @_status.ApplicationVersion</span>
+                    </div>
+                </div>
+
+                <div class="dashboard-health-row">
+                    <div class="dashboard-health-label">Database</div>
+                    <div class="@GetStatusClass(_status.DatabaseStatus)">
+                        <span class="status-dot"></span>
+                        <span>@_status.DatabaseStatus</span>
+                    </div>
+                    <div class="dashboard-health-meta">@_status.DatabaseDetails</div>
+                </div>
+            </div>
         </FluentCard>
-    </div>
+    </section>
 }
 
 @code {
@@ -66,4 +114,10 @@ else
             _isLoading = false;
         }
     }
+
+    private static string GetStatusClass(string status) =>
+        string.Equals(status, "Healthy", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, "Connected", StringComparison.OrdinalIgnoreCase)
+            ? "status-pill status-pill-enabled"
+            : "status-pill status-pill-manual";
 }

@@ -48,7 +48,7 @@
         </div>
 
         <div class="toolbar-field toolbar-field-action">
-            <FluentButton Appearance="Appearance.Accent" @onclick="() => OnOpenCreate.InvokeAsync()" Disabled="@(!HasSelectedSource)">
+            <FluentButton Class="primary-action-button" Appearance="Appearance.Accent" @onclick="() => OnOpenCreate.InvokeAsync()" Disabled="@(!HasSelectedSource)">
                 <FluentIcon Value="@(new Icons.Regular.Size20.Add())" Slot="start" />
                 <span>Add rule</span>
             </FluentButton>
@@ -64,14 +64,17 @@
         <FluentMessageBar Title="Category rules" Intent="@MessageIntent.Error" AllowDismiss="false">@ErrorMessage</FluentMessageBar>
     }
 
-    <FluentCard Class="rule-editor-card">
-        <h3>Rule Tester</h3>
-        <p class="section-help">Preview how the current rules evaluate a category name.</p>
+    <section class="rule-tester-panel">
+        <div class="rule-tester-header">
+            <h3>Rule Tester</h3>
+            <span class="section-help">Preview a category against the current ordered rules.</span>
+        </div>
+
         <div class="rule-tester-grid">
-            <FluentTextField @bind-Value="Tester.CategoryName" Maxlength="255" Placeholder="|FR| DOCUMENTAIRE SPORT" Label="Category name" Disabled="@(!HasSelectedSource || Tester.IsBusy)" />
+            <FluentTextField Class="rule-tester-input" @bind-Value="Tester.CategoryName" Maxlength="255" Placeholder="|FR| DOCUMENTAIRE SPORT" Label="Category name" Disabled="@(!HasSelectedSource || Tester.IsBusy)" />
             <div class="rule-action-cell">
                 <FluentButton Appearance="Appearance.Neutral" @onclick="() => OnRunTester.InvokeAsync()" Disabled="@(!HasSelectedSource || Tester.IsBusy)">
-                    @(Tester.IsBusy ? "Testing…" : "Test Rule")
+                    @(Tester.IsBusy ? "Testing…" : "Test rule")
                 </FluentButton>
             </div>
         </div>
@@ -83,20 +86,16 @@
         else if (Tester.Preview is not null)
         {
             <div class="rule-tester-result">
-                <FluentBadge Appearance="@(Tester.Preview.Decision == "Exclude" ? Appearance.Neutral : Appearance.Accent)">
-                    @(Tester.Preview.Decision == "Exclude" ? "Excluded" : "Included")
-                </FluentBadge>
-                @if (Tester.Preview.MatchedRuleId is int && Tester.Preview.MatchedRuleSequence is int matchedRuleSequence)
-                {
-                    <div class="category-meta">Matched rule #@matchedRuleSequence · @Tester.Preview.MatchedRuleAction · @Tester.Preview.MatchedPattern</div>
-                }
-                else
-                {
-                    <div class="category-meta">No rule matched. Default include applies.</div>
-                }
+                <div class="rule-tester-result-primary">
+                    <span class="@(Tester.Preview.Decision == "Exclude" ? "status-pill status-pill-manual" : "status-pill status-pill-enabled")">
+                        <span class="status-dot"></span>
+                        <span>@GetRuleTesterSummary(Tester.Preview)</span>
+                    </span>
+                </div>
+                <div class="rule-secondary">@GetRuleTesterDetails(Tester.Preview)</div>
             </div>
         }
-    </FluentCard>
+    </section>
 
     @if (!HasSelectedSource)
     {
@@ -150,30 +149,32 @@
                                               Title="Drag to reorder"
                                               AriaLabel="Drag to reorder"
                                               data-drag-handle="true"
-                                              Disabled="@(!rule.CanRunSecondaryActions)">
+                                              Disabled="@(!rule.CanRunSecondaryActions || rule.IsEditing)">
                                     ⋮⋮
                                 </FluentButton>
                             </td>
                             <td class="rule-sequence-cell">@rule.Sequence</td>
                             @if (rule.IsEditing)
                             {
-                                <td>
-                                    <FluentSelect TOption="string" Value="@rule.Action.ToString()" ValueChanged="value => rule.Action = ParseAction(value)" Disabled="@rule.IsBusy" AriaLabel="Rule action">
+                                <td class="rule-edit-cell">
+                                    <FluentSelect Class="inline-edit-field" TOption="string" Value="@rule.Action.ToString()" ValueChanged="value => rule.Action = ParseAction(value)" Disabled="@rule.IsBusy" AriaLabel="Rule action">
                                         <FluentOption Value="@CategoryRuleActionOption.Include.ToString()">Include</FluentOption>
                                         <FluentOption Value="@CategoryRuleActionOption.Exclude.ToString()">Exclude</FluentOption>
                                     </FluentSelect>
                                 </td>
-                                <td>
-                                    <FluentSelect TOption="string" Value="@rule.Operator.ToString()" ValueChanged="value => rule.Operator = ParseOperator(value)" Disabled="@rule.IsBusy" AriaLabel="Rule match operator">
+                                <td class="rule-edit-cell">
+                                    <FluentSelect Class="inline-edit-field" TOption="string" Value="@rule.Operator.ToString()" ValueChanged="value => rule.Operator = ParseOperator(value)" Disabled="@rule.IsBusy" AriaLabel="Rule match operator">
                                         <FluentOption Value="@CategoryRuleOperatorOption.Contains.ToString()">Contains</FluentOption>
                                         <FluentOption Value="@CategoryRuleOperatorOption.StartsWith.ToString()">StartsWith</FluentOption>
                                     </FluentSelect>
                                 </td>
-                                <td><FluentTextField @bind-Value="rule.Pattern" Maxlength="255" Disabled="@rule.IsBusy" AriaLabel="Rule pattern" /></td>
-                                <td>
-                                    <FluentCheckbox @bind-Value="rule.CaseSensitive" Disabled="@rule.IsBusy">Case sensitive</FluentCheckbox>
+                                <td class="rule-edit-cell">
+                                    <FluentTextField Class="inline-edit-field" @bind-Value="rule.Pattern" Maxlength="255" Disabled="@rule.IsBusy" AriaLabel="Rule pattern" />
                                 </td>
-                                <td>
+                                <td class="rule-edit-cell">
+                                    <FluentCheckbox Class="inline-edit-checkbox" @bind-Value="rule.CaseSensitive" Disabled="@rule.IsBusy">Case sensitive</FluentCheckbox>
+                                </td>
+                                <td class="rule-edit-cell">
                                     <FluentSwitch @bind-Value="rule.IsEnabled" Disabled="@rule.IsBusy" CheckedMessage="On" UncheckedMessage="Off">Enabled</FluentSwitch>
                                 </td>
                             }
@@ -187,8 +188,8 @@
                                     <FluentSwitch Value="@rule.IsEnabled" ValueChanged="value => OnToggleEnabled.InvokeAsync(new RuleToggleRequest(rule, value))" Disabled="@rule.IsBusy" CheckedMessage="On" UncheckedMessage="Off" AriaLabel="Toggle rule enabled state" />
                                 </td>
                             }
-                            <td>
-                                <div class="row-actions">
+                            <td class="rule-actions-cell">
+                                <div class="row-actions @(rule.IsEditing ? "inline-edit-actions" : string.Empty)">
                                     @if (rule.IsEditing)
                                     {
                                         <FluentButton Appearance="Appearance.Accent" @onclick="() => OnSave.InvokeAsync(rule)" Disabled="@rule.IsBusy">@(rule.IsBusy ? "Saving…" : "Save")</FluentButton>
@@ -199,15 +200,15 @@
                                         <FluentButton Appearance="Appearance.Neutral" Class="compact-icon-button" Title="Edit rule" AriaLabel="Edit rule" @onclick="() => OnBeginEdit.InvokeAsync(rule)" Disabled="@rule.IsBusy">
                                             <FluentIcon Value="@(new Icons.Regular.Size20.Edit())" />
                                         </FluentButton>
+                                        <FluentButton Appearance="Appearance.Neutral"
+                                                      Class="compact-icon-button"
+                                                      Title="Delete rule"
+                                                      AriaLabel="Delete rule"
+                                                      @onclick="() => OnRequestDelete.InvokeAsync(rule)"
+                                                      Disabled="@(!rule.CanRunSecondaryActions)">
+                                            <FluentIcon Value="@(new Icons.Regular.Size20.Delete())" Color="Color.Error" />
+                                        </FluentButton>
                                     }
-                                    <FluentButton Appearance="Appearance.Neutral"
-                                                  Class="compact-icon-button"
-                                                  Title="Delete rule"
-                                                  AriaLabel="Delete rule"
-                                                  @onclick="() => OnRequestDelete.InvokeAsync(rule)"
-                                                  Disabled="@(!rule.CanRunSecondaryActions)">
-                                        <FluentIcon Value="@(new Icons.Regular.Size20.Delete())" Color="Color.Error" />
-                                    </FluentButton>
                                 </div>
                                 @if (!string.IsNullOrWhiteSpace(rule.Message))
                                 {
@@ -312,6 +313,28 @@
         if (!HasSelectedSource || Rows.Count == 0)
         {
             return;
+        }
+
+        private static string GetRuleTesterSummary(AdminCategoryRulePreview preview)
+        {
+            if (preview.MatchedRuleSequence is int matchedRuleSequence)
+            {
+                return $"{preview.Decision} by rule #{matchedRuleSequence}";
+            }
+
+            return string.Equals(preview.Decision, "Exclude", StringComparison.OrdinalIgnoreCase)
+                ? "Excluded"
+                : "Included by default";
+        }
+
+        private static string GetRuleTesterDetails(AdminCategoryRulePreview preview)
+        {
+            if (preview.MatchedRuleSequence is not int)
+            {
+                return "No matching rule.";
+            }
+
+            return $"{preview.MatchedRuleOperator} \"{preview.MatchedPattern}\" · {(preview.MatchedRuleCaseSensitive == true ? "Case sensitive" : "Ignore case")}";
         }
 
         var signature = string.Join('|', Rows.Select(rule => $"{rule.RuleId}:{rule.Sequence}:{rule.IsEditing}:{rule.IsBusy}"));

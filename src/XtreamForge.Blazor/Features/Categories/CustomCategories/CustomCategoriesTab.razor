@@ -24,7 +24,7 @@
         </div>
 
         <div class="toolbar-field toolbar-field-action">
-            <FluentButton Appearance="Appearance.Accent" @onclick="() => OnOpenCreate.InvokeAsync()">
+            <FluentButton Class="primary-action-button" Appearance="Appearance.Accent" @onclick="() => OnOpenCreate.InvokeAsync()">
                 <FluentIcon Value="@(new Icons.Regular.Size20.Add())" Slot="start" />
                 <span>New category</span>
             </FluentButton>
@@ -67,10 +67,22 @@
                     {
                         <tr>
                             <td>
-                                <div class="category-name">@context.Summary.DisplayName</div>
-                                <div class="category-meta category-meta-inline">
-                                    <span>XF @context.Summary.XtreamForgeCategoryId</span>
-                                </div>
+                                @if (context.IsEditing)
+                                {
+                                    <div class="inline-editor-box">
+                                        <FluentTextField Class="inline-edit-field" @bind-Value="context.DisplayName" Maxlength="255" Label="Name" Disabled="@context.IsBusy" />
+                                        <div class="category-meta category-meta-inline">
+                                            <span>XF @context.Summary.XtreamForgeCategoryId</span>
+                                        </div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="category-name">@context.Summary.DisplayName</div>
+                                    <div class="category-meta category-meta-inline">
+                                        <span>XF @context.Summary.XtreamForgeCategoryId</span>
+                                    </div>
+                                }
                                 @if (!string.IsNullOrWhiteSpace(context.Message))
                                 {
                                     <div class="category-meta">@context.Message</div>
@@ -89,35 +101,30 @@
                                 }
                             </td>
                             <td>
-                                <div class="row-actions">
-                                    @if (!context.IsEditing)
-                                    {
+                                @if (context.IsEditing)
+                                {
+                                    <div class="row-actions inline-edit-actions">
+                                            <FluentButton Appearance="Appearance.Accent" @onclick="() => OnSave.InvokeAsync(context)" Disabled="@context.IsBusy">Save</FluentButton>
+                                            <FluentButton Appearance="Appearance.Neutral" @onclick="() => OnCancelEdit.InvokeAsync(context)" Disabled="@context.IsBusy">Cancel</FluentButton>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="row-actions">
                                         <FluentButton Appearance="Appearance.Neutral" Class="compact-icon-button" Title="Edit custom category" AriaLabel="Edit custom category" @onclick="() => OnBeginEdit.InvokeAsync(context)" Disabled="@context.IsBusy">
                                             <FluentIcon Value="@(new Icons.Regular.Size20.Edit())" />
                                         </FluentButton>
-                                    }
-                                    <FluentButton Appearance="Appearance.Neutral"
-                                                  Class="compact-icon-button"
-                                                  Title="@(context.UsageCount > 0 ? "Delete unavailable while category is in use" : "Delete custom category")"
-                                                  AriaLabel="Delete custom category"
-                                                  @onclick="() => OnRequestDelete.InvokeAsync(context)"
-                                                  Disabled="@(context.IsBusy || context.UsageCount > 0)">
-                                        <FluentIcon Value="@(new Icons.Regular.Size20.Delete())" Color="Color.Error" />
-                                    </FluentButton>
-                                </div>
-                                @if (context.IsEditing)
-                                {
-                                    <div class="inline-editor-box">
-                                        <FluentTextField @bind-Value="context.DisplayName" Maxlength="255" Label="Name" Disabled="@context.IsBusy" />
-                                        <div class="inline-editor-actions">
-                                            <FluentButton Appearance="Appearance.Accent" @onclick="() => OnSave.InvokeAsync(context)" Disabled="@context.IsBusy">Save</FluentButton>
-                                            <FluentButton Appearance="Appearance.Neutral" @onclick="() => OnCancelEdit.InvokeAsync(context)" Disabled="@context.IsBusy">Cancel</FluentButton>
-                                        </div>
+                                        <span title="@(context.UsageCount > 0 ? "Used categories must be unlinked before this custom category can be deleted." : "Delete custom category")">
+                                            <FluentButton Appearance="Appearance.Neutral"
+                                                          Class="compact-icon-button"
+                                                          Title="Delete custom category"
+                                                          AriaLabel="Delete custom category"
+                                                          @onclick="() => OnRequestDelete.InvokeAsync(context)"
+                                                          Disabled="@(context.IsBusy || context.UsageCount > 0)">
+                                                <FluentIcon Value="@(new Icons.Regular.Size20.Delete())" Color="Color.Error" />
+                                            </FluentButton>
+                                        </span>
                                     </div>
-                                }
-                                @if (context.UsageCount > 0)
-                                {
-                                    <div class="category-meta">Delete is available only when unused. Inspect Used By for details.</div>
                                 }
                             </td>
                         </tr>

@@ -22,4 +22,8 @@ public sealed record DashboardStatus(
     string ApplicationVersion,
     string Status,
     string DatabaseStatus,
-    string DatabaseDetails);
+    string DatabaseDetails,
+    int SourceCount,
+    int SourceCategoryCount,
+    int RuleCount,
+    int CustomCategoryCount);

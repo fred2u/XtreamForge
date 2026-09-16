@@ -79,6 +79,10 @@ public static class AdminEndpointExtensions
     {
         var databaseStatus = "Unavailable";
         var databaseDetails = "The database connectivity check failed.";
+        var sourceCount = 0;
+        var sourceCategoryCount = 0;
+        var ruleCount = 0;
+        var customCategoryCount = 0;
 
         try
         {
@@ -90,6 +94,14 @@ public static class AdminEndpointExtensions
             databaseDetails = canConnect
                 ? $"{providerDisplayName} is reachable."
                 : $"{providerDisplayName} is not reachable.";
+
+            if (canConnect)
+            {
+                sourceCount = await dbContext.XtreamSources.CountAsync(cancellationToken);
+                sourceCategoryCount = await dbContext.UpstreamCategories.CountAsync(cancellationToken);
+                ruleCount = await dbContext.CategoryRules.CountAsync(cancellationToken);
+                customCategoryCount = await dbContext.CustomCategories.CountAsync(cancellationToken);
+            }
         }
         catch
         {
@@ -100,7 +112,11 @@ public static class AdminEndpointExtensions
             ApplicationVersion: typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown",
             Status: "Healthy",
             DatabaseStatus: databaseStatus,
-            DatabaseDetails: databaseDetails));
+            DatabaseDetails: databaseDetails,
+            SourceCount: sourceCount,
+            SourceCategoryCount: sourceCategoryCount,
+            RuleCount: ruleCount,
+            CustomCategoryCount: customCategoryCount));
     }
 
     private static async Task<IResult> GetCategoriesAsync(
@@ -515,7 +531,11 @@ public sealed record AdminStatusResponse(
     string ApplicationVersion,
     string Status,
     string DatabaseStatus,
-    string DatabaseDetails);
+    string DatabaseDetails,
+    int SourceCount,
+    int SourceCategoryCount,
+    int RuleCount,
+    int CustomCategoryCount);
 
 public sealed record AdminCategoriesResponse(
     IReadOnlyList<AdminSourceResponse> Sources,

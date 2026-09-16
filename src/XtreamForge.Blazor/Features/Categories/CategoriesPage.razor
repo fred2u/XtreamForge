@@ -178,7 +178,7 @@ else
     </FluentDialogBody>
     <FluentDialogFooter>
         <FluentButton Appearance="Appearance.Neutral" @onclick="CloseRuleDeleteDialog" Disabled="@_isRuleDeleteSaving">Cancel</FluentButton>
-        <FluentButton Appearance="Appearance.Accent" BackgroundColor="#d13438" Color="#ffffff" @onclick="DeletePendingRuleAsync" Disabled="@_isRuleDeleteSaving" Loading="@_isRuleDeleteSaving">Delete</FluentButton>
+        <FluentButton Class="destructive-button" Appearance="Appearance.Accent" @onclick="DeletePendingRuleAsync" Disabled="@_isRuleDeleteSaving" Loading="@_isRuleDeleteSaving">Delete</FluentButton>
     </FluentDialogFooter>
 </FluentDialog>
 
@@ -289,7 +289,7 @@ else
     </FluentDialogBody>
     <FluentDialogFooter>
         <FluentButton Appearance="Appearance.Neutral" @onclick="CloseCustomCategoryDeleteDialog" Disabled="@_isCustomCategoryDeleteSaving">Cancel</FluentButton>
-        <FluentButton Appearance="Appearance.Accent" BackgroundColor="#d13438" Color="#ffffff" @onclick="DeletePendingCustomCategoryAsync" Disabled="@_isCustomCategoryDeleteSaving" Loading="@_isCustomCategoryDeleteSaving">Delete</FluentButton>
+        <FluentButton Class="destructive-button" Appearance="Appearance.Accent" @onclick="DeletePendingCustomCategoryAsync" Disabled="@_isCustomCategoryDeleteSaving" Loading="@_isCustomCategoryDeleteSaving">Delete</FluentButton>
     </FluentDialogFooter>
 </FluentDialog>
 

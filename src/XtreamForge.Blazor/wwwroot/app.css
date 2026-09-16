@@ -237,6 +237,15 @@ p {
     grid-template-columns: 1fr;
 }
 
+.destructive-button::part(control) {
+    background: padding-box linear-gradient(var(--error), var(--error)), border-box var(--error);
+    color: var(--foreground-on-accent-rest);
+}
+
+.destructive-button::part(control):not(:disabled):hover {
+    opacity: 0.8;
+}
+
 .categories-tabs::part(activeIndicator) {
     width: calc(100% - 24px);
 }

@@ -1,4 +1,5 @@
 using System.Net;
+using XtreamForge.ServiceDefaults;
 
 namespace XtreamForge.Xtream;
 
@@ -43,24 +44,26 @@ public sealed class ForwarderService(
         catch (OperationCanceledException exception)
         {
             logger.LogWarning(
-                exception,
-                "Timed out forwarding Xtream request to upstream {Host}:{Port} for endpoint type {EndpointType} and action {Action}.",
+                "Timed out forwarding Xtream request to upstream {Host}:{Port} for endpoint type {EndpointType} and action {Action}. ErrorType {ErrorType}. ErrorMessage {ErrorMessage}.",
                 SanitizeForLog(destination.Host),
                 destination.Port,
                 classification.EndpointType,
-                SanitizeForLog(classification.Action ?? "none"));
+                SanitizeForLog(classification.Action ?? "none"),
+                exception.GetType().Name,
+                XtreamCredentialRedaction.SanitizeText(exception.Message));
 
             return Results.StatusCode(StatusCodes.Status504GatewayTimeout);
         }
         catch (HttpRequestException exception)
         {
             logger.LogWarning(
-                exception,
-                "Failed forwarding Xtream request to upstream {Host}:{Port} for endpoint type {EndpointType} and action {Action}.",
+                "Failed forwarding Xtream request to upstream {Host}:{Port} for endpoint type {EndpointType} and action {Action}. ErrorType {ErrorType}. ErrorMessage {ErrorMessage}.",
                 SanitizeForLog(destination.Host),
                 destination.Port,
                 classification.EndpointType,
-                SanitizeForLog(classification.Action ?? "none"));
+                SanitizeForLog(classification.Action ?? "none"),
+                exception.GetType().Name,
+                XtreamCredentialRedaction.SanitizeText(exception.Message));
 
             return Results.StatusCode(StatusCodes.Status502BadGateway);
         }

@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http.Extensions;
 using XtreamForge.Xtream;
 using XtreamForge.Categories;
+using XtreamForge.ServiceDefaults;
 
 namespace XtreamForge.Xtream;
 
@@ -457,11 +458,12 @@ public sealed class XtreamContentProxyService(
         XtreamRequestClassification classification)
     {
         logger.LogWarning(
-            exception,
-            "Timed out retrieving upstream Xtream content for {Host}:{Port} and action {Action}.",
+            "Timed out retrieving upstream Xtream content for {Host}:{Port} and action {Action}. ErrorType {ErrorType}. ErrorMessage {ErrorMessage}.",
             ForwarderService.SanitizeForLog(destination.Host),
             destination.Port,
-            ForwarderService.SanitizeForLog(classification.Action ?? "none"));
+            ForwarderService.SanitizeForLog(classification.Action ?? "none"),
+            exception.GetType().Name,
+            XtreamCredentialRedaction.SanitizeText(exception.Message));
 
         return Results.StatusCode(StatusCodes.Status504GatewayTimeout);
     }
@@ -473,12 +475,13 @@ public sealed class XtreamContentProxyService(
         string message)
     {
         logger.LogWarning(
-            exception,
-            "{Message} for {Host}:{Port} and action {Action}.",
+            "{Message} for {Host}:{Port} and action {Action}. ErrorType {ErrorType}. ErrorMessage {ErrorMessage}.",
             message,
             ForwarderService.SanitizeForLog(destination.Host),
             destination.Port,
-            ForwarderService.SanitizeForLog(classification.Action ?? "none"));
+            ForwarderService.SanitizeForLog(classification.Action ?? "none"),
+            exception.GetType().Name,
+            XtreamCredentialRedaction.SanitizeText(exception.Message));
 
         return Results.StatusCode(StatusCodes.Status502BadGateway);
     }

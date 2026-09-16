@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
+using XtreamForge.ServiceDefaults;
 
 namespace Microsoft.Extensions.Hosting;
 
@@ -48,10 +49,20 @@ public static class Extensions
             {
                 tracing.AddSource(builder.Environment.ApplicationName)
                     .AddAspNetCoreInstrumentation(options =>
+                    {
                         options.Filter = context =>
                             !context.Request.Path.StartsWithSegments(HealthEndpointPath)
-                            && !context.Request.Path.StartsWithSegments(AlivenessEndpointPath))
-                    .AddHttpClientInstrumentation();
+                            && !context.Request.Path.StartsWithSegments(AlivenessEndpointPath);
+                        options.RecordException = false;
+                        options.EnrichWithHttpRequest = static (activity, request) =>
+                            XtreamCredentialRedaction.RedactServerRequest(activity, request);
+                    })
+                    .AddHttpClientInstrumentation(options =>
+                    {
+                        options.RecordException = false;
+                        options.EnrichWithHttpRequestMessage = static (activity, request) =>
+                            XtreamCredentialRedaction.RedactClientRequest(activity, request);
+                    });
             });
 
         builder.AddOpenTelemetryExporters();

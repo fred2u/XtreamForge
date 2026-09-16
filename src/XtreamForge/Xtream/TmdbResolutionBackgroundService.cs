@@ -15,9 +15,10 @@ public sealed class TmdbResolutionBackgroundService(
     {
         await foreach (var request in queue.DequeueAllAsync(stoppingToken))
         {
+            var resolved = false;
             try
             {
-                await ResolveAsync(request, stoppingToken);
+                resolved = await ResolveAsync(request, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -36,12 +37,12 @@ public sealed class TmdbResolutionBackgroundService(
             }
             finally
             {
-                queue.MarkCompleted(request);
+                queue.MarkCompleted(request, resolved);
             }
         }
     }
 
-    private async Task ResolveAsync(TmdbResolutionRequest request, CancellationToken cancellationToken)
+    private async Task<bool> ResolveAsync(TmdbResolutionRequest request, CancellationToken cancellationToken)
     {
         using var requestMessage = new HttpRequestMessage(
             HttpMethod.Get,
@@ -54,14 +55,14 @@ public sealed class TmdbResolutionBackgroundService(
 
         if (!responseMessage.IsSuccessStatusCode)
         {
-            return;
+            return false;
         }
 
         var payload = await upstreamClient.ReadFromJsonAsync<JsonNode>(responseMessage.Content, cancellationToken);
         var tmdbId = XtreamTmdbMetadata.TryExtractTmdbId(payload);
         if (tmdbId is null)
         {
-            return;
+            return false;
         }
 
         await mappingService.UpsertMappingAsync(
@@ -70,6 +71,7 @@ public sealed class TmdbResolutionBackgroundService(
             request.StreamId,
             tmdbId.Value,
             cancellationToken);
+        return true;
     }
 
     private static Uri BuildDetailRequestUri(TmdbResolutionRequest request)

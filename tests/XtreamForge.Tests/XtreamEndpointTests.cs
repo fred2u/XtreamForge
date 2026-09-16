@@ -522,6 +522,8 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         });
 
         Assert.DoesNotContain(handler.Requests, request => ParseQuery(request.RequestUri, "vod_id") == "102");
+        Assert.DoesNotContain(handler.Requests, request => ParseQuery(request.RequestUri, "vod_id") == "101");
+        Assert.DoesNotContain(handler.Requests, request => ParseQuery(request.RequestUri, "vod_id") == "103");
 
         var secondResponse = await client.GetAsync(BuildProxyRequestUri("get_vod_streams"));
         var secondPayload = await secondResponse.Content.ReadFromJsonAsync<List<TmdbStreamResponse>>();
@@ -535,6 +537,65 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         var verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
         var mappings = await verifyDbContext.StreamTmdbMappings.OrderBy(mapping => mapping.StreamId).ToListAsync();
         Assert.Equal(new[] { "101", "103", "104" }, mappings.Select(mapping => mapping.StreamId).ToArray());
+    }
+
+    [Fact]
+    public async Task GetVodStreams_WhenCategoryFilteringExcludesAnItem_DoesNotQueueDetailLookupForIt()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        await using (var scope = setupFactory.Services.CreateAsyncScope())
+        {
+            var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+            var ruleService = scope.ServiceProvider.GetRequiredService<CategoryRuleService>();
+
+            await mappingService.SyncCategoriesAsync(
+                new XtreamSourceDescriptor("https", "example.com", 443),
+                ContentType.Vod,
+                [
+                    new DiscoveredCategory("10", "Movies"),
+                    new DiscoveredCategory("20", "SPORT Movies")
+                ]);
+
+            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+            var sourceId = await dbContext.XtreamSources.Select(source => source.Id).SingleAsync();
+            await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
+        }
+
+        var handler = new FakeForwarderHandler((request, _) =>
+        {
+            var action = ParseQuery(request.RequestUri, "action");
+            var vodId = ParseQuery(request.RequestUri, "vod_id");
+            return Task.FromResult((action, vodId) switch
+            {
+                ("get_vod_streams", _) => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, """
+                    [
+                      {"stream_id":"100","name":"Included","category_id":"10","tmdb_id":"500"},
+                      {"stream_id":"200","name":"Category Excluded","category_id":"20"},
+                      {"stream_id":"300","name":"Needs Lookup","category_id":"10"}
+                    ]
+                    """),
+                ("get_vod_info", "300") => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, """{"info":{"category_id":"10","tmdb_id":"600"}}"""),
+                _ => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.BadRequest, "{}")
+            });
+        });
+
+        using var factory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(handler);
+        using var client = factory.CreateClient();
+        var response = await client.GetAsync(BuildProxyRequestUri("get_vod_streams"));
+        var payload = await response.Content.ReadFromJsonAsync<List<TmdbStreamResponse>>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Single(payload);
+        Assert.Equal("100", payload[0].Id);
+
+        await WaitForConditionAsync(
+            () => handler.Requests.Any(request => ParseQuery(request.RequestUri, "action") == "get_vod_info" && ParseQuery(request.RequestUri, "vod_id") == "300"));
+
+        Assert.DoesNotContain(handler.Requests, request => ParseQuery(request.RequestUri, "vod_id") == "200");
     }
 
     [Fact]
@@ -587,6 +648,8 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         await WaitForConditionAsync(
             () => handler.Requests.Any(request => ParseQuery(request.RequestUri, "action") == "get_series_info" && ParseQuery(request.RequestUri, "series_id") == "502"));
 
+        Assert.DoesNotContain(handler.Requests, request => ParseQuery(request.RequestUri, "series_id") == "501");
+
         var secondResponse = await client.GetAsync(BuildProxyRequestUri("get_series"));
         var secondPayload = await secondResponse.Content.ReadFromJsonAsync<List<TmdbSeriesResponse>>();
 
@@ -594,6 +657,11 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.NotNull(secondPayload);
         Assert.Equal(["501", "502"], secondPayload.Select(item => item.Id).Order().ToArray());
         Assert.Equal(601, secondPayload.Single(item => item.Id == "502").TmdbId);
+
+        await using var verifyScope = setupFactory.Services.CreateAsyncScope();
+        var verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var mappings = await verifyDbContext.StreamTmdbMappings.OrderBy(mapping => mapping.StreamId).ToListAsync();
+        Assert.Equal(new[] { "501", "502" }, mappings.Select(mapping => mapping.StreamId).ToArray());
     }
 
     [Fact]

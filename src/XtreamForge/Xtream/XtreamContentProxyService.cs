@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http.Extensions;
@@ -96,8 +95,7 @@ public sealed class XtreamContentProxyService(
 
                 foreach (var responseMessage in upstreamResponses)
                 {
-                    await using var payloadStream = await responseMessage.Content.ReadAsStreamAsync(context.RequestAborted);
-                    await foreach (var item in JsonSerializer.DeserializeAsyncEnumerable<JsonElement>(payloadStream, topLevelValues: false, cancellationToken: context.RequestAborted))
+                    await foreach (var item in upstreamClient.ReadJsonArrayAsync(responseMessage.Content, context.RequestAborted))
                     {
                         if (!TryTransformStreamItem(item, requestContext, classification.Action!, seenIds, out var transformedItem))
                         {
@@ -168,7 +166,7 @@ public sealed class XtreamContentProxyService(
                 return Results.Empty;
             }
 
-            var payload = await responseMessage.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: context.RequestAborted);
+            var payload = await upstreamClient.ReadFromJsonAsync<JsonNode>(responseMessage.Content, context.RequestAborted);
             if (payload is null)
             {
                 throw new JsonException("Expected a JSON payload for Xtream detail responses.");
@@ -223,7 +221,7 @@ public sealed class XtreamContentProxyService(
 
             responseMessage.EnsureSuccessStatusCode();
 
-            var upstreamCategories = await responseMessage.Content.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(cancellationToken: cancellationToken) ?? [];
+            var upstreamCategories = await upstreamClient.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(responseMessage.Content, cancellationToken) ?? [];
             await categoryMappingService.SyncCategoriesAsync(
                 sourceDescriptor,
                 contentType,

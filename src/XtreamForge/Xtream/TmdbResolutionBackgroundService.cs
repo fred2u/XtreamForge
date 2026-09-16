@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.WebUtilities;
 using XtreamForge.Categories;
@@ -58,7 +57,7 @@ public sealed class TmdbResolutionBackgroundService(
             return;
         }
 
-        var payload = await responseMessage.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: cancellationToken);
+        var payload = await upstreamClient.ReadFromJsonAsync<JsonNode>(responseMessage.Content, cancellationToken);
         var tmdbId = XtreamTmdbMetadata.TryExtractTmdbId(payload);
         if (tmdbId is null)
         {

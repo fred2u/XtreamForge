@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Net.Http.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.WebUtilities;
@@ -123,7 +122,7 @@ public sealed class XtreamSourceDiscoveryService(
         using var responseMessage = await _upstreamClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         responseMessage.EnsureSuccessStatusCode();
 
-        var payload = await responseMessage.Content.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(cancellationToken: cancellationToken) ?? [];
+        var payload = await _upstreamClient.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(responseMessage.Content, cancellationToken) ?? [];
         return payload
             .Select(category => new DiscoveredCategory(category.CategoryId ?? string.Empty, category.CategoryName ?? string.Empty))
             .ToList();

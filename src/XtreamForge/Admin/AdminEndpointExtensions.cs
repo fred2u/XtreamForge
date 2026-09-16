@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using XtreamForge.Categories;
 using XtreamForge.Data;
+using XtreamForge.Items;
 using XtreamForge.Xtream;
 
 namespace XtreamForge.Admin;
@@ -53,6 +54,30 @@ public static class AdminEndpointExtensions
         adminGroup.MapDelete("/category-rules/{ruleId:int}", DeleteCategoryRuleAsync)
             .WithName("DeleteAdminCategoryRule")
             .WithSummary("Deletes a category rule.");
+
+        adminGroup.MapGet("/item-rules", GetItemRulesAsync)
+            .WithName("GetAdminItemRules")
+            .WithSummary("Gets item rules for the selected source and content type.");
+
+        adminGroup.MapGet("/item-rules/preview", PreviewItemRulesAsync)
+            .WithName("PreviewAdminItemRules")
+            .WithSummary("Previews the effective rule decision for an item name.");
+
+        adminGroup.MapPost("/item-rules", CreateItemRuleAsync)
+            .WithName("CreateAdminItemRule")
+            .WithSummary("Creates an item rule.");
+
+        adminGroup.MapPut("/item-rules/{ruleId:int}", UpdateItemRuleAsync)
+            .WithName("UpdateAdminItemRule")
+            .WithSummary("Updates an item rule.");
+
+        adminGroup.MapPut("/item-rules/order", ReorderItemRulesAsync)
+            .WithName("ReorderAdminItemRules")
+            .WithSummary("Reorders item rules for the selected source and content type.");
+
+        adminGroup.MapDelete("/item-rules/{ruleId:int}", DeleteItemRuleAsync)
+            .WithName("DeleteAdminItemRule")
+            .WithSummary("Deletes an item rule.");
 
         adminGroup.MapPost("/custom-categories", CreateCustomCategoryAsync)
             .WithName("CreateAdminCustomCategory")
@@ -362,6 +387,146 @@ public static class AdminEndpointExtensions
         }
     }
 
+    private static async Task<IResult> GetItemRulesAsync(
+        int? sourceId,
+        string? contentType,
+        ItemRuleService itemRuleService,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var selectedContentType = ParseContentType(contentType);
+            if (sourceId is null)
+            {
+                return TypedResults.Ok(new AdminItemRulesResponse(null, selectedContentType.ToString(), []));
+            }
+
+            var rules = await itemRuleService.GetRuleDefinitionsAsync(sourceId.Value, selectedContentType, cancellationToken);
+            return TypedResults.Ok(new AdminItemRulesResponse(
+                sourceId,
+                selectedContentType.ToString(),
+                rules.Select(ToResponse).ToList()));
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        {
+            return TypedResults.BadRequest(new AdminErrorResponse(exception.Message));
+        }
+    }
+
+    private static async Task<IResult> PreviewItemRulesAsync(
+        int? sourceId,
+        string? contentType,
+        string? itemName,
+        ItemRuleService itemRuleService,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (sourceId is null)
+            {
+                return TypedResults.BadRequest(new AdminErrorResponse("A source must be selected."));
+            }
+
+            var preview = await itemRuleService.PreviewAsync(sourceId, ParseContentType(contentType), itemName, cancellationToken);
+            if (preview is null)
+            {
+                return TypedResults.BadRequest(new AdminErrorResponse("An item name is required."));
+            }
+
+            return TypedResults.Ok(new AdminItemRulePreviewResponse(
+                preview.ItemName,
+                preview.Evaluation.Decision.ToString(),
+                preview.Evaluation.MatchedRuleId,
+                preview.Evaluation.MatchedRuleSequence,
+                preview.Evaluation.MatchedRuleField?.ToString(),
+                preview.Evaluation.MatchedRuleAction?.ToString(),
+                preview.Evaluation.MatchedRuleOperator?.ToString(),
+                preview.Evaluation.MatchedPattern,
+                preview.Evaluation.MatchedRuleCaseSensitive));
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        {
+            return TypedResults.BadRequest(new AdminErrorResponse(exception.Message));
+        }
+    }
+
+    private static async Task<IResult> CreateItemRuleAsync(
+        AdminItemRuleRequest request,
+        ItemRuleService itemRuleService,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await itemRuleService.CreateRuleAsync(ToItemRuleEditorCommand(null, request), cancellationToken);
+            return TypedResults.Ok(new AdminMutationResponse(result.SourceId, result.ContentType.ToString()));
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        {
+            return TypedResults.BadRequest(new AdminErrorResponse(exception.Message));
+        }
+    }
+
+    private static async Task<IResult> UpdateItemRuleAsync(
+        int ruleId,
+        AdminItemRuleRequest request,
+        ItemRuleService itemRuleService,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await itemRuleService.UpdateRuleAsync(ToItemRuleEditorCommand(ruleId, request), cancellationToken);
+            return TypedResults.Ok(new AdminMutationResponse(result.SourceId, result.ContentType.ToString()));
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        {
+            return TypedResults.BadRequest(new AdminErrorResponse(exception.Message));
+        }
+    }
+
+    private static async Task<IResult> ReorderItemRulesAsync(
+        AdminItemRuleOrderRequest request,
+        ItemRuleService itemRuleService,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await itemRuleService.ReorderRulesAsync(
+                new ItemRuleOrderCommand(
+                    request.SelectedSourceId,
+                    ParseContentType(request.SelectedContentType),
+                    request.OrderedRuleIds),
+                cancellationToken);
+
+            return TypedResults.Ok(new AdminMutationResponse(result.SourceId, result.ContentType.ToString()));
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        {
+            return TypedResults.BadRequest(new AdminErrorResponse(exception.Message));
+        }
+    }
+
+    private static async Task<IResult> DeleteItemRuleAsync(
+        int ruleId,
+        int sourceId,
+        string contentType,
+        bool confirmDelete,
+        ItemRuleService itemRuleService,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await itemRuleService.DeleteRuleAsync(
+                new ItemRuleDeleteCommand(ruleId, sourceId, ParseContentType(contentType), confirmDelete),
+                cancellationToken);
+
+            return TypedResults.Ok(new AdminMutationResponse(result.SourceId, result.ContentType.ToString()));
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        {
+            return TypedResults.BadRequest(new AdminErrorResponse(exception.Message));
+        }
+    }
+
     private static async Task<IResult> UpdateCustomCategoryAsync(
         int customCategoryId,
         AdminCustomCategoryUpdateRequest request,
@@ -442,6 +607,18 @@ public static class AdminEndpointExtensions
             request.CaseSensitive,
             request.IsEnabled);
 
+    private static ItemRuleEditorCommand ToItemRuleEditorCommand(int? ruleId, AdminItemRuleRequest request) =>
+        new(
+            ruleId,
+            request.SelectedSourceId,
+            ParseContentType(request.SelectedContentType),
+            ParseItemRuleField(request.Field),
+            ParseItemRuleAction(request.Action),
+            ParseItemRuleOperator(request.Operator),
+            request.Pattern,
+            request.CaseSensitive,
+            request.IsEnabled);
+
     private static AdminSourceResponse ToResponse(XtreamSourceSummary source) =>
         new(source.Id, source.Protocol, source.Host, source.Port, source.LastSeenAtUtc);
 
@@ -473,6 +650,17 @@ public static class AdminEndpointExtensions
         new(
             rule.Id ?? 0,
             rule.Sequence,
+            rule.Action.ToString(),
+            rule.Operator.ToString(),
+            rule.Pattern,
+            rule.CaseSensitive,
+            rule.IsEnabled);
+
+    private static AdminItemRuleResponse ToResponse(ItemRuleDefinition rule) =>
+        new(
+            rule.Id ?? 0,
+            rule.Sequence,
+            rule.Field.ToString(),
             rule.Action.ToString(),
             rule.Operator.ToString(),
             rule.Pattern,
@@ -517,6 +705,36 @@ public static class AdminEndpointExtensions
         }
 
         throw new InvalidOperationException("Rule operator must be 'Contains' or 'StartsWith'.");
+    }
+
+    private static ItemRuleField ParseItemRuleField(string? value)
+    {
+        if (Enum.TryParse<ItemRuleField>(value, true, out var field))
+        {
+            return field;
+        }
+
+        throw new InvalidOperationException("Item rule field must be 'Name'.");
+    }
+
+    private static ItemRuleAction ParseItemRuleAction(string? value)
+    {
+        if (Enum.TryParse<ItemRuleAction>(value, true, out var action))
+        {
+            return action;
+        }
+
+        throw new InvalidOperationException("Item rule action must be 'Include' or 'Exclude'.");
+    }
+
+    private static ItemRuleOperator ParseItemRuleOperator(string? value)
+    {
+        if (Enum.TryParse<ItemRuleOperator>(value, true, out var itemRuleOperator))
+        {
+            return itemRuleOperator;
+        }
+
+        throw new InvalidOperationException("Item rule operator must be 'Contains' or 'StartsWith'.");
     }
 
     private static string GetProviderDisplayName(string? providerName) => providerName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true
@@ -599,6 +817,32 @@ public sealed record AdminCategoryRuleResponse(
     bool CaseSensitive,
     bool IsEnabled);
 
+public sealed record AdminItemRulesResponse(
+    int? SelectedSourceId,
+    string SelectedContentType,
+    IReadOnlyList<AdminItemRuleResponse> Rules);
+
+public sealed record AdminItemRulePreviewResponse(
+    string ItemName,
+    string Decision,
+    int? MatchedRuleId,
+    int? MatchedRuleSequence,
+    string? MatchedRuleField,
+    string? MatchedRuleAction,
+    string? MatchedRuleOperator,
+    string? MatchedPattern,
+    bool? MatchedRuleCaseSensitive);
+
+public sealed record AdminItemRuleResponse(
+    int Id,
+    int Sequence,
+    string Field,
+    string Action,
+    string Operator,
+    string Pattern,
+    bool CaseSensitive,
+    bool IsEnabled);
+
 public sealed record AdminCategoryRuleRequest(
     int SelectedSourceId,
     string SelectedContentType,
@@ -608,7 +852,22 @@ public sealed record AdminCategoryRuleRequest(
     bool CaseSensitive,
     bool IsEnabled);
 
+public sealed record AdminItemRuleRequest(
+    int SelectedSourceId,
+    string SelectedContentType,
+    string Field,
+    string Action,
+    string Operator,
+    string? Pattern,
+    bool CaseSensitive,
+    bool IsEnabled);
+
 public sealed record AdminCategoryRuleOrderRequest(
+    int SelectedSourceId,
+    string SelectedContentType,
+    IReadOnlyList<int> OrderedRuleIds);
+
+public sealed record AdminItemRuleOrderRequest(
     int SelectedSourceId,
     string SelectedContentType,
     IReadOnlyList<int> OrderedRuleIds);

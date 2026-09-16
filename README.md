@@ -149,8 +149,8 @@ Current behavior:
 
 - XtreamForge validates `protocol`, `host`, and `port`
 - `get_vod_categories` and `get_series_categories` are fetched from upstream and rewritten from PostgreSQL-backed rules
-- `get_vod_streams` and `get_series` use effective XtreamForge category mappings and return XtreamForge category IDs
-- `get_vod_info` and `get_series_info` rewrite category references to XtreamForge category IDs
+- `get_vod_streams` and `get_series` use effective XtreamForge category mappings, item rules, and TMDB-aware filtering before returning XtreamForge category IDs
+- `get_vod_info` and `get_series_info` rewrite category references to XtreamForge category IDs and can persist discovered TMDB IDs
 - other recognized `player_api.php` actions are classified for future transformation
 - all non-category requests are currently forwarded upstream unchanged
 - request methods, bodies, headers, query strings, and streamed responses are preserved where appropriate
@@ -197,7 +197,7 @@ The Blazor project is organized by feature slices, for example:
 
 ## Category management
 
-XtreamForge persists category discovery, category mappings, and category rules in PostgreSQL.
+XtreamForge persists category discovery, category mappings, category rules, item rules, and stream-to-TMDB mappings in PostgreSQL.
 
 Category model:
 
@@ -267,6 +267,43 @@ Rule behavior:
 
 Manual category disable still takes precedence over rule evaluation.
 
+## Item Rules
+
+Item rules decide whether an individual VOD or Series item survives catalogue processing after category filtering/mapping.
+
+Rule behavior:
+
+- rules are stored in PostgreSQL
+- rules are scoped independently per upstream source and content type
+- rules are evaluated sequentially in ascending order
+- the first enabled matching rule wins
+- matching currently supports the `Name` field with `StartsWith` and `Contains`
+- each rule can be case-sensitive or case-insensitive
+- `Include` and `Exclude` actions are supported
+- no matching rule means `Include`
+- the admin UI can create, edit, reorder, enable/disable, delete, and test rules interactively
+
+## TMDB enrichment (phase 1)
+
+For `get_vod_streams` and `get_series`, XtreamForge now returns an item only when a usable TMDB ID is known.
+
+Known TMDB IDs come from either:
+
+- the current upstream list item already exposing `tmdb_id`
+- a previously persisted `Source + ContentType + StreamId -> TmdbId` mapping
+
+If an item survives category and item-rule processing but still has no known TMDB ID:
+
+- it is excluded from the current response
+- XtreamForge enqueues a background `get_vod_info` or `get_series_info` lookup against the same upstream source
+- if the detail payload exposes a usable `tmdb_id`, XtreamForge persists the mapping so the item can appear on a later request
+
+Implementation notes:
+
+- XtreamForge does not call the TMDB API in this phase
+- request-time processing preloads item rules and TMDB mappings once per `Source + ContentType` request into in-memory dictionaries to avoid per-item database lookups
+- list processing preserves provider-specific fields and injects `tmdb_id` when the database already knows the mapping
+
 ## Stream and detail category translation
 
 XtreamForge applies the effective category model when processing:
@@ -283,6 +320,7 @@ Behavior:
 - manual exclusions and category rules are respected before any reverse mapping is used
 - merged output categories are queried using only the currently included upstream category IDs
 - stream list results are filtered and rewritten so returned `category_id` values use XtreamForge IDs
+- stream list results then pass through ordered item rules and TMDB-only filtering/enrichment
 - detail results rewrite discovered `category_id` / `category_ids` values to XtreamForge IDs
 
 If the client requests either:
@@ -292,7 +330,7 @@ player_api.php?action=get_vod_streams
 player_api.php?action=get_vod_streams&category_id=ALL
 ```
 
-XtreamForge treats both requests as all categories, performs one upstream catalogue request, rewrites `category_id` / `category_ids` to XtreamForge IDs, removes excluded category references, drops items with no effective included category, and deduplicates the result set. The same behavior applies to `get_series`.
+XtreamForge treats both requests as all categories, performs one upstream catalogue request, rewrites `category_id` / `category_ids` to XtreamForge IDs, applies item rules, removes items without an effective included category or known TMDB ID, enriches `tmdb_id` from persisted mappings when needed, and deduplicates the result set. The same behavior applies to `get_series`.
 
 ## Useful endpoints
 
@@ -314,7 +352,5 @@ The test suite does not require a locally installed PostgreSQL instance.
 ## Known limitations
 
 - Xtream rewriting currently focuses on category translation for category, stream, and detail actions
-- stream/info rewriting currently focuses on category translation only
-- no TMDB client or enrichment yet
+- TMDB enrichment currently depends only on upstream Xtream list/detail payloads and persisted mappings; no TMDB API integration exists yet
 - no admin authentication yet
-- no background jobs yet

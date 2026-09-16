@@ -26,6 +26,17 @@ public sealed class CategoriesClient(HttpClient httpClient)
         return await ReadAsync<AdminCategoryRulesPayload>(query, cancellationToken);
     }
 
+    public async Task<AdminItemRulesPayload> GetItemRulesAsync(int? sourceId, AdminContentType contentType, CancellationToken cancellationToken = default)
+    {
+        var query = $"/api/admin/item-rules?contentType={contentType}";
+        if (sourceId is int selectedSourceId)
+        {
+            query += $"&sourceId={selectedSourceId}";
+        }
+
+        return await ReadAsync<AdminItemRulesPayload>(query, cancellationToken);
+    }
+
     public async Task UpdateCategoryMappingAsync(int upstreamCategoryRecordId, AdminCategoryMappingUpdate request, CancellationToken cancellationToken = default)
     {
         var response = await httpClient.PutAsJsonAsync($"/api/admin/categories/{upstreamCategoryRecordId}/mapping", request, cancellationToken);
@@ -66,6 +77,36 @@ public sealed class CategoriesClient(HttpClient httpClient)
     {
         var requestUri = $"/api/admin/category-rules/preview?sourceId={sourceId}&contentType={contentType}&categoryName={Uri.EscapeDataString(categoryName)}";
         return ReadAsync<AdminCategoryRulePreview>(requestUri, cancellationToken);
+    }
+
+    public async Task CreateItemRuleAsync(AdminItemRuleUpdate request, CancellationToken cancellationToken = default)
+    {
+        var response = await httpClient.PostAsJsonAsync("/api/admin/item-rules", request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    public async Task UpdateItemRuleAsync(int ruleId, AdminItemRuleUpdate request, CancellationToken cancellationToken = default)
+    {
+        var response = await httpClient.PutAsJsonAsync($"/api/admin/item-rules/{ruleId}", request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    public async Task ReorderItemRulesAsync(AdminItemRuleOrderUpdate request, CancellationToken cancellationToken = default)
+    {
+        var response = await httpClient.PutAsJsonAsync("/api/admin/item-rules/order", request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    public async Task DeleteItemRuleAsync(int ruleId, int sourceId, AdminContentType contentType, CancellationToken cancellationToken = default)
+    {
+        var response = await httpClient.DeleteAsync($"/api/admin/item-rules/{ruleId}?sourceId={sourceId}&contentType={contentType}&confirmDelete=true", cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    public Task<AdminItemRulePreview> PreviewItemRuleAsync(int sourceId, AdminContentType contentType, string itemName, CancellationToken cancellationToken = default)
+    {
+        var requestUri = $"/api/admin/item-rules/preview?sourceId={sourceId}&contentType={contentType}&itemName={Uri.EscapeDataString(itemName)}";
+        return ReadAsync<AdminItemRulePreview>(requestUri, cancellationToken);
     }
 
     public async Task<AdminCustomCategory> CreateCustomCategoryAsync(AdminCustomCategoryCreate request, CancellationToken cancellationToken = default)

@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http.Extensions;
+using XtreamForge.Items;
 using XtreamForge.Xtream;
 using XtreamForge.Categories;
 using XtreamForge.ServiceDefaults;
@@ -11,6 +12,10 @@ namespace XtreamForge.Xtream;
 public sealed class XtreamContentProxyService(
     XtreamUpstreamClient upstreamClient,
     XtreamCategoryMappingService categoryMappingService,
+    ItemRuleService itemRuleService,
+    ItemRuleEvaluator itemRuleEvaluator,
+    StreamTmdbMappingService streamTmdbMappingService,
+    TmdbResolutionQueue tmdbResolutionQueue,
     ILogger<XtreamContentProxyService> logger)
 {
     public async Task<IResult?> TryHandleAsync(
@@ -38,35 +43,91 @@ public sealed class XtreamContentProxyService(
     {
         try
         {
-            var categoryContext = await RefreshCategoryContextAsync(destination, classification.ContentType!.Value, context, context.RequestAborted);
+            var contentType = classification.ContentType!.Value;
+            var sourceDescriptor = new XtreamSourceDescriptor(destination.Protocol, destination.Host, destination.Port);
+            var categoryContext = await RefreshCategoryContextAsync(destination, contentType, context, context.RequestAborted);
+            var itemRuleSet = await itemRuleService.GetRuleSetAsync(sourceDescriptor, contentType, context.RequestAborted);
+            var tmdbMappingSet = await streamTmdbMappingService.GetMappingsAsync(sourceDescriptor, contentType, context.RequestAborted);
             var categoryRequest = ClassifyCategoryRequest(context.Request.Query);
-            var responsePayload = new JsonArray();
             var seenIds = new HashSet<string>(StringComparer.Ordinal);
+            var knownTmdbMappings = new Dictionary<string, long>(tmdbMappingSet.Mappings, StringComparer.Ordinal);
+            var pendingTmdbMappings = new Dictionary<string, long>(StringComparer.Ordinal);
+            var requestCredentials = ExtractCredentials(context.Request.Query);
+            var requestContext = new StreamCollectionContext(
+                categoryContext,
+                contentType,
+                itemRuleSet.Rules,
+                itemRuleSet.SourceId ?? tmdbMappingSet.SourceId,
+                knownTmdbMappings,
+                pendingTmdbMappings,
+                requestCredentials,
+                destination.Protocol,
+                destination.Host,
+                destination.Port,
+                destination.Rest);
+            var targetUris = GetStreamTargetUris(destination.TargetUri, context.Request.Query, categoryContext, categoryRequest).ToList();
+            var upstreamResponses = new List<HttpResponseMessage>(targetUris.Count);
 
-            foreach (var targetUri in GetStreamTargetUris(destination.TargetUri, context.Request.Query, categoryContext, categoryRequest))
+            try
             {
-                using var requestMessage = XtreamProxyHttpRequestFactory.Create(targetUri, context.Request);
-                using var responseMessage = await upstreamClient.SendAsync(
-                    requestMessage,
-                    HttpCompletionOption.ResponseHeadersRead,
+                foreach (var targetUri in targetUris)
+                {
+                    using var requestMessage = XtreamProxyHttpRequestFactory.Create(targetUri, context.Request);
+                    var responseMessage = await upstreamClient.SendAsync(
+                        requestMessage,
+                        HttpCompletionOption.ResponseHeadersRead,
+                        context.RequestAborted);
+
+                    if (!responseMessage.IsSuccessStatusCode)
+                    {
+                        await XtreamProxyResponseWriter.WriteAsync(responseMessage, context.Response, context.Request.Method, context.RequestAborted);
+                        responseMessage.Dispose();
+                        return Results.Empty;
+                    }
+
+                    upstreamResponses.Add(responseMessage);
+                }
+
+                context.Response.StatusCode = StatusCodes.Status200OK;
+                context.Response.ContentType = "application/json; charset=utf-8";
+
+                await using var writer = new Utf8JsonWriter(context.Response.BodyWriter);
+                writer.WriteStartArray();
+
+                foreach (var responseMessage in upstreamResponses)
+                {
+                    await using var payloadStream = await responseMessage.Content.ReadAsStreamAsync(context.RequestAborted);
+                    await foreach (var item in JsonSerializer.DeserializeAsyncEnumerable<JsonElement>(payloadStream, topLevelValues: false, cancellationToken: context.RequestAborted))
+                    {
+                        if (!TryTransformStreamItem(item, requestContext, classification.Action!, seenIds, out var transformedItem))
+                        {
+                            continue;
+                        }
+
+                        transformedItem.WriteTo(writer);
+                        await writer.FlushAsync(context.RequestAborted);
+                    }
+                }
+
+                await PersistKnownTmdbMappingsAsync(
+                    requestContext.SourceId,
+                    contentType,
+                    requestContext.PendingTmdbMappings,
+                    destination,
+                    classification,
                     context.RequestAborted);
 
-                if (!responseMessage.IsSuccessStatusCode)
-                {
-                    await XtreamProxyResponseWriter.WriteAsync(responseMessage, context.Response, context.Request.Method, context.RequestAborted);
-                    return Results.Empty;
-                }
-
-                var payload = await responseMessage.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: context.RequestAborted);
-                if (payload is not JsonArray items)
-                {
-                    throw new JsonException("Expected an array payload for Xtream stream collections.");
-                }
-
-                AppendFilteredStreamItems(items, responsePayload, categoryContext, classification.Action!, seenIds);
+                writer.WriteEndArray();
+                await writer.FlushAsync(context.RequestAborted);
+                return Results.Empty;
             }
-
-            return Results.Json(responsePayload);
+            finally
+            {
+                foreach (var responseMessage in upstreamResponses)
+                {
+                    responseMessage.Dispose();
+                }
+            }
         }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {
@@ -119,6 +180,7 @@ public sealed class XtreamContentProxyService(
                 return Results.NotFound();
             }
 
+            await PersistDetailTmdbMappingAsync(payload, destination, classification, context.Request.Query, context.RequestAborted);
             return Results.Json(payload);
         }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
@@ -212,46 +274,74 @@ public sealed class XtreamContentProxyService(
         }
     }
 
-    private static void AppendFilteredStreamItems(
-        JsonArray upstreamItems,
-        JsonArray resultItems,
-        EffectiveCategoryContext categoryContext,
+    private bool TryTransformStreamItem(
+        JsonElement upstreamItem,
+        StreamCollectionContext requestContext,
         string action,
-        ISet<string> seenIds)
+        ISet<string> seenIds,
+        out JsonObject transformedItem)
     {
         var identifierProperty = action == "get_series" ? "series_id" : "stream_id";
+        transformedItem = null!;
 
-        foreach (var item in upstreamItems)
+        if (upstreamItem.ValueKind != JsonValueKind.Object)
         {
-            if (item is not JsonObject jsonObject)
-            {
-                continue;
-            }
-
-            var dedupeKey = TryGetScalarString(jsonObject[identifierProperty])
-                ?? jsonObject.ToJsonString();
-
-            var clonedObject = (JsonObject)jsonObject.DeepClone();
-            var rewriteResult = RewriteCategoryReferences(clonedObject, categoryContext.UpstreamToOutputCategoryIds);
-            if (!rewriteResult.FoundCategoryReference || rewriteResult.IncludedOutputCategoryIds.Count == 0)
-            {
-                continue;
-            }
-
-            NormalizePrimaryCategoryId(clonedObject);
-
-            if (!seenIds.Add(dedupeKey))
-            {
-                continue;
-            }
-
-            resultItems.Add(clonedObject);
+            return false;
         }
+
+        if (JsonNode.Parse(upstreamItem.GetRawText()) is not JsonObject clonedObject)
+        {
+            return false;
+        }
+
+        var rewriteResult = RewriteCategoryReferences(clonedObject, requestContext.CategoryContext.UpstreamToOutputCategoryIds);
+        if (!rewriteResult.FoundCategoryReference || rewriteResult.IncludedOutputCategoryIds.Count == 0)
+        {
+            return false;
+        }
+
+        var itemRuleEvaluation = itemRuleEvaluator.Evaluate(
+            new ItemRuleInput(XtreamTmdbMetadata.TryGetScalarString(clonedObject["name"])),
+            requestContext.ItemRules);
+        if (itemRuleEvaluation.Decision == ItemInclusionDecision.Exclude)
+        {
+            return false;
+        }
+
+        NormalizePrimaryCategoryId(clonedObject);
+
+        var streamId = XtreamTmdbMetadata.TryGetScalarString(clonedObject[identifierProperty])?.Trim();
+        var tmdbId = XtreamTmdbMetadata.TryParseTmdbId(clonedObject["tmdb_id"]);
+        if (tmdbId is long knownTmdbId)
+        {
+            SetTmdbId(clonedObject, knownTmdbId);
+            TrackKnownTmdbMapping(requestContext, streamId, knownTmdbId);
+        }
+        else if (!string.IsNullOrWhiteSpace(streamId)
+            && requestContext.KnownTmdbMappings.TryGetValue(streamId, out var persistedTmdbId))
+        {
+            tmdbId = persistedTmdbId;
+            SetTmdbId(clonedObject, persistedTmdbId);
+        }
+        else
+        {
+            EnqueueTmdbResolution(requestContext, streamId);
+            return false;
+        }
+
+        var dedupeKey = streamId ?? clonedObject.ToJsonString();
+        if (!seenIds.Add(dedupeKey))
+        {
+            return false;
+        }
+
+        transformedItem = clonedObject;
+        return true;
     }
 
     private static void NormalizePrimaryCategoryId(JsonObject jsonObject)
     {
-        var categoryId = TryGetScalarString(jsonObject["category_id"]);
+        var categoryId = XtreamTmdbMetadata.TryGetScalarString(jsonObject["category_id"]);
         if (!string.IsNullOrWhiteSpace(categoryId))
         {
             return;
@@ -263,7 +353,7 @@ public sealed class XtreamContentProxyService(
         }
 
         var firstIncludedCategoryId = categoryIdsArray
-            .Select(TryGetScalarString)
+            .Select(XtreamTmdbMetadata.TryGetScalarString)
             .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
 
         if (firstIncludedCategoryId is not null)
@@ -309,7 +399,7 @@ public sealed class XtreamContentProxyService(
                 if (property.Key.Equals("category_id", StringComparison.OrdinalIgnoreCase))
                 {
                     foundCategoryReference = true;
-                    var upstreamCategoryId = TryGetScalarString(property.Value);
+                    var upstreamCategoryId = XtreamTmdbMetadata.TryGetScalarString(property.Value);
                     if (upstreamCategoryId is not null && upstreamToOutputCategoryIds.TryGetValue(upstreamCategoryId, out var outputCategoryId))
                     {
                         jsonObject[property.Key] = outputCategoryId;
@@ -355,8 +445,8 @@ public sealed class XtreamContentProxyService(
     {
         IEnumerable<string> values = categoryIdsNode switch
         {
-            JsonArray jsonArray => jsonArray.Select(TryGetScalarString).OfType<string>(),
-            _ => ParseCategoryIdString(TryGetScalarString(categoryIdsNode))
+            JsonArray jsonArray => jsonArray.Select(XtreamTmdbMetadata.TryGetScalarString).OfType<string>(),
+            _ => ParseCategoryIdString(XtreamTmdbMetadata.TryGetScalarString(categoryIdsNode))
         };
 
         return values
@@ -387,34 +477,6 @@ public sealed class XtreamContentProxyService(
         }
 
         return value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-    }
-
-    private static string? TryGetScalarString(JsonNode? node)
-    {
-        if (node is null)
-        {
-            return null;
-        }
-
-        if (node is JsonValue jsonValue)
-        {
-            if (jsonValue.TryGetValue<string>(out var stringValue))
-            {
-                return stringValue;
-            }
-
-            if (jsonValue.TryGetValue<int>(out var intValue))
-            {
-                return intValue.ToString();
-            }
-
-            if (jsonValue.TryGetValue<long>(out var longValue))
-            {
-                return longValue.ToString();
-            }
-        }
-
-        return null;
     }
 
     private static Uri BuildTargetUri(
@@ -490,6 +552,21 @@ public sealed class XtreamContentProxyService(
         IReadOnlyDictionary<string, IReadOnlyList<string>> OutputToUpstreamCategoryIds,
         IReadOnlyDictionary<string, string> UpstreamToOutputCategoryIds);
 
+    private sealed record StreamCollectionContext(
+        EffectiveCategoryContext CategoryContext,
+        ContentType ContentType,
+        IReadOnlyList<ItemRuleDefinition> ItemRules,
+        int? SourceId,
+        IDictionary<string, long> KnownTmdbMappings,
+        IDictionary<string, long> PendingTmdbMappings,
+        RequestCredentials? Credentials,
+        string Protocol,
+        string Host,
+        int Port,
+        string Rest);
+
+    private sealed record RequestCredentials(string Username, string Password);
+
     private sealed record CategoryRequest(
         CategoryRequestMode Mode,
         string? CategoryId);
@@ -503,6 +580,125 @@ public sealed class XtreamContentProxyService(
     private sealed record CategoryRewriteResult(
         bool FoundCategoryReference,
         IReadOnlyCollection<string> IncludedOutputCategoryIds);
+
+    private void TrackKnownTmdbMapping(StreamCollectionContext requestContext, string? streamId, long tmdbId)
+    {
+        if (requestContext.SourceId is null || string.IsNullOrWhiteSpace(streamId))
+        {
+            return;
+        }
+
+        requestContext.KnownTmdbMappings[streamId] = tmdbId;
+        requestContext.PendingTmdbMappings[streamId] = tmdbId;
+    }
+
+    private void EnqueueTmdbResolution(StreamCollectionContext requestContext, string? streamId)
+    {
+        if (requestContext.SourceId is null
+            || string.IsNullOrWhiteSpace(streamId)
+            || requestContext.Credentials is null)
+        {
+            return;
+        }
+
+        tmdbResolutionQueue.TryEnqueue(new TmdbResolutionRequest(
+            requestContext.SourceId.Value,
+            requestContext.ContentType,
+            streamId,
+            requestContext.Protocol,
+            requestContext.Host,
+            requestContext.Port,
+            requestContext.Rest,
+            requestContext.Credentials.Username,
+            requestContext.Credentials.Password));
+    }
+
+    private async Task PersistKnownTmdbMappingsAsync(
+        int? sourceId,
+        ContentType contentType,
+        IDictionary<string, long> pendingTmdbMappings,
+        XtreamUpstreamDestination destination,
+        XtreamRequestClassification classification,
+        CancellationToken cancellationToken)
+    {
+        if (sourceId is null || pendingTmdbMappings.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await streamTmdbMappingService.UpsertMappingsAsync(
+                sourceId.Value,
+                contentType,
+                new Dictionary<string, long>(pendingTmdbMappings, StringComparer.Ordinal),
+                cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Failed persisting TMDB mappings for {Host}:{Port} and action {Action}. ErrorType {ErrorType}. ErrorMessage {ErrorMessage}.",
+                ForwarderService.SanitizeForLog(destination.Host),
+                destination.Port,
+                ForwarderService.SanitizeForLog(classification.Action ?? "none"),
+                exception.GetType().Name,
+                XtreamCredentialRedaction.SanitizeText(exception.Message));
+        }
+    }
+
+    private async Task PersistDetailTmdbMappingAsync(
+        JsonNode payload,
+        XtreamUpstreamDestination destination,
+        XtreamRequestClassification classification,
+        IQueryCollection query,
+        CancellationToken cancellationToken)
+    {
+        var tmdbId = XtreamTmdbMetadata.TryExtractTmdbId(payload);
+        if (tmdbId is null)
+        {
+            return;
+        }
+
+        var streamId = GetDetailStreamId(classification.Action, query);
+        if (string.IsNullOrWhiteSpace(streamId))
+        {
+            return;
+        }
+
+        var sourceId = await streamTmdbMappingService.GetSourceIdAsync(
+            new XtreamSourceDescriptor(destination.Protocol, destination.Host, destination.Port),
+            cancellationToken);
+        if (sourceId is null)
+        {
+            return;
+        }
+
+        await streamTmdbMappingService.UpsertMappingAsync(
+            sourceId.Value,
+            classification.ContentType!.Value,
+            streamId,
+            tmdbId.Value,
+            cancellationToken);
+    }
+
+    private static string? GetDetailStreamId(string? action, IQueryCollection query) =>
+        action == "get_series_info"
+            ? query["series_id"].ToString().Trim()
+            : query["vod_id"].ToString().Trim();
+
+    private static RequestCredentials? ExtractCredentials(IQueryCollection query)
+    {
+        var username = query["username"].ToString().Trim();
+        var password = query["password"].ToString().Trim();
+
+        return string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)
+            ? null
+            : new RequestCredentials(username, password);
+    }
+
+    private static void SetTmdbId(JsonObject jsonObject, long tmdbId) =>
+        jsonObject["tmdb_id"] = JsonValue.Create(tmdbId);
 }
 
 internal static class EnumerableExtensions

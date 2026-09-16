@@ -10,6 +10,8 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using XtreamForge.Categories;
 using XtreamForge.Data;
+using XtreamForge.Items;
+using XtreamForge.Xtream;
 
 namespace XtreamForge.Tests;
 
@@ -136,8 +138,8 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
 
             return Task.FromResult(action switch
             {
-                "get_vod_streams" when categoryId == "10" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "[{\"stream_id\":\"100\",\"name\":\"Movie A\",\"category_id\":\"10\"}]"),
-                "get_vod_streams" when categoryId == "30" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "[{\"stream_id\":\"300\",\"name\":\"Movie B\",\"category_id\":\"30\"}]"),
+                "get_vod_streams" when categoryId == "10" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "[{\"stream_id\":\"100\",\"name\":\"Movie A\",\"category_id\":\"10\",\"tmdb_id\":\"500\"}]"),
+                "get_vod_streams" when categoryId == "30" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, "[{\"stream_id\":\"300\",\"name\":\"Movie B\",\"category_id\":\"30\",\"tmdb_id\":\"700\"}]"),
                 _ => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.BadRequest, "{}")
             });
         });
@@ -205,10 +207,10 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
             {
                 "get_vod_streams" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, """
                     [
-                      {"stream_id":"101","name":"Movie A","category_id":"10","category_ids":["10","20"],"stream_icon":"poster-a"},
-                      {"stream_id":"102","name":"Filtered","category_id":"20","category_ids":["20"],"stream_icon":"poster-b"},
-                      {"stream_id":"103","name":"Movie B","category_id":"30","category_ids":"[\"30\"]","stream_icon":"poster-c"},
-                      {"stream_id":"103","name":"Movie B duplicate","category_id":"30","category_ids":["30"],"stream_icon":"poster-c-dup"}
+                      {"stream_id":"101","name":"Movie A","category_id":"10","category_ids":["10","20"],"stream_icon":"poster-a","tmdb_id":"501"},
+                      {"stream_id":"102","name":"Filtered","category_id":"20","category_ids":["20"],"stream_icon":"poster-b","tmdb_id":"502"},
+                      {"stream_id":"103","name":"Movie B","category_id":"30","category_ids":"[\"30\"]","stream_icon":"poster-c","tmdb_id":"503"},
+                      {"stream_id":"103","name":"Movie B duplicate","category_id":"30","category_ids":["30"],"stream_icon":"poster-c-dup","tmdb_id":"503"}
                     ]
                     """),
                 _ => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.BadRequest, "{}")
@@ -280,10 +282,10 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
             {
                 "get_series" => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, """
                     [
-                      {"series_id":"501","name":"Series A","category_id":"10"},
-                      {"series_id":"502","name":"Series B","category_id":"20"},
-                      {"series_id":"503","name":"Series C","category_id":"30","category_ids":["30"]},
-                      {"series_id":"503","name":"Series C duplicate","category_id":"30","category_ids":["30"]}
+                      {"series_id":"501","name":"Series A","category_id":"10","tmdb_id":"801"},
+                      {"series_id":"502","name":"Series B","category_id":"20","tmdb_id":"802"},
+                      {"series_id":"503","name":"Series C","category_id":"30","category_ids":["30"],"tmdb_id":"803"},
+                      {"series_id":"503","name":"Series C duplicate","category_id":"30","category_ids":["30"],"tmdb_id":"803"}
                     ]
                     """),
                 _ => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.BadRequest, "{}")
@@ -338,8 +340,8 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
 
         var handler = CreateJsonHandler("""
             [
-              {"stream_id":"101","name":"Movie A","category_id":"10","category_ids":["10","20"]},
-              {"stream_id":"102","name":"Filtered","category_id":"20","category_ids":["20"]}
+              {"stream_id":"101","name":"Movie A","category_id":"10","category_ids":["10","20"],"tmdb_id":"901"},
+              {"stream_id":"102","name":"Filtered","category_id":"20","category_ids":["20"],"tmdb_id":"902"}
             ]
             """);
 
@@ -382,8 +384,8 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
 
         var handler = CreateJsonHandler("""
             [
-              {"series_id":"501","name":"Series A","category_id":"10","category_ids":["10"]},
-              {"series_id":"502","name":"Filtered","category_id":"20","category_ids":["20"]}
+              {"series_id":"501","name":"Series A","category_id":"10","category_ids":["10"],"tmdb_id":"903"},
+              {"series_id":"502","name":"Filtered","category_id":"20","category_ids":["20"],"tmdb_id":"904"}
             ]
             """);
 
@@ -397,6 +399,159 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         var allJson = JsonNode.Parse(await allResponse.Content.ReadAsStringAsync());
 
         Assert.True(JsonNode.DeepEquals(missingJson, allJson));
+    }
+
+    [Fact]
+    public async Task GetVodStreams_AppliesItemRules_UsesKnownTmdbIds_AndQueuesMissingLookups()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        await using (var scope = setupFactory.Services.CreateAsyncScope())
+        {
+            var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+            var itemRuleService = scope.ServiceProvider.GetRequiredService<ItemRuleService>();
+            var tmdbMappingService = scope.ServiceProvider.GetRequiredService<StreamTmdbMappingService>();
+
+            await mappingService.SyncCategoriesAsync(
+                new XtreamSourceDescriptor("https", "example.com", 443),
+                ContentType.Vod,
+                [
+                    new DiscoveredCategory("10", "Movies")
+                ]);
+
+            var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+            var sourceId = await dbContext.XtreamSources.Select(source => source.Id).SingleAsync();
+
+            await itemRuleService.CreateRuleAsync(new ItemRuleEditorCommand(
+                null,
+                sourceId,
+                ContentType.Vod,
+                ItemRuleField.Name,
+                ItemRuleAction.Exclude,
+                ItemRuleOperator.StartsWith,
+                "|XXX|",
+                false,
+                true));
+
+            await tmdbMappingService.UpsertMappingAsync(sourceId, ContentType.Vod, "103", 551);
+        }
+
+        var handler = new FakeForwarderHandler((request, _) =>
+        {
+            var action = ParseQuery(request.RequestUri, "action");
+            var vodId = ParseQuery(request.RequestUri, "vod_id");
+            return Task.FromResult((action, vodId) switch
+            {
+                ("get_vod_streams", _) => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, """
+                    [
+                      {"stream_id":"101","name":"Movie Known","category_id":"10","tmdb_id":"550"},
+                      {"stream_id":"102","name":"|XXX| Hidden","category_id":"10"},
+                      {"stream_id":"103","name":"Movie From Cache","category_id":"10"},
+                      {"stream_id":"104","name":"Needs Lookup","category_id":"10"}
+                    ]
+                    """),
+                ("get_vod_info", "104") => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, """{"info":{"category_id":"10","tmdb_id":"552"}}"""),
+                _ => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.BadRequest, "{}")
+            });
+        });
+
+        using var factory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(handler);
+        using var client = factory.CreateClient();
+
+        var firstResponse = await client.GetAsync(BuildProxyRequestUri("get_vod_streams"));
+        var firstPayload = await firstResponse.Content.ReadFromJsonAsync<List<TmdbStreamResponse>>();
+
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+        Assert.NotNull(firstPayload);
+        Assert.Equal(["101", "103"], firstPayload.Select(item => item.Id).ToArray());
+        Assert.Equal(550, firstPayload.Single(item => item.Id == "101").TmdbId);
+        Assert.Equal(551, firstPayload.Single(item => item.Id == "103").TmdbId);
+
+        await WaitForConditionAsync(
+            () => handler.Requests.Any(request => ParseQuery(request.RequestUri, "action") == "get_vod_info" && ParseQuery(request.RequestUri, "vod_id") == "104"));
+
+        await WaitForConditionAsync(async () =>
+        {
+            await using var verifyScope = setupFactory.Services.CreateAsyncScope();
+            var verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+            return await verifyDbContext.StreamTmdbMappings.AnyAsync(mapping => mapping.StreamId == "104" && mapping.TmdbId == 552);
+        });
+
+        Assert.DoesNotContain(handler.Requests, request => ParseQuery(request.RequestUri, "vod_id") == "102");
+
+        var secondResponse = await client.GetAsync(BuildProxyRequestUri("get_vod_streams"));
+        var secondPayload = await secondResponse.Content.ReadFromJsonAsync<List<TmdbStreamResponse>>();
+
+        Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
+        Assert.NotNull(secondPayload);
+        Assert.Equal(["101", "103", "104"], secondPayload.Select(item => item.Id).Order().ToArray());
+        Assert.Equal(552, secondPayload.Single(item => item.Id == "104").TmdbId);
+
+        await using var verifyScope = setupFactory.Services.CreateAsyncScope();
+        var verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var mappings = await verifyDbContext.StreamTmdbMappings.OrderBy(mapping => mapping.StreamId).ToListAsync();
+        Assert.Equal(new[] { "101", "103", "104" }, mappings.Select(mapping => mapping.StreamId).ToArray());
+    }
+
+    [Fact]
+    public async Task GetSeries_ResolvesMissingTmdbIdsViaBackgroundSeriesInfo()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        await using (var scope = setupFactory.Services.CreateAsyncScope())
+        {
+            var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+            await mappingService.SyncCategoriesAsync(
+                new XtreamSourceDescriptor("https", "example.com", 443),
+                ContentType.Series,
+                [
+                    new DiscoveredCategory("10", "Series")
+                ]);
+        }
+
+        var handler = new FakeForwarderHandler((request, _) =>
+        {
+            var action = ParseQuery(request.RequestUri, "action");
+            var seriesId = ParseQuery(request.RequestUri, "series_id");
+            return Task.FromResult((action, seriesId) switch
+            {
+                ("get_series", _) => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, """
+                    [
+                      {"series_id":"501","name":"Series Known","category_id":"10","tmdb_id":600},
+                      {"series_id":"502","name":"Series Pending","category_id":"10"}
+                    ]
+                    """),
+                ("get_series_info", "502") => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.OK, """{"info":{"category_id":"10","tmdb_id":"601"}}"""),
+                _ => FakeForwarderHandler.CreateJsonResponse(HttpStatusCode.BadRequest, "{}")
+            });
+        });
+
+        using var factory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(handler);
+        using var client = factory.CreateClient();
+
+        var firstResponse = await client.GetAsync(BuildProxyRequestUri("get_series"));
+        var firstPayload = await firstResponse.Content.ReadFromJsonAsync<List<TmdbSeriesResponse>>();
+
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+        Assert.NotNull(firstPayload);
+        Assert.Single(firstPayload);
+        Assert.Equal("501", firstPayload[0].Id);
+        Assert.Equal(600, firstPayload[0].TmdbId);
+
+        await WaitForConditionAsync(
+            () => handler.Requests.Any(request => ParseQuery(request.RequestUri, "action") == "get_series_info" && ParseQuery(request.RequestUri, "series_id") == "502"));
+
+        var secondResponse = await client.GetAsync(BuildProxyRequestUri("get_series"));
+        var secondPayload = await secondResponse.Content.ReadFromJsonAsync<List<TmdbSeriesResponse>>();
+
+        Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
+        Assert.NotNull(secondPayload);
+        Assert.Equal(["501", "502"], secondPayload.Select(item => item.Id).Order().ToArray());
+        Assert.Equal(601, secondPayload.Single(item => item.Id == "502").TmdbId);
     }
 
     [Fact]
@@ -452,6 +607,39 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.Equal("1", payload.GetProperty("info").GetProperty("category_id").GetString());
         Assert.Equal(["1", customCategoryId.ToString()], payload.GetProperty("info").GetProperty("category_ids").EnumerateArray().Select(value => value.GetString()!).ToArray());
         Assert.Equal(customCategoryId.ToString(), payload.GetProperty("movie_data").GetProperty("category_id").GetString());
+    }
+
+    [Fact]
+    public async Task GetVodInfo_WithTmdbId_PersistsStreamMapping()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        await using (var scope = setupFactory.Services.CreateAsyncScope())
+        {
+            var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+            await mappingService.SyncCategoriesAsync(
+                new XtreamSourceDescriptor("https", "example.com", 443),
+                ContentType.Vod,
+                [
+                    new DiscoveredCategory("10", "Movies")
+                ]);
+        }
+
+        var handler = CreateJsonHandler("""{"info":{"category_id":"10","tmdb_id":"777"}}""");
+
+        using var factory = _factory.WithSqliteDatabase(databasePath).WithForwarderHandler(handler);
+        using var client = factory.CreateClient();
+        var response = await client.GetAsync(BuildProxyRequestUri("get_vod_info", ("vod_id", "100")));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        await using var verifyScope = setupFactory.Services.CreateAsyncScope();
+        var verifyDbContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var mapping = await verifyDbContext.StreamTmdbMappings.SingleAsync();
+        Assert.Equal("100", mapping.StreamId);
+        Assert.Equal(777, mapping.TmdbId);
     }
 
     [Fact]
@@ -1084,4 +1272,61 @@ public sealed class XtreamEndpointTests : IClassFixture<XtreamForgeApiFactory>
         [property: JsonPropertyName("series_id")] string Id,
         [property: JsonPropertyName("category_id")] string CategoryId,
         [property: JsonPropertyName("category_ids")] string[]? CategoryIds);
+
+    private sealed record TmdbStreamResponse(
+        [property: JsonPropertyName("stream_id")] string Id,
+        [property: JsonPropertyName("tmdb_id")] long TmdbId);
+
+    private sealed record TmdbSeriesResponse(
+        [property: JsonPropertyName("series_id")] string Id,
+        [property: JsonPropertyName("tmdb_id")] long TmdbId);
+
+    private static async Task WaitForConditionAsync(Func<bool> condition, int attempts = 50, int delayMilliseconds = 100)
+    {
+        for (var attempt = 0; attempt < attempts; attempt++)
+        {
+            if (condition())
+            {
+                return;
+            }
+
+            await Task.Delay(delayMilliseconds);
+        }
+
+        Assert.True(condition(), "Timed out waiting for the expected background request.");
+    }
+
+    private static async Task WaitForConditionAsync(Func<Task<bool>> condition, int attempts = 50, int delayMilliseconds = 100)
+    {
+        for (var attempt = 0; attempt < attempts; attempt++)
+        {
+            if (await condition())
+            {
+                return;
+            }
+
+            await Task.Delay(delayMilliseconds);
+        }
+
+        Assert.True(await condition(), "Timed out waiting for the expected background request.");
+    }
+
+    private static string BuildProxyRequestUri(string action, params (string Key, string Value)[] extraParameters)
+    {
+        var parameters = new Dictionary<string, string?>
+        {
+            ["action"] = action,
+            ["username"] = "tester",
+            ["password"] = "secret"
+        };
+
+        foreach (var (key, value) in extraParameters)
+        {
+            parameters[key] = value;
+        }
+
+        return Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString(
+            "/https/example.com/443/player_api.php",
+            parameters);
+    }
 }

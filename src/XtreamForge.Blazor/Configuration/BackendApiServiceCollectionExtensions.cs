@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using XtreamForge.Blazor.Features.Categories;
 using XtreamForge.Blazor.Features.Dashboard;
+using XtreamForge.Blazor.Features.Items.ItemRules;
 
 namespace XtreamForge.Blazor.Configuration;
 
@@ -15,6 +16,7 @@ public static class BackendApiServiceCollectionExtensions
 
         services.AddHttpClient<DashboardClient>(ConfigureBackendClient);
         services.AddHttpClient<CategoriesClient>(ConfigureBackendClient);
+        services.AddHttpClient<ItemRulesClient>(ConfigureBackendClient);
 
         return services;
     }

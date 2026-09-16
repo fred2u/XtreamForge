@@ -47,18 +47,24 @@ public sealed class ItemRuleService(
     public async Task<ItemRulesAdministrationView> GetAdministrationViewAsync(
         int? selectedSourceId,
         ContentType selectedContentType,
-        string? previewName,
         CancellationToken cancellationToken = default)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
-        if (selectedSourceId is null)
+        var sources = await dbContext.XtreamSources
+            .OrderBy(source => source.Host)
+            .ThenBy(source => source.Port)
+            .Select(source => new XtreamSourceSummary(source.Id, source.Protocol, source.Host, source.Port, source.LastSeenAtUtc))
+            .ToListAsync(cancellationToken);
+
+        var effectiveSourceId = selectedSourceId ?? sources.FirstOrDefault()?.Id;
+        if (effectiveSourceId is null)
         {
-            return new ItemRulesAdministrationView([], previewName, null);
+            return new ItemRulesAdministrationView(sources, null, selectedContentType, []);
         }
 
         var rules = await dbContext.ItemRules
-            .Where(rule => rule.XtreamSourceId == selectedSourceId.Value && rule.ContentType == selectedContentType)
+            .Where(rule => rule.XtreamSourceId == effectiveSourceId.Value && rule.ContentType == selectedContentType)
             .OrderBy(rule => rule.Sequence)
             .ThenBy(rule => rule.Id)
             .Select(rule => new ItemRuleSummary(
@@ -72,25 +78,7 @@ public sealed class ItemRuleService(
                 rule.IsEnabled))
             .ToListAsync(cancellationToken);
 
-        ItemRulePreviewResult? preview = null;
-        if (!string.IsNullOrWhiteSpace(previewName))
-        {
-            var evaluation = evaluator.Evaluate(
-                new ItemRuleInput(previewName),
-                rules.Select(rule => new ItemRuleDefinition(
-                    rule.Id,
-                    rule.Sequence,
-                    rule.Field,
-                    rule.Action,
-                    rule.Operator,
-                    rule.Pattern,
-                    rule.CaseSensitive,
-                    rule.IsEnabled)).ToList());
-
-            preview = new ItemRulePreviewResult(previewName, evaluation);
-        }
-
-        return new ItemRulesAdministrationView(rules, previewName, preview);
+        return new ItemRulesAdministrationView(sources, effectiveSourceId, selectedContentType, rules);
     }
 
     public async Task<ItemRuleMutationResult> CreateRuleAsync(ItemRuleEditorCommand command, CancellationToken cancellationToken = default)
@@ -347,9 +335,10 @@ public sealed record ItemRuleSummary(
     bool IsEnabled);
 
 public sealed record ItemRulesAdministrationView(
-    IReadOnlyList<ItemRuleSummary> Rules,
-    string? PreviewName,
-    ItemRulePreviewResult? Preview);
+    IReadOnlyList<XtreamSourceSummary> Sources,
+    int? SelectedSourceId,
+    ContentType SelectedContentType,
+    IReadOnlyList<ItemRuleSummary> Rules);
 
 public sealed record ItemRulePreviewResult(
     string ItemName,

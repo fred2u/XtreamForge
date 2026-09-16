@@ -1,6 +1,8 @@
-@namespace XtreamForge.Blazor.Features.Categories.ItemRules
+@namespace XtreamForge.Blazor.Features.Items.ItemRules
 @using System.Globalization
 @using Microsoft.JSInterop
+@using XtreamForge.Blazor.Features.Categories
+@using XtreamForge.Blazor.Features.Items
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 
@@ -73,7 +75,8 @@
     else if (Rows.Count == 0)
     {
         <FluentCard Class="empty-state">
-            <p>No rules configured for this source and content type.</p>
+            <p>No item rules configured for this source and content type.</p>
+            <FluentButton Class="primary-action-button" Appearance="Appearance.Accent" IconStart="@(new Icons.Regular.Size20.Add())" @onclick="() => OnOpenCreate.InvokeAsync()">Add rule</FluentButton>
         </FluentCard>
     }
     else
@@ -328,7 +331,7 @@
             return;
         }
 
-        _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./Features/Categories/CategoryRules/CategoryRulesTab.razor.js");
+        _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./Features/Items/ItemRules/ItemRulesTab.razor.js");
         _dotNetReference ??= DotNetObjectReference.Create(this);
         await _module.InvokeVoidAsync("initializeRuleDragDrop", _rulesTable, _dotNetReference);
         _lastDragDropSignature = signature;

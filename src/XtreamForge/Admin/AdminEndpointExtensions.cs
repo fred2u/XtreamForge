@@ -396,16 +396,12 @@ public static class AdminEndpointExtensions
         try
         {
             var selectedContentType = ParseContentType(contentType);
-            if (sourceId is null)
-            {
-                return TypedResults.Ok(new AdminItemRulesResponse(null, selectedContentType.ToString(), []));
-            }
-
-            var rules = await itemRuleService.GetRuleDefinitionsAsync(sourceId.Value, selectedContentType, cancellationToken);
+            var view = await itemRuleService.GetAdministrationViewAsync(sourceId, selectedContentType, cancellationToken);
             return TypedResults.Ok(new AdminItemRulesResponse(
-                sourceId,
-                selectedContentType.ToString(),
-                rules.Select(ToResponse).ToList()));
+                view.Sources.Select(ToResponse).ToList(),
+                view.SelectedSourceId,
+                view.SelectedContentType.ToString(),
+                view.Rules.Select(ToResponse).ToList()));
         }
         catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
         {
@@ -818,6 +814,7 @@ public sealed record AdminCategoryRuleResponse(
     bool IsEnabled);
 
 public sealed record AdminItemRulesResponse(
+    IReadOnlyList<AdminSourceResponse> Sources,
     int? SelectedSourceId,
     string SelectedContentType,
     IReadOnlyList<AdminItemRuleResponse> Rules);

@@ -19,4 +19,8 @@ public sealed class XtreamSource
     public ICollection<OutputCategory> OutputCategories { get; set; } = [];
 
     public ICollection<CategoryRule> CategoryRules { get; set; } = [];
+
+    public ICollection<ItemRule> ItemRules { get; set; } = [];
+
+    public ICollection<StreamTmdbMapping> StreamTmdbMappings { get; set; } = [];
 }

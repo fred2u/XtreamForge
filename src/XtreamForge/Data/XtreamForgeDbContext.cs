@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using XtreamForge.Categories;
+using XtreamForge.Items;
 
 namespace XtreamForge.Data;
 
@@ -10,6 +11,8 @@ public sealed class XtreamForgeDbContext(DbContextOptions<XtreamForgeDbContext> 
     public DbSet<OutputCategory> OutputCategories => Set<OutputCategory>();
     public DbSet<CustomCategory> CustomCategories => Set<CustomCategory>();
     public DbSet<CategoryRule> CategoryRules => Set<CategoryRule>();
+    public DbSet<ItemRule> ItemRules => Set<ItemRule>();
+    public DbSet<StreamTmdbMapping> StreamTmdbMappings => Set<StreamTmdbMapping>();
     public DbSet<Setting> Settings => Set<Setting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -103,6 +106,45 @@ public sealed class XtreamForgeDbContext(DbContextOptions<XtreamForgeDbContext> 
         categoryRules.HasOne(rule => rule.XtreamSource)
             .WithMany(source => source.CategoryRules)
             .HasForeignKey(rule => rule.XtreamSourceId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var itemRules = modelBuilder.Entity<ItemRule>();
+        itemRules.ToTable("item_rules");
+        itemRules.HasKey(rule => rule.Id);
+        itemRules.HasIndex(rule => new { rule.XtreamSourceId, rule.ContentType, rule.Sequence }).IsUnique();
+        itemRules.HasIndex(rule => new { rule.XtreamSourceId, rule.ContentType, rule.IsEnabled, rule.Sequence });
+        itemRules.Property(rule => rule.Id).HasColumnName("id");
+        itemRules.Property(rule => rule.XtreamSourceId).HasColumnName("xtream_source_id");
+        itemRules.Property(rule => rule.ContentType).HasColumnName("content_type").HasConversion<string>().HasMaxLength(20);
+        itemRules.Property(rule => rule.Sequence).HasColumnName("sequence");
+        itemRules.Property(rule => rule.Field).HasColumnName("field").HasConversion<string>().HasMaxLength(20);
+        itemRules.Property(rule => rule.Action).HasColumnName("action").HasConversion<string>().HasMaxLength(20);
+        itemRules.Property(rule => rule.Operator).HasColumnName("operator").HasConversion<string>().HasMaxLength(20);
+        itemRules.Property(rule => rule.Pattern).HasColumnName("pattern").HasMaxLength(255).IsRequired();
+        itemRules.Property(rule => rule.CaseSensitive).HasColumnName("case_sensitive");
+        itemRules.Property(rule => rule.IsEnabled).HasColumnName("is_enabled");
+        itemRules.Property(rule => rule.CreatedAtUtc).HasColumnName("created_at_utc");
+        itemRules.Property(rule => rule.UpdatedAtUtc).HasColumnName("updated_at_utc");
+        itemRules.HasOne(rule => rule.XtreamSource)
+            .WithMany(source => source.ItemRules)
+            .HasForeignKey(rule => rule.XtreamSourceId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var streamTmdbMappings = modelBuilder.Entity<StreamTmdbMapping>();
+        streamTmdbMappings.ToTable("stream_tmdb_mappings");
+        streamTmdbMappings.HasKey(mapping => mapping.Id);
+        streamTmdbMappings.HasIndex(mapping => new { mapping.XtreamSourceId, mapping.ContentType, mapping.StreamId }).IsUnique();
+        streamTmdbMappings.HasIndex(mapping => new { mapping.XtreamSourceId, mapping.ContentType });
+        streamTmdbMappings.Property(mapping => mapping.Id).HasColumnName("id");
+        streamTmdbMappings.Property(mapping => mapping.XtreamSourceId).HasColumnName("xtream_source_id");
+        streamTmdbMappings.Property(mapping => mapping.ContentType).HasColumnName("content_type").HasConversion<string>().HasMaxLength(20);
+        streamTmdbMappings.Property(mapping => mapping.StreamId).HasColumnName("stream_id").HasMaxLength(64).IsRequired();
+        streamTmdbMappings.Property(mapping => mapping.TmdbId).HasColumnName("tmdb_id");
+        streamTmdbMappings.Property(mapping => mapping.CreatedAtUtc).HasColumnName("created_at_utc");
+        streamTmdbMappings.Property(mapping => mapping.UpdatedAtUtc).HasColumnName("updated_at_utc");
+        streamTmdbMappings.HasOne(mapping => mapping.XtreamSource)
+            .WithMany(source => source.StreamTmdbMappings)
+            .HasForeignKey(mapping => mapping.XtreamSourceId)
             .OnDelete(DeleteBehavior.Cascade);
 
         var settings = modelBuilder.Entity<Setting>();

@@ -1,14 +1,14 @@
-using System.Diagnostics;
-using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.WebUtilities;
+using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace XtreamForge.ServiceDefaults;
 
 public static partial class XtreamCredentialRedaction
 {
-    private const string RedactedValue = "REDACTED";
+    private const string RedactedValue = "***";
 
     private static readonly HashSet<string> SensitiveQueryKeys = new(StringComparer.OrdinalIgnoreCase)
     {

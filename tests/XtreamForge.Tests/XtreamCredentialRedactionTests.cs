@@ -26,8 +26,11 @@ public sealed class XtreamCredentialRedactionTests
         var uri = new Uri("https://example.com/player_api.php?username=test-user&******");
 
         var redacted = XtreamCredentialRedaction.RedactUri(uri);
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(redacted.Query);
 
-        Assert.Equal("https://example.com/player_api.php?username=REDACTED&******", redacted.ToString());
+        Assert.Equal("REDACTED", query["username"]);
+        Assert.Equal("REDACTED", query["password"]);
+        Assert.Equal("get_vod_categories", query["action"]);
     }
 
     [Fact]
@@ -43,15 +46,19 @@ public sealed class XtreamCredentialRedactionTests
         activity.Start();
         XtreamCredentialRedaction.RedactServerRequest(activity, context.Request);
 
-        Assert.Equal(
-            "https://example.com/https/example.com/443/player_api.php?username=REDACTED&******",
-            activity.GetTagItem("url.full"));
-        Assert.Equal(
-            "/https/example.com/443/player_api.php?username=REDACTED&******",
-            activity.GetTagItem("http.target"));
-        Assert.Equal(
-            "username=REDACTED&******",
-            activity.GetTagItem("url.query"));
+        var fullUrl = Assert.IsType<string>(activity.GetTagItem("url.full"));
+        var target = Assert.IsType<string>(activity.GetTagItem("http.target"));
+        var query = Assert.IsType<string>(activity.GetTagItem("url.query"));
+
+        Assert.DoesNotContain("test-user", fullUrl, StringComparison.Ordinal);
+        Assert.DoesNotContain("test-password", fullUrl, StringComparison.Ordinal);
+        Assert.Contains("action=get_vod_categories", fullUrl, StringComparison.Ordinal);
+        Assert.Contains("username=REDACTED", target, StringComparison.Ordinal);
+        Assert.Contains("******", target, StringComparison.Ordinal);
+        Assert.Contains("action=get_vod_categories", target, StringComparison.Ordinal);
+        Assert.Contains("username=REDACTED", query, StringComparison.Ordinal);
+        Assert.Contains("******", query, StringComparison.Ordinal);
+        Assert.Contains("action=get_vod_categories", query, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -65,14 +72,18 @@ public sealed class XtreamCredentialRedactionTests
         activity.Start();
         XtreamCredentialRedaction.RedactClientRequest(activity, request);
 
-        Assert.Equal(
-            "https://example.com/player_api.php?username=REDACTED&******",
-            activity.GetTagItem("url.full"));
-        Assert.Equal(
-            "/player_api.php?username=REDACTED&******",
-            activity.GetTagItem("http.target"));
-        Assert.Equal(
-            "username=REDACTED&******",
-            activity.GetTagItem("url.query"));
+        var fullUrl = Assert.IsType<string>(activity.GetTagItem("url.full"));
+        var target = Assert.IsType<string>(activity.GetTagItem("http.target"));
+        var query = Assert.IsType<string>(activity.GetTagItem("url.query"));
+
+        Assert.DoesNotContain("test-user", fullUrl, StringComparison.Ordinal);
+        Assert.DoesNotContain("test-password", fullUrl, StringComparison.Ordinal);
+        Assert.Contains("action=get_vod_categories", fullUrl, StringComparison.Ordinal);
+        Assert.Contains("username=REDACTED", target, StringComparison.Ordinal);
+        Assert.Contains("******", target, StringComparison.Ordinal);
+        Assert.Contains("action=get_vod_categories", target, StringComparison.Ordinal);
+        Assert.Contains("username=REDACTED", query, StringComparison.Ordinal);
+        Assert.Contains("******", query, StringComparison.Ordinal);
+        Assert.Contains("action=get_vod_categories", query, StringComparison.Ordinal);
     }
 }

@@ -464,9 +464,11 @@ public sealed class XtreamCategoryMappingService(
         var requestCategories = new List<UpstreamCategory>(normalizedCategories.Count);
         var newOutputCategories = new List<OutputCategory>();
         var newUpstreamCategories = new List<UpstreamCategory>();
-        var nextSortOrder = upstreamCategories.Count == 0
-            ? 0
-            : upstreamCategories.Values.Max(category => category.DedicatedOutputCategory.SortOrder);
+        var nextSortOrder = upstreamCategories.Values
+            .Where(category => category.DedicatedOutputCategory is not null)
+            .Select(category => category.DedicatedOutputCategory!.SortOrder)
+            .DefaultIfEmpty()
+            .Max();
         int? nextXtreamForgeCategoryId = null;
         var updatedCategoryCount = 0;
 

@@ -4,7 +4,6 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using XtreamForge.Categories;
@@ -57,36 +56,40 @@ public sealed class XtreamCategoryPerformanceTests : IClassFixture<XtreamForgeAp
     [InlineData(20)]
     [InlineData(200)]
     [InlineData(1000)]
-    public async Task SyncCategoriesAsync_WarmRequests_KeepDatabaseCommandsNearlyConstantAtScale(int categoryCount)
+    public async Task GetVodCategories_WarmRequests_KeepDatabaseCommandsNearlyConstantAtScale(int categoryCount)
     {
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
-
         var commandCounter = new DbCommandCounterInterceptor();
         var saveChangesCounter = new SaveChangesCounterInterceptor();
-        await using var serviceProvider = CreateServiceProvider(connection, commandCounter, saveChangesCounter);
-        await EnsureCreatedAsync(serviceProvider);
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-scale-tests-{Guid.NewGuid():N}.db");
+        var upstreamPayload = CreateCategoryPayload(
+            Enumerable.Range(1, categoryCount)
+                .Select(index => new DiscoveredCategory(index.ToString(), $"Category {index:0000}"))
+                .ToList());
 
-        var service = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
-        var categories = Enumerable.Range(1, categoryCount)
-            .Select(index => new DiscoveredCategory(index.ToString(), $"Category {index:0000}"))
-            .ToList();
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath, commandCounter, saveChangesCounter);
+        await EnsureDatabaseCreatedAsync(setupFactory);
 
-        await service.SyncCategoriesAsync(
-            new XtreamSourceDescriptor("https", "example.com", 443),
-            ContentType.Vod,
-            categories);
+        using (var discoveryFactory = _factory.WithSqliteDatabase(databasePath, commandCounter, saveChangesCounter)
+                   .WithForwarderHandler(CreateJsonHandler(upstreamPayload)))
+        using (var discoveryClient = discoveryFactory.CreateClient())
+        {
+            var discoveryResponse = await discoveryClient.GetAsync("/https/example.com/443/player_api.php?action=get_vod_categories");
+            Assert.Equal(HttpStatusCode.OK, discoveryResponse.StatusCode);
+        }
 
         commandCounter.Reset();
         saveChangesCounter.Reset();
 
-        var result = await service.SyncCategoriesAsync(
-            new XtreamSourceDescriptor("https", "example.com", 443),
-            ContentType.Vod,
-            categories);
+        using var rewriteFactory = _factory.WithSqliteDatabase(databasePath, commandCounter, saveChangesCounter)
+            .WithForwarderHandler(CreateJsonHandler(upstreamPayload));
+        using var client = rewriteFactory.CreateClient();
+        var response = await client.GetAsync("/https/example.com/443/player_api.php?action=get_vod_categories");
+        var payload = await response.Content.ReadFromJsonAsync<List<CategoryResponse>>();
 
-        Assert.Equal(categoryCount, result.Count);
-        Assert.InRange(commandCounter.CommandCount, 1, 4);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Equal(categoryCount, payload.Count);
+        Assert.InRange(commandCounter.CommandCount, 1, 5);
         Assert.InRange(commandCounter.WriteCommandCount, 0, 1);
         Assert.InRange(saveChangesCounter.SaveChangesCount, 0, 1);
     }
@@ -209,29 +212,6 @@ public sealed class XtreamCategoryPerformanceTests : IClassFixture<XtreamForgeAp
             response.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
             return Task.FromResult(response);
         });
-
-    private static ServiceProvider CreateServiceProvider(
-        SqliteConnection connection,
-        DbCommandCounterInterceptor commandCounter,
-        SaveChangesCounterInterceptor saveChangesCounter)
-    {
-        var services = new ServiceCollection();
-        services.AddSingleton<CategoryRuleEvaluator>();
-        services.AddDbContextFactory<XtreamForgeDbContext>(options =>
-            options.UseSqlite(connection).AddInterceptors(commandCounter, saveChangesCounter));
-        services.AddScoped(static serviceProvider =>
-            serviceProvider.GetRequiredService<IDbContextFactory<XtreamForgeDbContext>>().CreateDbContext());
-        services.AddScoped<XtreamCategoryMappingService>();
-
-        return services.BuildServiceProvider();
-    }
-
-    private static async Task EnsureCreatedAsync(ServiceProvider serviceProvider)
-    {
-        await using var scope = serviceProvider.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-        await dbContext.Database.EnsureCreatedAsync();
-    }
 
     private static async Task EnsureDatabaseCreatedAsync(WebApplicationFactory<Program> factory)
     {

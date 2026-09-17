@@ -106,7 +106,7 @@ public sealed class XtreamCategoryPerformanceTests : IClassFixture<XtreamForgeAp
 
         await using var scope = factory.Services.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
-        var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var mappingService = scope.ServiceProvider.GetRequiredService<CategoryService>();
         var ruleService = scope.ServiceProvider.GetRequiredService<CategoryRuleService>();
         var sourceId = await dbContext.XtreamSources.Select(source => source.Id).SingleAsync();
         var upstreamCategories = await dbContext.UpstreamCategories

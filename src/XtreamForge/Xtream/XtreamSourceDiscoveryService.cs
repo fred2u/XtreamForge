@@ -11,7 +11,6 @@ namespace XtreamForge.Xtream;
 public sealed class XtreamSourceDiscoveryService(
     XtreamUpstreamDestinationResolver destinationResolver,
     XtreamUpstreamClient upstreamClient,
-    XtreamCategoryMappingService categoryMappingService,
     SourceService sourceService)
 {
     private readonly XtreamUpstreamClient _upstreamClient = upstreamClient;
@@ -27,17 +26,18 @@ public sealed class XtreamSourceDiscoveryService(
         var seriesCategories = await FetchCategoriesAsync(destination, request.Username!, request.Password!, "get_series_categories", cancellationToken);
         var sourceDescriptor = new XtreamSourceDescriptor(destination.Protocol, destination.Host, destination.Port);
 
-        await categoryMappingService.SyncCategoriesAsync(sourceDescriptor, ContentType.Vod, vodCategories, cancellationToken);
-        await categoryMappingService.SyncCategoriesAsync(sourceDescriptor, ContentType.Series, seriesCategories, cancellationToken);
+        var vodSynchronization = await sourceService.SynchronizeCategoriesAsync(
+            sourceDescriptor,
+            ContentType.Vod,
+            vodCategories,
+            cancellationToken);
+        await sourceService.SynchronizeCategoriesAsync(
+            sourceDescriptor,
+            ContentType.Series,
+            seriesCategories,
+            cancellationToken);
 
-        var sourceId = await sourceService.GetSourceIdAsync(sourceDescriptor, cancellationToken);
-
-        if (sourceId is null)
-        {
-            throw new InvalidOperationException("The source could not be saved.");
-        }
-
-        return new XtreamSourceDiscoveryResult(sourceId.Value, vodCategories.Count, seriesCategories.Count);
+        return new XtreamSourceDiscoveryResult(vodSynchronization.SourceId, vodCategories.Count, seriesCategories.Count);
     }
 
     private XtreamValidatedSourceDestination ParseAndValidateDestination(XtreamSourceDiscoveryRequest request)

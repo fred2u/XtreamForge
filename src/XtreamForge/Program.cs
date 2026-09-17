@@ -47,6 +47,7 @@ builder.Services.AddHealthChecks()
 builder.Services.AddSingleton<CategoryRuleEvaluator>();
 builder.Services.AddSingleton<ItemRuleEvaluator>();
 builder.Services.AddSingleton<SourceService>();
+builder.Services.AddScoped<CategoryService>();
 builder.Services.AddScoped<CategoryRuleService>();
 builder.Services.AddScoped<ItemRuleService>();
 builder.Services.AddSingleton<StreamTmdbMappingService>();

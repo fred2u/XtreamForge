@@ -18,7 +18,7 @@ public sealed class ItemRuleServiceTests
         await using var serviceProvider = CreateServiceProvider(connection);
         await EnsureCreatedAsync(serviceProvider);
 
-        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var mappingService = serviceProvider.GetRequiredService<CategoryService>();
         var ruleService = serviceProvider.GetRequiredService<ItemRuleService>();
         await SeedVodCategoriesAsync(mappingService);
         var sourceId = await GetSourceIdAsync(serviceProvider);
@@ -59,7 +59,7 @@ public sealed class ItemRuleServiceTests
         await using var serviceProvider = CreateServiceProvider(connection);
         await EnsureCreatedAsync(serviceProvider);
 
-        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var mappingService = serviceProvider.GetRequiredService<CategoryService>();
         var ruleService = serviceProvider.GetRequiredService<ItemRuleService>();
         await SeedVodCategoriesAsync(mappingService);
         var sourceId = await GetSourceIdAsync(serviceProvider);
@@ -80,9 +80,9 @@ public sealed class ItemRuleServiceTests
         Assert.Equal(10, remainingRule.Sequence);
     }
 
-    private static async Task SeedVodCategoriesAsync(XtreamCategoryMappingService mappingService)
+    private static async Task SeedVodCategoriesAsync(CategoryService mappingService)
     {
-        await mappingService.SyncCategoriesAsync(
+        await mappingService.RewriteCategoriesAsync(
             new XtreamSourceDescriptor("https", "example.com", 443),
             ContentType.Vod,
             [
@@ -112,6 +112,8 @@ public sealed class ItemRuleServiceTests
         services.AddSingleton(new CategoryRuleEvaluator());
         services.AddSingleton(new ItemRuleEvaluator());
         services.AddSingleton<SourceService>();
+        services.AddScoped<CategoryService>();
+        services.AddScoped<CategoryRuleService>();
         services.AddScoped<XtreamCategoryMappingService>();
         services.AddScoped<ItemRuleService>();
         return services.BuildServiceProvider();

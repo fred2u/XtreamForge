@@ -154,13 +154,13 @@ public static class AdminEndpointExtensions
     private static async Task<IResult> GetCategoriesAsync(
         int? sourceId,
         string? contentType,
-        XtreamCategoryMappingService categoryMappingService,
+        CategoryService categoryService,
         CancellationToken cancellationToken)
     {
         try
         {
             var selectedContentType = ParseContentType(contentType);
-            var view = await categoryMappingService.GetAdministrationViewAsync(sourceId, selectedContentType, cancellationToken);
+            var view = await categoryService.GetAdministrationViewAsync(sourceId, selectedContentType, cancellationToken);
             return TypedResults.Ok(new AdminCategoriesResponse(
                 view.Sources.Select(ToResponse).ToList(),
                 view.SelectedSourceId,
@@ -177,12 +177,12 @@ public static class AdminEndpointExtensions
     private static async Task<IResult> UpdateCategoryMappingAsync(
         int upstreamCategoryRecordId,
         AdminCategoryMappingRequest request,
-        XtreamCategoryMappingService categoryMappingService,
+        CategoryService categoryService,
         CancellationToken cancellationToken)
     {
         try
         {
-            var result = await categoryMappingService.SaveCategoryConfigurationAsync(
+            var result = await categoryService.SaveCategoryConfigurationAsync(
                 new CategoryConfigurationCommand(
                     upstreamCategoryRecordId,
                     request.SelectedSourceId,
@@ -381,12 +381,12 @@ public static class AdminEndpointExtensions
 
     private static async Task<IResult> CreateCustomCategoryAsync(
         AdminCustomCategoryCreateRequest request,
-        XtreamCategoryMappingService categoryMappingService,
+        CategoryService categoryService,
         CancellationToken cancellationToken)
     {
         try
         {
-            var result = await categoryMappingService.CreateCustomCategoryAsync(
+            var result = await categoryService.CreateCustomCategoryAsync(
                 new CustomCategoryCreateCommand(ParseContentType(request.SelectedContentType), request.DisplayName),
                 cancellationToken);
 
@@ -545,12 +545,12 @@ public static class AdminEndpointExtensions
     private static async Task<IResult> UpdateCustomCategoryAsync(
         int customCategoryId,
         AdminCustomCategoryUpdateRequest request,
-        XtreamCategoryMappingService categoryMappingService,
+        CategoryService categoryService,
         CancellationToken cancellationToken)
     {
         try
         {
-            var result = await categoryMappingService.UpdateCustomCategoryAsync(
+            var result = await categoryService.UpdateCustomCategoryAsync(
                 new CustomCategoryUpdateCommand(customCategoryId, ParseContentType(request.SelectedContentType), request.DisplayName),
                 cancellationToken);
 
@@ -565,12 +565,12 @@ public static class AdminEndpointExtensions
     private static async Task<IResult> DeleteCustomCategoryAsync(
         int customCategoryId,
         string contentType,
-        XtreamCategoryMappingService categoryMappingService,
+        CategoryService categoryService,
         CancellationToken cancellationToken)
     {
         try
         {
-            var result = await categoryMappingService.DeleteCustomCategoryAsync(
+            var result = await categoryService.DeleteCustomCategoryAsync(
                 new CustomCategoryDeleteCommand(customCategoryId, ParseContentType(contentType)),
                 cancellationToken);
 
@@ -585,12 +585,12 @@ public static class AdminEndpointExtensions
     private static async Task<IResult> GetCustomCategoryUsagesAsync(
         int customCategoryId,
         string contentType,
-        XtreamCategoryMappingService categoryMappingService,
+        CategoryService categoryService,
         CancellationToken cancellationToken)
     {
         try
         {
-            var usages = await categoryMappingService.GetCustomCategoryUsagesAsync(
+            var usages = await categoryService.GetCustomCategoryUsagesAsync(
                 customCategoryId,
                 ParseContentType(contentType),
                 cancellationToken);

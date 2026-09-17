@@ -416,7 +416,7 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
         var upstreamCategoryId = await GetUpstreamCategoryRecordIdAsync(setupFactory, "10");
         await using (var scope = setupFactory.Services.CreateAsyncScope())
         {
-            var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+            var mappingService = scope.ServiceProvider.GetRequiredService<CategoryService>();
             await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(upstreamCategoryId, sourceId, ContentType.Vod, CategoryMappingSelection.Custom, null, "Movies Shared"));
         }
 
@@ -465,11 +465,11 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
 
         await using (var scope = setupFactory.Services.CreateAsyncScope())
         {
-            var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+            var mappingService = scope.ServiceProvider.GetRequiredService<CategoryService>();
 
-            await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "provider-a.com", 443), ContentType.Vod, [new DiscoveredCategory("10", "Movies A")]);
-            await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "provider-b.net", 443), ContentType.Vod, [new DiscoveredCategory("20", "Movies B")]);
-            await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "provider-a.com", 443), ContentType.Series, [new DiscoveredCategory("30", "Series A")]);
+            await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "provider-a.com", 443), ContentType.Vod, [new DiscoveredCategory("10", "Movies A")]);
+            await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "provider-b.net", 443), ContentType.Vod, [new DiscoveredCategory("20", "Movies B")]);
+            await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "provider-a.com", 443), ContentType.Series, [new DiscoveredCategory("30", "Series A")]);
 
             var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
             var sourceACategory = await dbContext.UpstreamCategories.SingleAsync(category => category.UpstreamCategoryId == "10" && category.ContentType == ContentType.Vod);
@@ -524,11 +524,11 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
 
         await using (var scope = setupFactory.Services.CreateAsyncScope())
         {
-            var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+            var mappingService = scope.ServiceProvider.GetRequiredService<CategoryService>();
             var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
 
-            await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "provider-a.com", 443), ContentType.Vod, [new DiscoveredCategory("10", "Movies A")]);
-            await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "provider-b.net", 443), ContentType.Vod, [new DiscoveredCategory("20", "Movies B")]);
+            await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "provider-a.com", 443), ContentType.Vod, [new DiscoveredCategory("10", "Movies A")]);
+            await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "provider-b.net", 443), ContentType.Vod, [new DiscoveredCategory("20", "Movies B")]);
 
             var sourceACategory = await dbContext.UpstreamCategories.SingleAsync(category => category.UpstreamCategoryId == "10");
             var sourceBCategory = await dbContext.UpstreamCategories.SingleAsync(category => category.UpstreamCategoryId == "20");
@@ -585,10 +585,10 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
     private static async Task<int> SeedCategoryAdministrationDataAsync(WebApplicationFactory<Program> factory)
     {
         await using var scope = factory.Services.CreateAsyncScope();
-        var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var mappingService = scope.ServiceProvider.GetRequiredService<CategoryService>();
         var ruleService = scope.ServiceProvider.GetRequiredService<CategoryRuleService>();
 
-        await mappingService.SyncCategoriesAsync(
+        await mappingService.RewriteCategoriesAsync(
             new XtreamSourceDescriptor("https", "example.com", 443),
             ContentType.Vod,
             [
@@ -613,9 +613,9 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
     private static async Task<int> SeedSingleSourceAsync(WebApplicationFactory<Program> factory)
     {
         await using var scope = factory.Services.CreateAsyncScope();
-        var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var mappingService = scope.ServiceProvider.GetRequiredService<CategoryService>();
 
-        await mappingService.SyncCategoriesAsync(
+        await mappingService.RewriteCategoriesAsync(
             new XtreamSourceDescriptor("https", "example.com", 443),
             ContentType.Vod,
             [new DiscoveredCategory("10", "Movies A")]);
@@ -634,13 +634,13 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
     private static async Task SeedDashboardStatusDataAsync(WebApplicationFactory<Program> factory)
     {
         await using var scope = factory.Services.CreateAsyncScope();
-        var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var mappingService = scope.ServiceProvider.GetRequiredService<CategoryService>();
         var ruleService = scope.ServiceProvider.GetRequiredService<CategoryRuleService>();
         var itemRuleService = scope.ServiceProvider.GetRequiredService<ItemRuleService>();
         var tmdbMappingService = scope.ServiceProvider.GetRequiredService<StreamTmdbMappingService>();
         var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
 
-        await mappingService.SyncCategoriesAsync(
+        await mappingService.RewriteCategoriesAsync(
             new XtreamSourceDescriptor("https", "provider-a.com", 443),
             ContentType.Vod,
             [
@@ -648,7 +648,7 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
                 new DiscoveredCategory("20", "Sports A")
             ]);
 
-        await mappingService.SyncCategoriesAsync(
+        await mappingService.RewriteCategoriesAsync(
             new XtreamSourceDescriptor("https", "provider-b.net", 8080),
             ContentType.Vod,
             [
@@ -687,10 +687,10 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
     private static async Task<(int SourceAId, int TargetCategoryId, int SiblingCategoryId, int OtherSourceCategoryId)> SeedSimilarCategoriesAsync(WebApplicationFactory<Program> factory)
     {
         await using var scope = factory.Services.CreateAsyncScope();
-        var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var mappingService = scope.ServiceProvider.GetRequiredService<CategoryService>();
         var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
 
-        await mappingService.SyncCategoriesAsync(
+        await mappingService.RewriteCategoriesAsync(
             new XtreamSourceDescriptor("https", "source-a.example", 443),
             ContentType.Vod,
             [
@@ -698,7 +698,7 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
                 new DiscoveredCategory("11", "Movies B")
             ]);
 
-        await mappingService.SyncCategoriesAsync(
+        await mappingService.RewriteCategoriesAsync(
             new XtreamSourceDescriptor("https", "source-b.example", 443),
             ContentType.Vod,
             [

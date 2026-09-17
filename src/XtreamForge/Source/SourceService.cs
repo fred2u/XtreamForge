@@ -147,7 +147,7 @@ public sealed class SourceService(IDbContextFactory<XtreamForgeDbContext> dbCont
                     synchronizedBatch.CreatedCategoryCount,
                     synchronizedBatch.UpdatedCategoryCount);
             }
-            catch (DbUpdateException exception) when (attempt < MaxSyncAttempts && IsUniqueConstraintViolation(exception))
+            catch (DbUpdateException exception) when (attempt < MaxSyncAttempts && CategoryPersistenceUtilities.IsUniqueConstraintViolation(exception))
             {
                 await transaction.RollbackAsync(CancellationToken.None);
             }
@@ -248,7 +248,7 @@ public sealed class SourceService(IDbContextFactory<XtreamForgeDbContext> dbCont
         {
             if (!upstreamCategories.TryGetValue(discoveredCategory.UpstreamCategoryId, out var upstreamCategory))
             {
-                nextXtreamForgeCategoryId ??= await GetNextXtreamForgeCategoryIdAsync(dbContext, contentType, cancellationToken);
+                nextXtreamForgeCategoryId ??= await CategoryPersistenceUtilities.GetNextXtreamForgeCategoryIdAsync(dbContext, contentType, cancellationToken);
                 var allocatedCategoryId = nextXtreamForgeCategoryId.Value;
                 nextXtreamForgeCategoryId = allocatedCategoryId + 1;
                 var outputCategory = CreateOutputCategory(source, contentType, allocatedCategoryId, ++nextSortOrder, discoveredCategory.UpstreamCategoryName, discoveredAt);
@@ -284,7 +284,7 @@ public sealed class SourceService(IDbContextFactory<XtreamForgeDbContext> dbCont
 
             if (upstreamCategory.DedicatedOutputCategory is null)
             {
-                nextXtreamForgeCategoryId ??= await GetNextXtreamForgeCategoryIdAsync(dbContext, contentType, cancellationToken);
+                nextXtreamForgeCategoryId ??= await CategoryPersistenceUtilities.GetNextXtreamForgeCategoryIdAsync(dbContext, contentType, cancellationToken);
                 var allocatedCategoryId = nextXtreamForgeCategoryId.Value;
                 nextXtreamForgeCategoryId = allocatedCategoryId + 1;
                 var outputCategory = CreateOutputCategory(source, contentType, allocatedCategoryId, ++nextSortOrder, discoveredCategory.UpstreamCategoryName, discoveredAt);
@@ -370,23 +370,6 @@ public sealed class SourceService(IDbContextFactory<XtreamForgeDbContext> dbCont
         }
     }
 
-    private static async Task<int> GetNextXtreamForgeCategoryIdAsync(
-        XtreamForgeDbContext dbContext,
-        ContentType contentType,
-        CancellationToken cancellationToken)
-    {
-        var nextCategoryId = await dbContext.OutputCategories
-            .Where(category => category.ContentType == contentType)
-            .Select(category => (int?)category.XtreamForgeCategoryId)
-            .Concat(
-                dbContext.CustomCategories
-                    .Where(category => category.ContentType == contentType)
-                    .Select(category => (int?)category.XtreamForgeCategoryId))
-            .MaxAsync(cancellationToken) ?? 0;
-
-        return nextCategoryId + 1;
-    }
-
     private static SourceCategorySnapshot CreateSourceCategorySnapshot(
         UpstreamCategory category,
         DateTimeOffset discoveredAt) =>
@@ -406,11 +389,6 @@ public sealed class SourceService(IDbContextFactory<XtreamForgeDbContext> dbCont
             category.CustomCategory?.DisplayName,
             category.FirstDiscoveredAtUtc,
             discoveredAt);
-
-    private static bool IsUniqueConstraintViolation(DbUpdateException exception) =>
-        exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }
-        or SqliteException { SqliteExtendedErrorCode: 2067 }
-        or SqliteException { SqliteErrorCode: 19 };
 
     private sealed record SynchronizedCategoryBatch(
         IReadOnlyList<UpstreamCategory> RequestCategories,

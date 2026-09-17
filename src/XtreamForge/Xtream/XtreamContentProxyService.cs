@@ -10,7 +10,7 @@ namespace XtreamForge.Xtream;
 
 public sealed class XtreamContentProxyService(
     XtreamUpstreamClient upstreamClient,
-    XtreamCategoryMappingService categoryMappingService,
+    CategoryService categoryService,
     ItemRuleService itemRuleService,
     ItemRuleEvaluator itemRuleEvaluator,
     StreamTmdbMappingService streamTmdbMappingService,
@@ -210,7 +210,7 @@ public sealed class XtreamContentProxyService(
         CancellationToken cancellationToken)
     {
         var sourceDescriptor = new XtreamSourceDescriptor(destination.Protocol, destination.Host, destination.Port);
-        var mappings = await categoryMappingService.GetEffectiveOutputCategoryMappingsAsync(sourceDescriptor, contentType, cancellationToken);
+        var mappings = await categoryService.GetEffectiveOutputCategoryMappingsAsync(sourceDescriptor, contentType, cancellationToken);
         if (mappings.Count == 0
             && !await sourceService.HasDiscoveredCategoriesAsync(sourceDescriptor, contentType, cancellationToken))
         {
@@ -226,14 +226,14 @@ public sealed class XtreamContentProxyService(
             responseMessage.EnsureSuccessStatusCode();
 
             var upstreamCategories = await upstreamClient.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(responseMessage.Content, cancellationToken) ?? [];
-            await categoryMappingService.SyncCategoriesAsync(
+            var synchronization = await sourceService.SynchronizeCategoriesAsync(
                 sourceDescriptor,
                 contentType,
                 [.. upstreamCategories.Select(category => new DiscoveredCategory(category.CategoryId ?? string.Empty, category.CategoryName ?? string.Empty))],
                 cancellationToken);
 
-            mappings = await categoryMappingService.GetEffectiveOutputCategoryMappingsAsync(
-                sourceDescriptor,
+            mappings = await categoryService.GetEffectiveOutputCategoryMappingsAsync(
+                synchronization.SourceId,
                 contentType,
                 cancellationToken);
         }

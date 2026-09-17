@@ -111,7 +111,7 @@
                 <tbody>
                     @foreach (var context in Rows)
                     {
-                        <tr>
+                        <tr @key="context.Summary.Id">
                             <td>
                                 <div class="category-name">@context.Summary.UpstreamCategoryName</div>
                                 <div class="category-meta category-meta-inline">
@@ -122,15 +122,19 @@
                             <td>
                                 <div class="mapping-cell">
                                     <div class="mapping-control-row">
-                                        <FluentSelect Class="mapping-select" TOption="string" @bind-Value="context.MappingValue" @bind-Value:after="() => OnMappingChanged.InvokeAsync(context)" Disabled="@context.IsBusy" AriaLabel="Category mapping">
-                                            <FluentOption Value="disabled">Disabled</FluentOption>
-                                            <FluentOption Value="original">Original</FluentOption>
-                                            <FluentOption Value="new">New category</FluentOption>
+                                        <select class="mapping-select-native"
+                                                value="@context.MappingValue"
+                                                @onchange="args => HandleMappingChangedAsync(context.Summary.Id, args.Value?.ToString())"
+                                                disabled="@context.IsBusy"
+                                                aria-label="Category mapping">
+                                            <option value="disabled">Disabled</option>
+                                            <option value="original">Original</option>
+                                            <option value="new">New category</option>
                                             @foreach (var customCategory in CustomCategories)
                                             {
-                                                <FluentOption Value="@CategoryRowState.GetCustomMappingValue(customCategory.Summary.Id)">@customCategory.Summary.DisplayName</FluentOption>
+                                                <option value="@CategoryRowState.GetCustomMappingValue(customCategory.Summary.Id)">@customCategory.Summary.DisplayName</option>
                                             }
-                                        </FluentSelect>
+                                        </select>
 
                                         @switch (context.SaveState)
                                         {
@@ -148,8 +152,8 @@
                                         <div class="inline-editor-box">
                                             <FluentTextField @bind-Value="context.NewCustomCategoryName" Maxlength="255" Placeholder="Movies 4K" Label="New global custom category" Disabled="@context.IsBusy" />
                                             <div class="inline-editor-actions">
-                                                <FluentButton Appearance="Appearance.Accent" @onclick="() => OnCreateCustomCategory.InvokeAsync(context)" Disabled="@context.IsBusy">Create &amp; Map</FluentButton>
-                                                <FluentButton Appearance="Appearance.Neutral" @onclick="() => OnCancelCustomCategory.InvokeAsync(context)" Disabled="@context.IsBusy">Cancel</FluentButton>
+                                                <FluentButton Appearance="Appearance.Accent" @onclick="() => OnCreateCustomCategory.InvokeAsync(context.Summary.Id)" Disabled="@context.IsBusy">Create &amp; Map</FluentButton>
+                                                <FluentButton Appearance="Appearance.Neutral" @onclick="() => OnCancelCustomCategory.InvokeAsync(context.Summary.Id)" Disabled="@context.IsBusy">Cancel</FluentButton>
                                             </div>
                                         </div>
                                     }
@@ -158,7 +162,7 @@
                                     {
                                         <div class="mapping-feedback">
                                             <FluentMessageBar Intent="@MessageIntent.Error" AllowDismiss="false">@context.ValidationError</FluentMessageBar>
-                                            <FluentButton Appearance="Appearance.Stealth" @onclick="() => OnRetry.InvokeAsync(context)">Retry</FluentButton>
+                                            <FluentButton Appearance="Appearance.Stealth" @onclick="() => OnRetry.InvokeAsync(context.Summary.Id)">Retry</FluentButton>
                                         </div>
                                     }
                                 </div>
@@ -172,7 +176,7 @@
                             <td>
                                 @if (context.Summary.MatchedRuleId is not null && context.Summary.MatchedRuleSequence is int matchedRuleSequence)
                                 {
-                                    <button type="button" class="inline-link-button rule-link" title="@CategoriesPageState.FormatMatchedRuleDetails(context.Summary)" @onclick="() => OnOpenRule.InvokeAsync(context)">
+                                    <button type="button" class="inline-link-button rule-link" title="@CategoriesPageState.FormatMatchedRuleDetails(context.Summary)" @onclick="() => OnOpenRule.InvokeAsync(context.Summary.Id)">
                                         <span class="rule-primary">
                                             <span class="rule-sequence">#@matchedRuleSequence</span>
                                             <span class="rule-fragment">@context.Summary.MatchedRuleAction</span>
@@ -241,19 +245,19 @@
     public EventCallback OnOpenAddSource { get; set; }
 
     [Parameter]
-    public EventCallback<CategoryRowState> OnMappingChanged { get; set; }
+    public EventCallback<CategoryMappingChangeRequest> OnMappingChanged { get; set; }
 
     [Parameter]
-    public EventCallback<CategoryRowState> OnCreateCustomCategory { get; set; }
+    public EventCallback<int> OnCreateCustomCategory { get; set; }
 
     [Parameter]
-    public EventCallback<CategoryRowState> OnCancelCustomCategory { get; set; }
+    public EventCallback<int> OnCancelCustomCategory { get; set; }
 
     [Parameter]
-    public EventCallback<CategoryRowState> OnRetry { get; set; }
+    public EventCallback<int> OnRetry { get; set; }
 
     [Parameter]
-    public EventCallback<CategoryRowState> OnOpenRule { get; set; }
+    public EventCallback<int> OnOpenRule { get; set; }
 
     private static string FormatNullableInt(int? value) => value?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
 
@@ -291,4 +295,7 @@
         Enum.TryParse<CategoryStatusFilter>(value, true, out var statusFilter)
             ? OnStatusFilterChanged.InvokeAsync(statusFilter)
             : Task.CompletedTask;
+
+    private Task HandleMappingChangedAsync(int upstreamCategoryRecordId, string? value) =>
+        OnMappingChanged.InvokeAsync(new CategoryMappingChangeRequest(upstreamCategoryRecordId, value));
 }

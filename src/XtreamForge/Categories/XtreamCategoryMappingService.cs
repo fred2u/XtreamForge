@@ -175,7 +175,21 @@ public sealed class XtreamCategoryMappingService(
 
                 await dbContext.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
-                return new CategoryConfigurationResult(upstreamCategory.XtreamSourceId, upstreamCategory.ContentType);
+                CustomCategorySummary? customCategory = null;
+                if (upstreamCategory.CustomCategoryId is int customCategoryId && upstreamCategory.CustomCategory is not null)
+                {
+                    customCategory = new CustomCategorySummary(
+                        upstreamCategory.CustomCategory.Id,
+                        upstreamCategory.CustomCategory.XtreamForgeCategoryId,
+                        upstreamCategory.CustomCategory.DisplayName,
+                        await dbContext.UpstreamCategories.CountAsync(category => category.CustomCategoryId == customCategoryId, cancellationToken));
+                }
+
+                return new CategoryConfigurationResult(
+                    upstreamCategory.XtreamSourceId,
+                    upstreamCategory.ContentType,
+                    command.MappingSelection,
+                    customCategory);
             }
             catch (DbUpdateException exception) when (attempt < MaxSyncAttempts && IsUniqueConstraintViolation(exception))
             {
@@ -704,7 +718,11 @@ public sealed record CategoryConfigurationCommand(
     int? CustomCategoryId,
     string? NewCustomCategoryName);
 
-public sealed record CategoryConfigurationResult(int SourceId, ContentType ContentType);
+public sealed record CategoryConfigurationResult(
+    int SourceId,
+    ContentType ContentType,
+    CategoryMappingSelection MappingSelection,
+    CustomCategorySummary? CustomCategory);
 public sealed record CustomCategoryCreateCommand(ContentType ContentType, string? DisplayName);
 public sealed record CustomCategoryUpdateCommand(int CustomCategoryId, ContentType ContentType, string DisplayName);
 

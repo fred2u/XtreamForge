@@ -1,5 +1,6 @@
 @page "/categories"
 @using System.Globalization
+@using System.Diagnostics.CodeAnalysis
 @using Microsoft.AspNetCore.WebUtilities
 @using XtreamForge.Blazor.Features.Categories.CategoryRules
 @using XtreamForge.Blazor.Features.Categories.CustomCategories
@@ -367,7 +368,6 @@ else
     private string? _customCategoryDeleteErrorMessage;
 
     private IReadOnlyList<CategoryRowState> FilteredCategoryRows => CategoriesPageState.FilterCategoryRows(_categoryRows, _searchText, _statusFilter);
-
     private string ActiveTabId
     {
         get => _activeTab.ToString();
@@ -501,6 +501,48 @@ else
         _categoryRows = payload.UpstreamCategories.Select(summary => new CategoryRowState(summary)).ToList();
     }
 
+    private bool TryGetCategoryRow(int upstreamCategoryRecordId, [NotNullWhen(true)] out CategoryRowState? row)
+    {
+        row = _categoryRows.SingleOrDefault(candidate => candidate.Summary.Id == upstreamCategoryRecordId);
+        return row is not null;
+    }
+
+    private void ApplyCategoryMappingResponse(int upstreamCategoryRecordId, AdminCategoryMappingResponse response)
+    {
+        if (!TryGetCategoryRow(upstreamCategoryRecordId, out var row))
+        {
+            return;
+        }
+
+        var previousCustomCategoryId = row.Summary.CustomCategoryId;
+        row.ApplyPersistedMapping(response.MappingValue, response.CustomCategory);
+
+        if (previousCustomCategoryId is int oldCustomCategoryId
+            && oldCustomCategoryId != response.CustomCategory?.Id
+            && _customCategoryRows.SingleOrDefault(customCategory => customCategory.Summary.Id == oldCustomCategoryId) is { } previousCustomCategory)
+        {
+            previousCustomCategory.SetUsageCount(previousCustomCategory.UsageCount - 1);
+        }
+
+        if (response.CustomCategory is null)
+        {
+            return;
+        }
+
+        var existingRow = _customCategoryRows.SingleOrDefault(customCategory => customCategory.Summary.Id == response.CustomCategory.Id);
+        if (existingRow is not null)
+        {
+            existingRow.RefreshSummary(response.CustomCategory);
+            return;
+        }
+
+        _customCategoryRows.Add(new CustomCategoryRowState(response.CustomCategory));
+        _customCategoryRows = _customCategoryRows
+            .OrderBy(customCategory => customCategory.Summary.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(customCategory => customCategory.Summary.Id)
+            .ToList();
+    }
+
     private void ApplyRulesView(AdminCategoryRulesPayload payload)
     {
         _rulesView = payload;
@@ -569,11 +611,18 @@ else
         }
     }
 
-    private async Task OnMappingSelectionChangedAsync(CategoryRowState row)
+    private async Task OnMappingSelectionChangedAsync(CategoryMappingChangeRequest request)
     {
+        if (!TryGetCategoryRow(request.UpstreamCategoryRecordId, out var row))
+        {
+            _categoryErrorMessage = "The selected category is no longer available. Refresh and try again.";
+            return;
+        }
+
         _categoryMessage = null;
         _categoryErrorMessage = null;
         row.ClearFeedback();
+        row.MappingValue = request.MappingValue ?? row.MappingValue;
 
         if (row.MappingValue == "new")
         {
@@ -584,20 +633,38 @@ else
         await SaveCategoryMappingAsync(row, row.MappingValue, null);
     }
 
-    private Task CancelCustomCategoryCreate(CategoryRowState row)
+    private Task CancelCustomCategoryCreate(int upstreamCategoryRecordId)
     {
+        if (!TryGetCategoryRow(upstreamCategoryRecordId, out var row))
+        {
+            return Task.CompletedTask;
+        }
+
         row.CancelCustomCategoryCreate();
         return Task.CompletedTask;
     }
 
-    private Task RetryCategoryMappingAsync(CategoryRowState row) =>
-        SaveCategoryMappingAsync(
+    private Task RetryCategoryMappingAsync(int upstreamCategoryRecordId)
+    {
+        if (!TryGetCategoryRow(upstreamCategoryRecordId, out var row))
+        {
+            _categoryErrorMessage = "The selected category is no longer available. Refresh and try again.";
+            return Task.CompletedTask;
+        }
+
+        return SaveCategoryMappingAsync(
             row,
             row.PendingMappingValue ?? row.MappingValue,
             row.PendingNewCustomCategoryName ?? row.NewCustomCategoryName);
+    }
 
-    private Task OpenMatchedRuleAsync(CategoryRowState row)
+    private Task OpenMatchedRuleAsync(int upstreamCategoryRecordId)
     {
+        if (!TryGetCategoryRow(upstreamCategoryRecordId, out var row))
+        {
+            return Task.CompletedTask;
+        }
+
         if (row.Summary.MatchedRuleId is int matchedRuleId)
         {
             _highlightedRuleId = matchedRuleId;
@@ -607,8 +674,16 @@ else
         return Task.CompletedTask;
     }
 
-    private Task CreateCustomCategoryAsync(CategoryRowState row) =>
-        SaveCategoryMappingAsync(row, "new", row.NewCustomCategoryName);
+    private Task CreateCustomCategoryAsync(int upstreamCategoryRecordId)
+    {
+        if (!TryGetCategoryRow(upstreamCategoryRecordId, out var row))
+        {
+            _categoryErrorMessage = "The selected category is no longer available. Refresh and try again.";
+            return Task.CompletedTask;
+        }
+
+        return SaveCategoryMappingAsync(row, "new", row.NewCustomCategoryName);
+    }
 
     private async Task SaveCategoryMappingAsync(CategoryRowState row, string mappingValue, string? newCustomCategoryName)
     {
@@ -620,6 +695,8 @@ else
 
         try
         {
+            var sourceCategoryRecordId = row.Summary.Id;
+            var isCreateAndMap = string.Equals(mappingValue, "new", StringComparison.Ordinal);
             row.BeginSave(mappingValue, newCustomCategoryName);
 
             var request = mappingValue switch
@@ -633,8 +710,15 @@ else
                 _ => throw new InvalidOperationException("Invalid category mapping selection.")
             };
 
-            await CategoriesClient.UpdateCategoryMappingAsync(row.Summary.Id, request);
-            await RefreshCategoriesViewAsync(row.Summary.Id, "Mapping saved.");
+            var response = await CategoriesClient.UpdateCategoryMappingAsync(sourceCategoryRecordId, request);
+            if (isCreateAndMap)
+            {
+                await RefreshCategoriesViewAsync(sourceCategoryRecordId, "Mapping saved.");
+                return;
+            }
+
+            ApplyCategoryMappingResponse(sourceCategoryRecordId, response);
+            _categoryMessage = "Mapping saved.";
         }
         catch (Exception exception)
         {

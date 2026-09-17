@@ -60,7 +60,7 @@ public static class CategoriesPageState
 
 public sealed class CategoryRowState(AdminUpstreamCategory summary)
 {
-    public AdminUpstreamCategory Summary { get; } = summary;
+    public AdminUpstreamCategory Summary { get; private set; } = summary;
 
     public string MappingValue { get; set; } = GetMappingValue(summary);
 
@@ -117,6 +117,35 @@ public sealed class CategoryRowState(AdminUpstreamCategory summary)
         PendingMappingValue = null;
         PendingNewCustomCategoryName = null;
         SaveState = MutationFeedbackState.Saved;
+    }
+
+    public void ApplyPersistedMapping(string mappingValue, AdminCustomCategory? customCategory)
+    {
+        var currentMappingSelection = mappingValue switch
+        {
+            "disabled" => "Disabled",
+            "original" => "Original",
+            _ when mappingValue.StartsWith("custom:", StringComparison.Ordinal) => "Custom",
+            _ => throw new InvalidOperationException("The backend returned an invalid category mapping value.")
+        };
+        var isManuallyExcluded = string.Equals(mappingValue, "disabled", StringComparison.Ordinal);
+
+        Summary = Summary with
+        {
+            IsManuallyExcluded = isManuallyExcluded,
+            CustomCategoryId = customCategory?.Id,
+            CustomCategoryName = customCategory?.DisplayName,
+            EffectiveDecision = isManuallyExcluded ? "Exclude" : Summary.RuleDecision,
+            IsEffectivelyIncluded = !isManuallyExcluded && string.Equals(Summary.RuleDecision, "Include", StringComparison.OrdinalIgnoreCase),
+            CurrentMappingSelection = currentMappingSelection
+        };
+
+        if (string.Equals(currentMappingSelection, "Custom", StringComparison.Ordinal) && customCategory is null)
+        {
+            throw new InvalidOperationException("Custom category details are required for custom mappings.");
+        }
+
+        CommitMapping(mappingValue);
     }
 
     public void Fail(string message)
@@ -269,7 +298,7 @@ public sealed class CustomCategoryRowState(AdminCustomCategory summary)
     private string _savedDisplayName = summary.DisplayName;
     private int _usageCount = summary.UsageCount;
 
-    public AdminCustomCategory Summary { get; } = summary;
+    public AdminCustomCategory Summary { get; private set; } = summary;
 
     public string DisplayName { get; set; } = summary.DisplayName;
 
@@ -321,6 +350,14 @@ public sealed class CustomCategoryRowState(AdminCustomCategory summary)
     public void SetUsageCount(int usageCount)
     {
         _usageCount = Math.Max(0, usageCount);
+    }
+
+    public void RefreshSummary(AdminCustomCategory summary)
+    {
+        Summary = summary;
+        DisplayName = summary.DisplayName;
+        _savedDisplayName = summary.DisplayName;
+        _usageCount = summary.UsageCount;
     }
 }
 
@@ -460,6 +497,8 @@ public sealed record AdminCategoryMappingUpdate(
     int? CustomCategoryId,
     string? NewCustomCategoryName);
 
+public sealed record CategoryMappingChangeRequest(int UpstreamCategoryRecordId, string? MappingValue);
+
 public sealed record AdminCategoryRuleUpdate(
     int SelectedSourceId,
     string SelectedContentType,
@@ -491,6 +530,12 @@ public sealed record AdminCategoryRulePreview(
 public sealed record AdminCustomCategoryCreate(string SelectedContentType, string? DisplayName);
 
 public sealed record AdminCustomCategoryUpdate(string SelectedContentType, string DisplayName);
+
+public sealed record AdminCategoryMappingResponse(
+    int SourceId,
+    string ContentType,
+    string MappingValue,
+    AdminCustomCategory? CustomCategory);
 
 public sealed record AdminSourceDiscoveryCreate(
     string? Protocol,

@@ -26,4 +26,6 @@ public sealed record DashboardStatus(
     int SourceCount,
     int SourceCategoryCount,
     int RuleCount,
-    int CustomCategoryCount);
+    int CustomCategoryCount,
+    int ItemRuleCount,
+    int KnownTmdbMappingCount);

@@ -67,6 +67,17 @@ public sealed class XtreamCategoryMappingService(
                     await dbContext.SaveChangesAsync(cancellationToken);
                 }
 
+                if (synchronizedBatch.ExistingCategoryIdsToTouch.Count > 0)
+                {
+                    await TouchDiscoveredCategoriesAsync(
+                        dbContext,
+                        source.Id,
+                        contentType,
+                        discoveredAt,
+                        synchronizedBatch,
+                        cancellationToken);
+                }
+
                 await transaction.CommitAsync(cancellationToken);
 
                 IReadOnlyList<CategoryRuleDefinition> rules;
@@ -464,6 +475,8 @@ public sealed class XtreamCategoryMappingService(
         var requestCategories = new List<UpstreamCategory>(normalizedCategories.Count);
         var newOutputCategories = new List<OutputCategory>();
         var newUpstreamCategories = new List<UpstreamCategory>();
+        var existingCategoryIdsToTouch = new List<int>(normalizedCategories.Count);
+        var existingCategoryCount = upstreamCategories.Count;
         var nextSortOrder = upstreamCategories.Values
             .Where(category => category.DedicatedOutputCategory is not null)
             .Select(category => category.DedicatedOutputCategory!.SortOrder)
@@ -501,12 +514,12 @@ public sealed class XtreamCategoryMappingService(
             }
 
             requestCategories.Add(upstreamCategory);
+            existingCategoryIdsToTouch.Add(upstreamCategory.Id);
             var categoryUpdated = false;
 
             if (!string.Equals(upstreamCategory.UpstreamCategoryName, discoveredCategory.UpstreamCategoryName, StringComparison.Ordinal))
             {
                 upstreamCategory.UpstreamCategoryName = discoveredCategory.UpstreamCategoryName;
-                upstreamCategory.LastDiscoveredAtUtc = discoveredAt;
                 categoryUpdated = true;
             }
 
@@ -543,7 +556,12 @@ public sealed class XtreamCategoryMappingService(
             dbContext.UpstreamCategories.AddRange(newUpstreamCategories);
         }
 
-        return new SynchronizedCategoryBatch(requestCategories, newUpstreamCategories.Count, updatedCategoryCount);
+        return new SynchronizedCategoryBatch(
+            requestCategories,
+            newUpstreamCategories.Count,
+            updatedCategoryCount,
+            existingCategoryIdsToTouch,
+            newUpstreamCategories.Count == 0 && existingCategoryCount > 0 && existingCategoryIdsToTouch.Count == existingCategoryCount);
     }
 
     private async Task<IReadOnlyList<EffectiveOutputCategoryMapping>> GetEffectiveOutputCategoriesAsync(
@@ -730,6 +748,34 @@ public sealed class XtreamCategoryMappingService(
             category.CustomCategory?.XtreamForgeCategoryId,
             category.CustomCategory?.DisplayName);
 
+    private static async Task TouchDiscoveredCategoriesAsync(
+        XtreamForgeDbContext dbContext,
+        int sourceId,
+        ContentType contentType,
+        DateTimeOffset discoveredAt,
+        SynchronizedCategoryBatch synchronizedBatch,
+        CancellationToken cancellationToken)
+    {
+        if (synchronizedBatch.TouchAllExistingCategories)
+        {
+            await dbContext.UpstreamCategories
+                .Where(category => category.XtreamSourceId == sourceId && category.ContentType == contentType)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(category => category.LastDiscoveredAtUtc, discoveredAt),
+                    cancellationToken);
+            return;
+        }
+
+        foreach (var categoryIdBatch in synchronizedBatch.ExistingCategoryIdsToTouch.Chunk(500))
+        {
+            await dbContext.UpstreamCategories
+                .Where(category => categoryIdBatch.Contains(category.Id))
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(category => category.LastDiscoveredAtUtc, discoveredAt),
+                    cancellationToken);
+        }
+    }
+
     private static string NormalizeCustomCategoryName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -807,7 +853,9 @@ public sealed class XtreamCategoryMappingService(
     private sealed record SynchronizedCategoryBatch(
         IReadOnlyList<UpstreamCategory> RequestCategories,
         int CreatedCategoryCount,
-        int UpdatedCategoryCount);
+        int UpdatedCategoryCount,
+        IReadOnlyList<int> ExistingCategoryIdsToTouch,
+        bool TouchAllExistingCategories);
 
     private sealed record EffectiveCategoryCandidate(
         string UpstreamCategoryId,

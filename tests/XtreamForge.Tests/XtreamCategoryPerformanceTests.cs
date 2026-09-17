@@ -47,8 +47,8 @@ public sealed class XtreamCategoryPerformanceTests : IClassFixture<XtreamForgeAp
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);
         Assert.Equal(expectedPayload, payload);
-        Assert.InRange(commandCounter.CommandCount, 1, 5);
-        Assert.InRange(commandCounter.WriteCommandCount, 0, 1);
+        Assert.InRange(commandCounter.CommandCount, 1, 6);
+        Assert.InRange(commandCounter.WriteCommandCount, 0, 2);
         Assert.InRange(saveChangesCounter.SaveChangesCount, 0, 1);
     }
 
@@ -89,8 +89,8 @@ public sealed class XtreamCategoryPerformanceTests : IClassFixture<XtreamForgeAp
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);
         Assert.Equal(categoryCount, payload.Count);
-        Assert.InRange(commandCounter.CommandCount, 1, 5);
-        Assert.InRange(commandCounter.WriteCommandCount, 0, 1);
+        Assert.InRange(commandCounter.CommandCount, 1, 6);
+        Assert.InRange(commandCounter.WriteCommandCount, 0, 2);
         Assert.InRange(saveChangesCounter.SaveChangesCount, 0, 1);
     }
 

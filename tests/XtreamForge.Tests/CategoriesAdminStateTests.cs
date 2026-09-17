@@ -189,7 +189,7 @@ public sealed class CategoriesAdminStateTests
 
         row.BeginCustomCategoryCreate();
         row.BeginSave("new", row.NewCustomCategoryName);
-        row.ApplyPersistedMapping(CategoryMappingSelectionOption.Custom, new AdminCustomCategory(42, 1042, "Movies 4K", 1));
+        row.ApplyPersistedMapping("custom:42", new AdminCustomCategory(42, 1042, "Movies 4K", 1));
 
         Assert.False(row.IsCreatingCustomCategory);
         Assert.Equal("custom:42", row.MappingValue);

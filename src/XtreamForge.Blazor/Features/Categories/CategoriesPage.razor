@@ -516,11 +516,7 @@ else
         }
 
         var previousCustomCategoryId = row.Summary.CustomCategoryId;
-        var mappingSelection = Enum.TryParse<CategoryMappingSelectionOption>(response.MappingSelection, true, out var parsedSelection)
-            ? parsedSelection
-            : throw new InvalidOperationException("The backend returned an invalid category mapping selection.");
-
-        row.ApplyPersistedMapping(mappingSelection, response.CustomCategory);
+        row.ApplyPersistedMapping(response.MappingValue, response.CustomCategory);
 
         if (previousCustomCategoryId is int oldCustomCategoryId
             && oldCustomCategoryId != response.CustomCategory?.Id

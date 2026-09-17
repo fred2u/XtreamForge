@@ -145,7 +145,7 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);
-        Assert.Equal("Custom", payload.MappingSelection);
+        Assert.StartsWith("custom:", payload.MappingValue, StringComparison.Ordinal);
         Assert.NotNull(payload.CustomCategory);
         Assert.Equal("Movies 4K", payload.CustomCategory.DisplayName);
 

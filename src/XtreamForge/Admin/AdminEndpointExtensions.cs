@@ -194,7 +194,7 @@ public static class AdminEndpointExtensions
             return TypedResults.Ok(new AdminCategoryMappingMutationResponse(
                 result.SourceId,
                 result.ContentType.ToString(),
-                result.MappingSelection.ToString(),
+                ToMappingValue(result.MappingSelection, result.CustomCategory?.Id),
                 result.CustomCategory is null ? null : ToResponse(result.CustomCategory)));
         }
         catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
@@ -756,6 +756,14 @@ public static class AdminEndpointExtensions
         : providerName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true
             ? "SQLite"
             : "The configured database";
+
+    private static string ToMappingValue(CategoryMappingSelection mappingSelection, int? customCategoryId) => mappingSelection switch
+    {
+        CategoryMappingSelection.Disabled => "disabled",
+        CategoryMappingSelection.Original => "original",
+        CategoryMappingSelection.Custom when customCategoryId is int id => $"custom:{id}",
+        _ => throw new InvalidOperationException("Custom category details are required for custom mappings.")
+    };
 }
 
 public sealed record AdminStatusResponse(
@@ -920,7 +928,7 @@ public sealed record AdminMutationResponse(int SourceId, string ContentType);
 public sealed record AdminCategoryMappingMutationResponse(
     int SourceId,
     string ContentType,
-    string MappingSelection,
+    string MappingValue,
     AdminCustomCategoryResponse? CustomCategory);
 
 public sealed record AdminContentTypeMutationResponse(string ContentType);

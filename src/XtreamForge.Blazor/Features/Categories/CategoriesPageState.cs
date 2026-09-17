@@ -119,10 +119,16 @@ public sealed class CategoryRowState(AdminUpstreamCategory summary)
         SaveState = MutationFeedbackState.Saved;
     }
 
-    public void ApplyPersistedMapping(CategoryMappingSelectionOption mappingSelection, AdminCustomCategory? customCategory)
+    public void ApplyPersistedMapping(string mappingValue, AdminCustomCategory? customCategory)
     {
-        var currentMappingSelection = mappingSelection.ToString();
-        var isManuallyExcluded = mappingSelection == CategoryMappingSelectionOption.Disabled;
+        var currentMappingSelection = mappingValue switch
+        {
+            "disabled" => "Disabled",
+            "original" => "Original",
+            _ when mappingValue.StartsWith("custom:", StringComparison.Ordinal) => "Custom",
+            _ => throw new InvalidOperationException("The backend returned an invalid category mapping value.")
+        };
+        var isManuallyExcluded = string.Equals(mappingValue, "disabled", StringComparison.Ordinal);
 
         Summary = Summary with
         {
@@ -134,13 +140,12 @@ public sealed class CategoryRowState(AdminUpstreamCategory summary)
             CurrentMappingSelection = currentMappingSelection
         };
 
-        CommitMapping(mappingSelection switch
+        if (string.Equals(currentMappingSelection, "Custom", StringComparison.Ordinal) && customCategory is null)
         {
-            CategoryMappingSelectionOption.Disabled => "disabled",
-            CategoryMappingSelectionOption.Original => "original",
-            CategoryMappingSelectionOption.Custom when customCategory is not null => GetCustomMappingValue(customCategory.Id),
-            _ => throw new InvalidOperationException("Custom category details are required for custom mappings.")
-        });
+            throw new InvalidOperationException("Custom category details are required for custom mappings.");
+        }
+
+        CommitMapping(mappingValue);
     }
 
     public void Fail(string message)
@@ -437,13 +442,6 @@ public enum MutationFeedbackState
     Failed = 3
 }
 
-public enum CategoryMappingSelectionOption
-{
-    Disabled = 1,
-    Original = 2,
-    Custom = 3
-}
-
 public sealed record AdminCategoriesPayload(
     IReadOnlyList<AdminSource> Sources,
     int? SelectedSourceId,
@@ -536,7 +534,7 @@ public sealed record AdminCustomCategoryUpdate(string SelectedContentType, strin
 public sealed record AdminCategoryMappingResponse(
     int SourceId,
     string ContentType,
-    string MappingSelection,
+    string MappingValue,
     AdminCustomCategory? CustomCategory);
 
 public sealed record AdminSourceDiscoveryCreate(

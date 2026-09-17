@@ -122,7 +122,7 @@
                             <td>
                                 <div class="mapping-cell">
                                     <div class="mapping-control-row">
-                                        <FluentSelect @key="context.Summary.Id" Class="mapping-select" TOption="string" @bind-Value="context.MappingValue" @bind-Value:after="() => OnMappingChanged.InvokeAsync(new CategoryMappingChangeRequest(context.Summary.Id, context.MappingValue))" Disabled="@context.IsBusy" AriaLabel="Category mapping">
+                                        <FluentSelect @key="(context.Summary.Id, CustomCategoriesVersion)" Class="mapping-select" TOption="string" @bind-Value="context.MappingValue" @bind-Value:after="() => OnMappingChanged.InvokeAsync(new CategoryMappingChangeRequest(context.Summary.Id, context.MappingValue))" Disabled="@context.IsBusy" AriaLabel="Category mapping">
                                             <FluentOption Value="disabled">Disabled</FluentOption>
                                             <FluentOption Value="original">Original</FluentOption>
                                             <FluentOption Value="new">New category</FluentOption>
@@ -218,6 +218,9 @@
 
     [Parameter]
     public required IReadOnlyList<CustomCategoryRowState> CustomCategories { get; set; }
+
+    [Parameter]
+    public required string CustomCategoriesVersion { get; set; }
 
     [Parameter]
     public string? Message { get; set; }

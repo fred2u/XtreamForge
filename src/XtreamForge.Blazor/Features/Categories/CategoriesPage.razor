@@ -52,6 +52,7 @@ else
                     Rows="FilteredCategoryRows"
                     TotalCount="_categoryRows.Count"
                     CustomCategories="_customCategoryRows"
+                    CustomCategoriesVersion="CustomCategoriesVersion"
                     Message="@_categoryMessage"
                     ErrorMessage="@_categoryErrorMessage"
                     OnSourceChanged="OnSourceChangedAsync"
@@ -368,6 +369,7 @@ else
     private string? _customCategoryDeleteErrorMessage;
 
     private IReadOnlyList<CategoryRowState> FilteredCategoryRows => CategoriesPageState.FilterCategoryRows(_categoryRows, _searchText, _statusFilter);
+    private string CustomCategoriesVersion => string.Join('|', _customCategoryRows.Select(category => $"{category.Summary.Id}:{category.Summary.DisplayName}"));
 
     private string ActiveTabId
     {

@@ -11,6 +11,7 @@ using System.Text.RegularExpressions;
 using XtreamForge.Categories;
 using XtreamForge.Data;
 using XtreamForge.Items;
+using XtreamForge.Source;
 using XtreamForge.Xtream;
 
 namespace XtreamForge.Tests;

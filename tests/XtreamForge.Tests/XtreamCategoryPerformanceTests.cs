@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using XtreamForge.Categories;
 using XtreamForge.Data;
+using XtreamForge.Source;
 
 namespace XtreamForge.Tests;
 

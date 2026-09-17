@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Diagnostics;
 using XtreamForge.Xtream;
 using XtreamForge.Categories;
+using XtreamForge.Source;
 using XtreamForge.ServiceDefaults;
 
 namespace XtreamForge.Xtream;

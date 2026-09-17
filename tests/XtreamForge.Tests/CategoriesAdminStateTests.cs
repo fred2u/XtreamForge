@@ -200,6 +200,39 @@ public sealed class CategoriesAdminStateTests
     }
 
     [Fact]
+    public void CategoryRowState_RefreshedCustomSummary_CommitsCreatedCategorySelection()
+    {
+        var refreshedSummary = new AdminUpstreamCategory(
+            4,
+            "50",
+            "|FR| 4K UHD",
+            false,
+            42,
+            "Movies 4K",
+            500,
+            "|FR| 4K UHD",
+            "Include",
+            "Include",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            true,
+            "Custom");
+
+        var refreshedRow = new CategoryRowState(refreshedSummary);
+        refreshedRow.CommitMapping(refreshedRow.MappingValue);
+
+        Assert.False(refreshedRow.IsCreatingCustomCategory);
+        Assert.Equal("custom:42", refreshedRow.MappingValue);
+        Assert.Equal("custom:42", refreshedRow.SavedMappingValue);
+        Assert.Equal(42, refreshedRow.Summary.CustomCategoryId);
+        Assert.Equal("Movies 4K", refreshedRow.Summary.CustomCategoryName);
+    }
+
+    [Fact]
     public void FormatEffectiveStatus_PrefersManualDisabledThenRuleDisabled()
     {
         var manualSummary = new AdminUpstreamCategory(1, "10", "Manual", true, null, null, 100, "Manual", "Exclude", "Include", null, null, null, null, null, null, false, "Disabled");

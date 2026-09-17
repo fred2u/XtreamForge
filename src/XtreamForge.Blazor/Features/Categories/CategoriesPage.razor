@@ -696,6 +696,8 @@ else
 
         try
         {
+            var sourceCategoryRecordId = row.Summary.Id;
+            var isCreateAndMap = string.Equals(mappingValue, "new", StringComparison.Ordinal);
             row.BeginSave(mappingValue, newCustomCategoryName);
 
             var request = mappingValue switch
@@ -709,8 +711,14 @@ else
                 _ => throw new InvalidOperationException("Invalid category mapping selection.")
             };
 
-            var response = await CategoriesClient.UpdateCategoryMappingAsync(row.Summary.Id, request);
-            ApplyCategoryMappingResponse(row.Summary.Id, response);
+            var response = await CategoriesClient.UpdateCategoryMappingAsync(sourceCategoryRecordId, request);
+            if (isCreateAndMap)
+            {
+                await RefreshCategoriesViewAsync(sourceCategoryRecordId, "Mapping saved.");
+                return;
+            }
+
+            ApplyCategoryMappingResponse(sourceCategoryRecordId, response);
             _categoryMessage = "Mapping saved.";
         }
         catch (Exception exception)

@@ -7,7 +7,7 @@ using XtreamForge.Source;
 
 namespace XtreamForge.Tests;
 
-public sealed class XtreamCategoryMappingServiceTests
+public sealed class CategoryServiceTests
 {
     [Fact]
     public async Task SyncCategoriesAsync_CreatesStableSourceAndDedicatedMappings()
@@ -17,9 +17,9 @@ public sealed class XtreamCategoryMappingServiceTests
         await using var serviceProvider = CreateServiceProvider(connection);
         await EnsureCreatedAsync(serviceProvider);
 
-        var service = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var service = serviceProvider.GetRequiredService<CategoryService>();
 
-        var firstResult = await service.SyncCategoriesAsync(
+        var firstResult = await service.RewriteCategoriesAsync(
             new XtreamSourceDescriptor("https", "example.com", 443),
             ContentType.Vod,
             [
@@ -27,7 +27,7 @@ public sealed class XtreamCategoryMappingServiceTests
                 new DiscoveredCategory("57", "Beta")
             ]);
 
-        var secondResult = await service.SyncCategoriesAsync(
+        var secondResult = await service.RewriteCategoriesAsync(
             new XtreamSourceDescriptor("https", "example.com", 443),
             ContentType.Vod,
             [
@@ -63,9 +63,9 @@ public sealed class XtreamCategoryMappingServiceTests
         await using var serviceProvider = CreateServiceProvider(connection);
         await EnsureCreatedAsync(serviceProvider);
 
-        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
-        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-a.example", 443), ContentType.Vod, [new DiscoveredCategory("10", "|FR| 4K UHD")]);
-        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-b.example", 443), ContentType.Vod, [new DiscoveredCategory("500", "|FR| UHD")]);
+        var mappingService = serviceProvider.GetRequiredService<CategoryService>();
+        await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "source-a.example", 443), ContentType.Vod, [new DiscoveredCategory("10", "|FR| 4K UHD")]);
+        await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "source-b.example", 443), ContentType.Vod, [new DiscoveredCategory("500", "|FR| UHD")]);
 
         var sourceAId = await GetSourceIdAsync(serviceProvider, "source-a.example");
         var sourceBId = await GetSourceIdAsync(serviceProvider, "source-b.example");
@@ -101,8 +101,8 @@ public sealed class XtreamCategoryMappingServiceTests
         Assert.Equal(1, await dbContext.CustomCategories.CountAsync());
         Assert.All(persistedCategories, category => Assert.Equal(customCategory.Id, category.CustomCategoryId));
 
-        var sourceAResult = await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-a.example", 443), ContentType.Vod, [new DiscoveredCategory("10", "|FR| 4K UHD")]);
-        var sourceBResult = await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-b.example", 443), ContentType.Vod, [new DiscoveredCategory("500", "|FR| UHD")]);
+        var sourceAResult = await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "source-a.example", 443), ContentType.Vod, [new DiscoveredCategory("10", "|FR| 4K UHD")]);
+        var sourceBResult = await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "source-b.example", 443), ContentType.Vod, [new DiscoveredCategory("500", "|FR| UHD")]);
 
         Assert.Equal("Movies 4K", Assert.Single(sourceAResult).CategoryName);
         Assert.Equal("Movies 4K", Assert.Single(sourceBResult).CategoryName);
@@ -118,7 +118,7 @@ public sealed class XtreamCategoryMappingServiceTests
         await using var serviceProvider = CreateServiceProvider(connection);
         await EnsureCreatedAsync(serviceProvider);
 
-        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var mappingService = serviceProvider.GetRequiredService<CategoryService>();
         await SeedVodCategoriesAsync(mappingService);
         var sourceId = await GetSourceIdAsync(serviceProvider, "example.com");
         var category = await GetUpstreamCategoryAsync(serviceProvider, sourceId, "42");
@@ -168,7 +168,7 @@ public sealed class XtreamCategoryMappingServiceTests
         await using var serviceProvider = CreateServiceProvider(connection);
         await EnsureCreatedAsync(serviceProvider);
 
-        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var mappingService = serviceProvider.GetRequiredService<CategoryService>();
         await SeedVodCategoriesAsync(mappingService);
         var sourceId = await GetSourceIdAsync(serviceProvider, "example.com");
         var category = await GetUpstreamCategoryAsync(serviceProvider, sourceId, "42");
@@ -206,9 +206,9 @@ public sealed class XtreamCategoryMappingServiceTests
         await using var serviceProvider = CreateServiceProvider(connection);
         await EnsureCreatedAsync(serviceProvider);
 
-        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var mappingService = serviceProvider.GetRequiredService<CategoryService>();
         var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
-        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Vod, [new DiscoveredCategory("42", "|FR| DOCUMENTAIRE SPORT")]);
+        await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Vod, [new DiscoveredCategory("42", "|FR| DOCUMENTAIRE SPORT")]);
         var sourceId = await GetSourceIdAsync(serviceProvider, "example.com");
 
         await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Include, CategoryRuleOperator.Contains, "DOCUMENTAIRE", false, true));
@@ -233,9 +233,9 @@ public sealed class XtreamCategoryMappingServiceTests
         await using var serviceProvider = CreateServiceProvider(connection);
         await EnsureCreatedAsync(serviceProvider);
 
-        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
-        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Vod, [new DiscoveredCategory("10", "VOD Sport")]);
-        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Series, [new DiscoveredCategory("20", "Series Drama")]);
+        var mappingService = serviceProvider.GetRequiredService<CategoryService>();
+        await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Vod, [new DiscoveredCategory("10", "VOD Sport")]);
+        await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Series, [new DiscoveredCategory("20", "Series Drama")]);
 
         var sourceId = await GetSourceIdAsync(serviceProvider, "example.com");
         var vodCategory = await GetUpstreamCategoryAsync(serviceProvider, sourceId, "10");
@@ -269,9 +269,9 @@ public sealed class XtreamCategoryMappingServiceTests
         await using var serviceProvider = CreateServiceProvider(connection);
         await EnsureCreatedAsync(serviceProvider);
 
-        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var mappingService = serviceProvider.GetRequiredService<CategoryService>();
         var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
-        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Vod, [new DiscoveredCategory("42", "DOCUMENTAIRE")]);
+        await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "example.com", 443), ContentType.Vod, [new DiscoveredCategory("42", "DOCUMENTAIRE")]);
         var sourceId = await GetSourceIdAsync(serviceProvider, "example.com");
         var category = await GetUpstreamCategoryAsync(serviceProvider, sourceId, "42");
 
@@ -295,9 +295,9 @@ public sealed class XtreamCategoryMappingServiceTests
         await using var serviceProvider = CreateServiceProvider(connection);
         await EnsureCreatedAsync(serviceProvider);
 
-        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var mappingService = serviceProvider.GetRequiredService<CategoryService>();
         var ruleService = serviceProvider.GetRequiredService<CategoryRuleService>();
-        await mappingService.SyncCategoriesAsync(
+        await mappingService.RewriteCategoriesAsync(
             new XtreamSourceDescriptor("https", "example.com", 443),
             ContentType.Vod,
             [
@@ -315,7 +315,7 @@ public sealed class XtreamCategoryMappingServiceTests
         await mappingService.SaveCategoryConfigurationAsync(new CategoryConfigurationCommand(category30.Id, sourceId, ContentType.Vod, CategoryMappingSelection.Custom, customCategory.Id, null));
         await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
 
-        var result = await mappingService.SyncCategoriesAsync(
+        var result = await mappingService.RewriteCategoriesAsync(
             new XtreamSourceDescriptor("https", "example.com", 443),
             ContentType.Vod,
             [
@@ -340,9 +340,9 @@ public sealed class XtreamCategoryMappingServiceTests
         await using var serviceProvider = CreateServiceProvider(connection);
         await EnsureCreatedAsync(serviceProvider);
 
-        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
-        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-a.example", 443), ContentType.Vod, [new DiscoveredCategory("10", "One")]);
-        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-b.example", 443), ContentType.Vod, [new DiscoveredCategory("11", "Two")]);
+        var mappingService = serviceProvider.GetRequiredService<CategoryService>();
+        await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "source-a.example", 443), ContentType.Vod, [new DiscoveredCategory("10", "One")]);
+        await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "source-b.example", 443), ContentType.Vod, [new DiscoveredCategory("11", "Two")]);
 
         var sourceAId = await GetSourceIdAsync(serviceProvider, "source-a.example");
         var sourceBId = await GetSourceIdAsync(serviceProvider, "source-b.example");
@@ -355,8 +355,8 @@ public sealed class XtreamCategoryMappingServiceTests
 
         await mappingService.UpdateCustomCategoryAsync(new CustomCategoryUpdateCommand(customCategory.Id, ContentType.Vod, "Renamed Shared"));
 
-        var sourceAResult = await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-a.example", 443), ContentType.Vod, [new DiscoveredCategory("10", "One")]);
-        var sourceBResult = await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "source-b.example", 443), ContentType.Vod, [new DiscoveredCategory("11", "Two")]);
+        var sourceAResult = await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "source-a.example", 443), ContentType.Vod, [new DiscoveredCategory("10", "One")]);
+        var sourceBResult = await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "source-b.example", 443), ContentType.Vod, [new DiscoveredCategory("11", "Two")]);
         Assert.Equal("Renamed Shared", Assert.Single(sourceAResult).CategoryName);
         Assert.Equal("Renamed Shared", Assert.Single(sourceBResult).CategoryName);
 
@@ -381,7 +381,7 @@ public sealed class XtreamCategoryMappingServiceTests
         await using var serviceProvider = CreateServiceProvider(connection);
         await EnsureCreatedAsync(serviceProvider);
 
-        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var mappingService = serviceProvider.GetRequiredService<CategoryService>();
 
         var created = await mappingService.CreateCustomCategoryAsync(new CustomCategoryCreateCommand(ContentType.Vod, "Movies 4K"));
         var reused = await mappingService.CreateCustomCategoryAsync(new CustomCategoryCreateCommand(ContentType.Vod, "  movies 4k  "));
@@ -403,9 +403,9 @@ public sealed class XtreamCategoryMappingServiceTests
         await using var serviceProvider = CreateServiceProvider(connection);
         await EnsureCreatedAsync(serviceProvider);
 
-        var mappingService = serviceProvider.GetRequiredService<XtreamCategoryMappingService>();
-        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "vod.example", 443), ContentType.Vod, [new DiscoveredCategory("10", "Movies")]);
-        await mappingService.SyncCategoriesAsync(new XtreamSourceDescriptor("https", "series.example", 443), ContentType.Series, [new DiscoveredCategory("20", "Series")]);
+        var mappingService = serviceProvider.GetRequiredService<CategoryService>();
+        await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "vod.example", 443), ContentType.Vod, [new DiscoveredCategory("10", "Movies")]);
+        await mappingService.RewriteCategoriesAsync(new XtreamSourceDescriptor("https", "series.example", 443), ContentType.Series, [new DiscoveredCategory("20", "Series")]);
 
         var vodSourceId = await GetSourceIdAsync(serviceProvider, "vod.example");
         var seriesSourceId = await GetSourceIdAsync(serviceProvider, "series.example");
@@ -426,6 +426,7 @@ public sealed class XtreamCategoryMappingServiceTests
         services.AddDbContextFactory<XtreamForgeDbContext>(options => options.UseSqlite(connection));
         services.AddScoped(static provider => provider.GetRequiredService<IDbContextFactory<XtreamForgeDbContext>>().CreateDbContext());
         services.AddSingleton<SourceService>();
+        services.AddScoped<CategoryService>();
         services.AddScoped<CategoryRuleService>();
         services.AddScoped<XtreamCategoryMappingService>();
         return services.BuildServiceProvider();
@@ -438,9 +439,9 @@ public sealed class XtreamCategoryMappingServiceTests
         await dbContext.Database.EnsureCreatedAsync();
     }
 
-    private static async Task SeedVodCategoriesAsync(XtreamCategoryMappingService mappingService)
+    private static async Task SeedVodCategoriesAsync(CategoryService mappingService)
     {
-        await mappingService.SyncCategoriesAsync(
+        await mappingService.RewriteCategoriesAsync(
             new XtreamSourceDescriptor("https", "example.com", 443),
             ContentType.Vod,
             [

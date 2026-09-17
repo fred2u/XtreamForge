@@ -7,7 +7,7 @@ namespace XtreamForge.Xtream;
 
 public sealed class XtreamCategoryProxyService(
     XtreamUpstreamClient upstreamClient,
-    XtreamCategoryMappingService categoryMappingService,
+    CategoryService categoryService,
     ILogger<XtreamCategoryProxyService> logger)
 {
     public async Task<IResult?> TryHandleAsync(
@@ -34,7 +34,7 @@ public sealed class XtreamCategoryProxyService(
 
             var upstreamCategories = await upstreamClient.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(responseMessage.Content, context.RequestAborted) ?? [];
 
-            var rewrittenCategories = await categoryMappingService.SyncCategoriesAsync(
+            var rewrittenCategories = await categoryService.RewriteCategoriesAsync(
                 new XtreamSourceDescriptor(destination.Protocol, destination.Host, destination.Port),
                 contentType,
                 [.. upstreamCategories

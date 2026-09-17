@@ -475,7 +475,9 @@ public sealed class XtreamCategoryMappingService(
             if (!upstreamCategories.TryGetValue(discoveredCategory.UpstreamCategoryId, out var upstreamCategory))
             {
                 nextXtreamForgeCategoryId ??= await GetNextXtreamForgeCategoryIdAsync(dbContext, contentType, cancellationToken);
-                var outputCategory = CreateOutputCategory(source, contentType, nextXtreamForgeCategoryId.Value++, ++nextSortOrder, discoveredCategory.UpstreamCategoryName, discoveredAt);
+                var allocatedCategoryId = nextXtreamForgeCategoryId.Value;
+                nextXtreamForgeCategoryId = allocatedCategoryId + 1;
+                var outputCategory = CreateOutputCategory(source, contentType, allocatedCategoryId, ++nextSortOrder, discoveredCategory.UpstreamCategoryName, discoveredAt);
                 newOutputCategories.Add(outputCategory);
 
                 upstreamCategory = new UpstreamCategory
@@ -509,7 +511,9 @@ public sealed class XtreamCategoryMappingService(
             if (upstreamCategory.DedicatedOutputCategory is null)
             {
                 nextXtreamForgeCategoryId ??= await GetNextXtreamForgeCategoryIdAsync(dbContext, contentType, cancellationToken);
-                var outputCategory = CreateOutputCategory(source, contentType, nextXtreamForgeCategoryId.Value++, ++nextSortOrder, discoveredCategory.UpstreamCategoryName, discoveredAt);
+                var allocatedCategoryId = nextXtreamForgeCategoryId.Value;
+                nextXtreamForgeCategoryId = allocatedCategoryId + 1;
+                var outputCategory = CreateOutputCategory(source, contentType, allocatedCategoryId, ++nextSortOrder, discoveredCategory.UpstreamCategoryName, discoveredAt);
                 newOutputCategories.Add(outputCategory);
                 upstreamCategory.DedicatedOutputCategory = outputCategory;
                 categoryUpdated = true;
@@ -797,24 +801,24 @@ public sealed class XtreamCategoryMappingService(
         exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }
         or SqliteException { SqliteExtendedErrorCode: 2067 }
         or SqliteException { SqliteErrorCode: 19 };
+
+    private sealed record SynchronizedCategoryBatch(
+        IReadOnlyList<UpstreamCategory> RequestCategories,
+        int CreatedCategoryCount,
+        int UpdatedCategoryCount);
+
+    private sealed record EffectiveCategoryCandidate(
+        string UpstreamCategoryId,
+        string UpstreamCategoryName,
+        bool IsExcluded,
+        int DedicatedOutputCategoryId,
+        int DedicatedXtreamForgeCategoryId,
+        string DedicatedDisplayName,
+        int DedicatedSortOrder,
+        int? CustomCategoryId,
+        int? CustomXtreamForgeCategoryId,
+        string? CustomDisplayName);
 }
-
-file sealed record SynchronizedCategoryBatch(
-    IReadOnlyList<UpstreamCategory> RequestCategories,
-    int CreatedCategoryCount,
-    int UpdatedCategoryCount);
-
-file sealed record EffectiveCategoryCandidate(
-    string UpstreamCategoryId,
-    string UpstreamCategoryName,
-    bool IsExcluded,
-    int DedicatedOutputCategoryId,
-    int DedicatedXtreamForgeCategoryId,
-    string DedicatedDisplayName,
-    int DedicatedSortOrder,
-    int? CustomCategoryId,
-    int? CustomXtreamForgeCategoryId,
-    string? CustomDisplayName);
 
 public sealed record XtreamSourceDescriptor(string Protocol, string Host, int Port);
 

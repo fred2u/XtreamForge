@@ -25,10 +25,11 @@ public sealed class XtreamCategoryProxyService(
 
         try
         {
+            var contentType = classification.ContentType.Value;
             using var requestMessage = XtreamProxyHttpRequestFactory.Create(destination.TargetUri, context.Request);
             using var requestActivity = ActivitySource.StartActivity("Xtream.Categories.Request", ActivityKind.Internal);
             requestActivity?.SetTag("xtream.action", classification.Action);
-            requestActivity?.SetTag("xtream.content_type", classification.ContentType?.ToString());
+            requestActivity?.SetTag("xtream.content_type", contentType.ToString());
 
             using var responseMessage = await SendUpstreamRequestAsync(upstreamClient, requestMessage, context.RequestAborted);
             if (!responseMessage.IsSuccessStatusCode)
@@ -42,7 +43,7 @@ public sealed class XtreamCategoryProxyService(
 
             var rewrittenCategories = await categoryMappingService.SyncCategoriesAsync(
                 new XtreamSourceDescriptor(destination.Protocol, destination.Host, destination.Port),
-                classification.ContentType.Value,
+                contentType,
                 upstreamCategories
                     .Select(category => new DiscoveredCategory(category.CategoryId ?? string.Empty, category.CategoryName ?? string.Empty))
                     .ToList(),

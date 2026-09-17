@@ -149,7 +149,7 @@ public sealed class XtreamCategoryPerformanceTests : IClassFixture<XtreamForgeAp
 
         for (var index = 1; index <= 164; index++)
         {
-            var prefix = index % 3 switch
+            var prefix = (index % 3) switch
             {
                 1 => "SPORT",
                 2 => "XXX",

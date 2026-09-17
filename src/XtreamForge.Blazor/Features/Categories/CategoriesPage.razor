@@ -507,11 +507,19 @@ else
     private void ApplyCategoryMappingResponse(int upstreamCategoryRecordId, AdminCategoryMappingResponse response)
     {
         var row = GetCategoryRow(upstreamCategoryRecordId);
+        var previousCustomCategoryId = row.Summary.CustomCategoryId;
         var mappingSelection = Enum.TryParse<CategoryMappingSelectionOption>(response.MappingSelection, true, out var parsedSelection)
             ? parsedSelection
             : throw new InvalidOperationException("The backend returned an invalid category mapping selection.");
 
         row.ApplyPersistedMapping(mappingSelection, response.CustomCategory);
+
+        if (previousCustomCategoryId is int oldCustomCategoryId
+            && oldCustomCategoryId != response.CustomCategory?.Id
+            && _customCategoryRows.SingleOrDefault(customCategory => customCategory.Summary.Id == oldCustomCategoryId) is { } previousCustomCategory)
+        {
+            previousCustomCategory.SetUsageCount(previousCustomCategory.UsageCount - 1);
+        }
 
         if (response.CustomCategory is null)
         {
@@ -676,7 +684,7 @@ else
 
             var response = await CategoriesClient.UpdateCategoryMappingAsync(row.Summary.Id, request);
             ApplyCategoryMappingResponse(row.Summary.Id, response);
-            await RefreshCategoriesViewAsync(message: "Mapping saved.");
+            _categoryMessage = "Mapping saved.";
         }
         catch (Exception exception)
         {

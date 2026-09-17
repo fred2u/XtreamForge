@@ -34,9 +34,8 @@ public sealed class SourceServiceTests
 
         Assert.Equal(sourceId, result.SourceId);
         Assert.True(await sourceService.SourceExistsAsync(result.SourceId));
-        Assert.Collection(
-            sources,
-            source => Assert.Equal((result.SourceId, "https", "example.com", 443), (source.Id, source.Protocol, source.Host, source.Port)));
+        var source = Assert.Single(sources);
+        Assert.Equal((result.SourceId, "https", "example.com", 443), (source.Id, source.Protocol, source.Host, source.Port));
     }
 
     [Fact]
@@ -144,11 +143,11 @@ public sealed class SourceServiceTests
             ]);
 
         var categories = await sourceService.GetSourceCategoriesAsync(
-            descriptor,
+            1,
             ContentType.Vod,
             ["57", "81"]);
 
-        Assert.Equal(["57", "81"], categories.Select(category => category.UpstreamCategoryId).ToArray());
+        Assert.Equal(["57", "81"], [.. categories.Select(category => category.UpstreamCategoryId)]);
     }
 
     private static ServiceProvider CreateServiceProvider(

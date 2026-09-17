@@ -1,9 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
-using System.Diagnostics;
 using XtreamForge.Data;
-using XtreamForge.Categories;
 using XtreamForge.Source;
 
 namespace XtreamForge.Categories;
@@ -13,7 +11,6 @@ public sealed class XtreamCategoryMappingService(
     SourceService sourceService,
     CategoryRuleEvaluator ruleEvaluator)
 {
-    private static readonly ActivitySource ActivitySource = new("XtreamForge");
     private const int MaxSyncAttempts = 3;
     public const int MaxCustomCategoryNameLength = 255;
 
@@ -33,38 +30,16 @@ public sealed class XtreamCategoryMappingService(
             cancellationToken);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        IReadOnlyList<CategoryRuleDefinition> rules;
-        using (var activity = ActivitySource.StartActivity("Xtream.Categories.Rules", ActivityKind.Internal))
-        {
-            activity?.SetTag("xtream.content_type", contentType.ToString());
-            rules = await LoadRuleDefinitionsAsync(dbContext, synchronizedCategories.SourceId, contentType, cancellationToken);
-            activity?.SetTag("xtream.rules.count", rules.Count);
-        }
+
+        var rules = await LoadRuleDefinitionsAsync(dbContext, synchronizedCategories.SourceId, contentType, cancellationToken);
 
         var effectiveCategoryInputs = synchronizedCategories.Categories
             .Select(CreateEffectiveCategoryCandidate)
             .ToList();
 
-        using (var activity = ActivitySource.StartActivity("Xtream.Categories.Mappings", ActivityKind.Internal))
-        {
-            activity?.SetTag("xtream.content_type", contentType.ToString());
-            activity?.SetTag("xtream.categories.request_count", effectiveCategoryInputs.Count);
-            activity?.SetTag(
-                "xtream.categories.custom_mapping_count",
-                effectiveCategoryInputs.Count(category => category.CustomCategoryId is not null));
-        }
+        var effectiveCategories = BuildEffectiveOutputCategories(effectiveCategoryInputs, rules);
 
-        IReadOnlyList<EffectiveOutputCategoryMapping> effectiveCategories;
-        using (var activity = ActivitySource.StartActivity("Xtream.Categories.Evaluate", ActivityKind.Internal))
-        {
-            activity?.SetTag("xtream.content_type", contentType.ToString());
-            effectiveCategories = BuildEffectiveOutputCategories(effectiveCategoryInputs, rules);
-            activity?.SetTag("xtream.categories.output_count", effectiveCategories.Count);
-        }
-
-        return effectiveCategories
-            .Select(category => new RewrittenCategory(category.XtreamForgeCategoryId.ToString(), category.DisplayName, category.IncludedUpstreamCategoryIds))
-            .ToList();
+        return [.. effectiveCategories.Select(category => new RewrittenCategory(category.XtreamForgeCategoryId.ToString(), category.DisplayName, category.IncludedUpstreamCategoryIds))];
     }
 
     public async Task<CategoryAdministrationView> GetAdministrationViewAsync(
@@ -324,15 +299,6 @@ public sealed class XtreamCategoryMappingService(
     }
 
     public async Task<IReadOnlyList<EffectiveOutputCategoryMapping>> GetEffectiveOutputCategoryMappingsAsync(
-        int sourceId,
-        ContentType contentType,
-        CancellationToken cancellationToken = default)
-    {
-        var upstreamCategories = await sourceService.GetSourceCategoriesAsync(sourceId, contentType, cancellationToken: cancellationToken);
-        return await GetEffectiveOutputCategoriesAsync(sourceId, contentType, upstreamCategories, cancellationToken);
-    }
-
-    public async Task<IReadOnlyList<EffectiveOutputCategoryMapping>> GetEffectiveOutputCategoryMappingsAsync(
         XtreamSourceDescriptor sourceDescriptor,
         ContentType contentType,
         CancellationToken cancellationToken = default)
@@ -345,20 +311,19 @@ public sealed class XtreamCategoryMappingService(
             return [];
         }
 
-        var upstreamCategories = await sourceService.GetSourceCategoriesAsync(resolvedSourceId, contentType, cancellationToken: cancellationToken);
-        return await GetEffectiveOutputCategoriesAsync(resolvedSourceId, contentType, upstreamCategories, cancellationToken);
+        return await GetEffectiveOutputCategoryMappingsAsync(resolvedSourceId, contentType, cancellationToken);
     }
 
-    public async Task<bool> HasDiscoveredCategoriesAsync(
-        XtreamSourceDescriptor sourceDescriptor,
+    public async Task<IReadOnlyList<EffectiveOutputCategoryMapping>> GetEffectiveOutputCategoryMappingsAsync(
+        int sourceId,
         ContentType contentType,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(sourceDescriptor);
-        return await sourceService.HasDiscoveredCategoriesAsync(sourceDescriptor, contentType, cancellationToken);
+        var upstreamCategories = await sourceService.GetSourceCategoriesAsync(sourceId, contentType, cancellationToken: cancellationToken);
+        return await GetEffectiveOutputCategoriesAsync(sourceId, contentType, upstreamCategories, cancellationToken);
     }
 
-    private async Task<IReadOnlyList<EffectiveOutputCategoryMapping>> GetEffectiveOutputCategoriesAsync(
+    private async Task<List<EffectiveOutputCategoryMapping>> GetEffectiveOutputCategoriesAsync(
         int sourceId,
         ContentType contentType,
         IReadOnlyList<SourceCategorySnapshot> upstreamCategories,
@@ -366,13 +331,14 @@ public sealed class XtreamCategoryMappingService(
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var rules = await LoadRuleDefinitionsAsync(dbContext, sourceId, contentType, cancellationToken);
-        return BuildEffectiveOutputCategories(upstreamCategories.Select(CreateEffectiveCategoryCandidate).ToList(), rules);
+        return BuildEffectiveOutputCategories([.. upstreamCategories.Select(CreateEffectiveCategoryCandidate)], rules);
     }
 
-    private IReadOnlyList<EffectiveOutputCategoryMapping> BuildEffectiveOutputCategories(
-        IReadOnlyList<EffectiveCategoryCandidate> upstreamCategories,
-        IReadOnlyList<CategoryRuleDefinition> rules) =>
-        upstreamCategories
+    private List<EffectiveOutputCategoryMapping> BuildEffectiveOutputCategories(
+        IReadOnlyList<EffectiveCategoryCandidate> effectiveCategoryCandidates,
+        IReadOnlyList<CategoryRuleDefinition> rules)
+    {
+        return [.. effectiveCategoryCandidates
             .Select(category => new
             {
                 Category = category,
@@ -396,8 +362,8 @@ public sealed class XtreamCategoryMappingService(
                     group.Select(entry => entry.Category.UpstreamCategoryId).Distinct(StringComparer.Ordinal).ToList());
             })
             .OrderBy(category => category.SortOrder)
-            .ThenBy(category => category.XtreamForgeCategoryId)
-            .ToList();
+            .ThenBy(category => category.XtreamForgeCategoryId)];
+    }
 
     private EffectiveCategoryState EvaluateEffectiveState(
         bool isManuallyExcluded,
@@ -418,7 +384,7 @@ public sealed class XtreamCategoryMappingService(
             ruleResult.MatchedRuleCaseSensitive);
     }
 
-    private async Task<CustomCategory> ResolveCustomCategoryAsync(
+    private async static Task<CustomCategory> ResolveCustomCategoryAsync(
         XtreamForgeDbContext dbContext,
         ContentType contentType,
         int? customCategoryId,
@@ -461,7 +427,7 @@ public sealed class XtreamCategoryMappingService(
         return customCategory;
     }
 
-    private async Task<int> GetNextXtreamForgeCategoryIdAsync(
+    private async static Task<int> GetNextXtreamForgeCategoryIdAsync(
         XtreamForgeDbContext dbContext,
         ContentType contentType,
         CancellationToken cancellationToken)
@@ -507,7 +473,7 @@ public sealed class XtreamCategoryMappingService(
         return trimmedName.ToUpperInvariant();
     }
 
-    private static async Task<IReadOnlyList<CategoryRuleDefinition>> LoadRuleDefinitionsAsync(
+    private static async Task<List<CategoryRuleDefinition>> LoadRuleDefinitionsAsync(
         XtreamForgeDbContext dbContext,
         int sourceId,
         ContentType contentType,

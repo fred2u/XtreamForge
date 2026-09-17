@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -9,10 +8,9 @@ namespace XtreamForge.Source;
 
 public sealed class SourceService(IDbContextFactory<XtreamForgeDbContext> dbContextFactory)
 {
-    private static readonly ActivitySource ActivitySource = new("XtreamForge");
     private const int MaxSyncAttempts = 3;
 
-    public async Task<IReadOnlyList<XtreamSourceSummary>> GetSourcesAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<XtreamSourceSummary>> GetSourcesAsync(CancellationToken cancellationToken)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         return await dbContext.XtreamSources
@@ -23,9 +21,7 @@ public sealed class SourceService(IDbContextFactory<XtreamForgeDbContext> dbCont
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<int?> GetSourceIdAsync(
-        XtreamSourceDescriptor sourceDescriptor,
-        CancellationToken cancellationToken = default)
+    public async Task<int?> GetSourceIdAsync(XtreamSourceDescriptor sourceDescriptor, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sourceDescriptor);
 
@@ -39,205 +35,12 @@ public sealed class SourceService(IDbContextFactory<XtreamForgeDbContext> dbCont
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<bool> SourceExistsAsync(int sourceId, CancellationToken cancellationToken = default)
+    public async Task<bool> SourceExistsAsync(int sourceId, CancellationToken cancellationToken)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         return await dbContext.XtreamSources
             .AsNoTracking()
             .AnyAsync(source => source.Id == sourceId, cancellationToken);
-    }
-
-    public async Task<bool> HasDiscoveredCategoriesAsync(
-        XtreamSourceDescriptor sourceDescriptor,
-        ContentType contentType,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(sourceDescriptor);
-
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        return await dbContext.UpstreamCategories
-            .AsNoTracking()
-            .AnyAsync(category => category.XtreamSource.Protocol == sourceDescriptor.Protocol
-                && category.XtreamSource.Host == sourceDescriptor.Host
-                && category.XtreamSource.Port == sourceDescriptor.Port
-                && category.ContentType == contentType,
-                cancellationToken);
-    }
-
-    public async Task<SourceCategorySynchronizationResult> SynchronizeCategoriesAsync(
-        XtreamSourceDescriptor sourceDescriptor,
-        ContentType contentType,
-        IReadOnlyList<DiscoveredCategory> discoveredCategories,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(sourceDescriptor);
-        ArgumentNullException.ThrowIfNull(discoveredCategories);
-
-        var normalizedCategories = NormalizeDiscoveredCategories(discoveredCategories);
-
-        for (var attempt = 1; attempt <= MaxSyncAttempts; attempt++)
-        {
-            var discoveredAt = DateTimeOffset.UtcNow;
-
-            await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-
-            try
-            {
-                XtreamSource source;
-                using (var activity = ActivitySource.StartActivity("Xtream.Categories.SourceLookup", ActivityKind.Internal))
-                {
-                    activity?.SetTag("xtream.content_type", contentType.ToString());
-                    source = await GetOrCreateSourceAsync(dbContext, sourceDescriptor, discoveredAt, cancellationToken);
-                    activity?.SetTag("xtream.source.id", source.Id);
-                }
-
-                SynchronizedCategoryBatch synchronizedBatch;
-                using (var activity = ActivitySource.StartActivity("Xtream.Categories.Sync", ActivityKind.Internal))
-                {
-                    activity?.SetTag("xtream.content_type", contentType.ToString());
-                    activity?.SetTag("xtream.categories.discovered_count", normalizedCategories.Count);
-                    synchronizedBatch = await SynchronizeUpstreamCategoriesAsync(
-                        dbContext,
-                        source,
-                        contentType,
-                        normalizedCategories,
-                        discoveredAt,
-                        cancellationToken);
-                    activity?.SetTag("xtream.categories.request_count", synchronizedBatch.RequestCategories.Count);
-                    activity?.SetTag("xtream.categories.created_count", synchronizedBatch.CreatedCategoryCount);
-                    activity?.SetTag("xtream.categories.updated_count", synchronizedBatch.UpdatedCategoryCount);
-                }
-
-                source.LastSeenAtUtc = discoveredAt;
-
-                if (dbContext.ChangeTracker.HasChanges())
-                {
-                    await dbContext.SaveChangesAsync(cancellationToken);
-                }
-
-                if (synchronizedBatch.ExistingCategoryIdsToTouch.Count > 0)
-                {
-                    await TouchDiscoveredCategoriesAsync(
-                        dbContext,
-                        source.Id,
-                        contentType,
-                        discoveredAt,
-                        synchronizedBatch,
-                        cancellationToken);
-                }
-
-                await transaction.CommitAsync(cancellationToken);
-
-                return new SourceCategorySynchronizationResult(
-                    source.Id,
-                    synchronizedBatch.RequestCategories
-                        .Select(category => CreateSourceCategorySnapshot(category, discoveredAt))
-                        .ToList(),
-                    synchronizedBatch.CreatedCategoryCount,
-                    synchronizedBatch.UpdatedCategoryCount);
-            }
-            catch (DbUpdateException exception) when (attempt < MaxSyncAttempts && IsUniqueConstraintViolation(exception))
-            {
-                await transaction.RollbackAsync(CancellationToken.None);
-            }
-        }
-
-        throw new InvalidOperationException("Unable to synchronize Xtream categories after multiple attempts.");
-    }
-
-    public async Task<IReadOnlyList<SourceCategorySnapshot>> GetSourceCategoriesAsync(
-        int sourceId,
-        ContentType contentType,
-        IReadOnlyCollection<string>? restrictToUpstreamCategoryIds = null,
-        CancellationToken cancellationToken = default)
-    {
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        return await GetSourceCategoriesAsync(dbContext, sourceId, contentType, restrictToUpstreamCategoryIds, cancellationToken);
-    }
-
-    public async Task<IReadOnlyList<SourceCategorySnapshot>> GetSourceCategoriesAsync(
-        XtreamSourceDescriptor sourceDescriptor,
-        ContentType contentType,
-        IReadOnlyCollection<string>? restrictToUpstreamCategoryIds = null,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(sourceDescriptor);
-
-        var sourceId = await GetSourceIdAsync(sourceDescriptor, cancellationToken);
-        return sourceId is int resolvedSourceId
-            ? await GetSourceCategoriesAsync(resolvedSourceId, contentType, restrictToUpstreamCategoryIds, cancellationToken)
-            : [];
-    }
-
-    private static List<DiscoveredCategory> NormalizeDiscoveredCategories(IReadOnlyList<DiscoveredCategory> discoveredCategories)
-    {
-        var normalizedCategories = new List<DiscoveredCategory>(discoveredCategories.Count);
-        var categoryIndexById = new Dictionary<string, int>(StringComparer.Ordinal);
-
-        foreach (var category in discoveredCategories)
-        {
-            if (string.IsNullOrWhiteSpace(category.UpstreamCategoryId) || string.IsNullOrWhiteSpace(category.UpstreamCategoryName))
-            {
-                continue;
-            }
-
-            var normalizedCategory = new DiscoveredCategory(category.UpstreamCategoryId.Trim(), category.UpstreamCategoryName.Trim());
-            if (categoryIndexById.TryGetValue(normalizedCategory.UpstreamCategoryId, out var existingIndex))
-            {
-                normalizedCategories[existingIndex] = normalizedCategory;
-                continue;
-            }
-
-            categoryIndexById[normalizedCategory.UpstreamCategoryId] = normalizedCategories.Count;
-            normalizedCategories.Add(normalizedCategory);
-        }
-
-        return normalizedCategories;
-    }
-
-    private static async Task<IReadOnlyList<SourceCategorySnapshot>> GetSourceCategoriesAsync(
-        XtreamForgeDbContext dbContext,
-        int sourceId,
-        ContentType contentType,
-        IReadOnlyCollection<string>? restrictToUpstreamCategoryIds,
-        CancellationToken cancellationToken)
-    {
-        var restrictedIds = restrictToUpstreamCategoryIds?.ToArray();
-        if (restrictedIds is { Length: 0 })
-        {
-            return [];
-        }
-
-        var query = dbContext.UpstreamCategories
-            .AsNoTracking()
-            .Where(category => category.XtreamSourceId == sourceId && category.ContentType == contentType);
-
-        if (restrictedIds is { Length: > 0 })
-        {
-            query = query.Where(category => restrictedIds.Contains(category.UpstreamCategoryId));
-        }
-
-        return await query
-            .OrderBy(category => category.DedicatedOutputCategory.SortOrder)
-            .ThenBy(category => category.UpstreamCategoryName)
-            .Select(category => new SourceCategorySnapshot(
-                category.Id,
-                category.XtreamSourceId,
-                category.ContentType,
-                category.UpstreamCategoryId,
-                category.UpstreamCategoryName,
-                category.IsExcluded,
-                category.DedicatedOutputCategoryId,
-                category.DedicatedOutputCategory.XtreamForgeCategoryId,
-                category.DedicatedOutputCategory.DisplayName,
-                category.DedicatedOutputCategory.SortOrder,
-                category.CustomCategoryId,
-                category.CustomCategory != null ? category.CustomCategory.XtreamForgeCategoryId : null,
-                category.CustomCategory != null ? category.CustomCategory.DisplayName : null,
-                category.FirstDiscoveredAtUtc,
-                category.LastDiscoveredAtUtc))
-            .ToListAsync(cancellationToken);
     }
 
     private static async Task<XtreamSource> GetOrCreateSourceAsync(
@@ -271,11 +74,152 @@ public sealed class SourceService(IDbContextFactory<XtreamForgeDbContext> dbCont
         return source;
     }
 
+    public async Task<bool> HasDiscoveredCategoriesAsync(
+        XtreamSourceDescriptor sourceDescriptor,
+        ContentType contentType,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(sourceDescriptor);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        return await dbContext.UpstreamCategories
+            .AsNoTracking()
+            .AnyAsync(category => category.XtreamSource.Protocol == sourceDescriptor.Protocol
+                && category.XtreamSource.Host == sourceDescriptor.Host
+                && category.XtreamSource.Port == sourceDescriptor.Port
+                && category.ContentType == contentType,
+                cancellationToken);
+    }
+
+    public async Task<SourceCategorySynchronizationResult> SynchronizeCategoriesAsync(
+        XtreamSourceDescriptor sourceDescriptor,
+        ContentType contentType,
+        IReadOnlyList<DiscoveredCategory> discoveredCategories,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(sourceDescriptor);
+        ArgumentNullException.ThrowIfNull(discoveredCategories);
+
+        var normalizedCategories = NormalizeDiscoveredCategories(discoveredCategories);
+
+        for (var attempt = 1; attempt <= MaxSyncAttempts; attempt++)
+        {
+            var discoveredAt = DateTimeOffset.UtcNow;
+
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+            try
+            {
+                var source = await GetOrCreateSourceAsync(dbContext, sourceDescriptor, discoveredAt, cancellationToken);
+
+                var synchronizedBatch = await SynchronizeUpstreamCategoriesAsync(
+                    dbContext,
+                    source,
+                    contentType,
+                    normalizedCategories,
+                    discoveredAt,
+                    cancellationToken);
+
+                source.LastSeenAtUtc = discoveredAt;
+
+                if (dbContext.ChangeTracker.HasChanges())
+                {
+                    await dbContext.SaveChangesAsync(cancellationToken);
+                }
+
+                if (synchronizedBatch.ExistingCategoryIdsToTouch.Count > 0)
+                {
+                    await TouchDiscoveredCategoriesAsync(
+                        dbContext,
+                        source.Id,
+                        contentType,
+                        discoveredAt,
+                        synchronizedBatch,
+                        cancellationToken);
+                }
+
+                await transaction.CommitAsync(cancellationToken);
+
+                return new SourceCategorySynchronizationResult(
+                    source.Id,
+                    [.. synchronizedBatch.RequestCategories.Select(category => CreateSourceCategorySnapshot(category, discoveredAt))],
+                    synchronizedBatch.CreatedCategoryCount,
+                    synchronizedBatch.UpdatedCategoryCount);
+            }
+            catch (DbUpdateException exception) when (attempt < MaxSyncAttempts && IsUniqueConstraintViolation(exception))
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+            }
+        }
+
+        throw new InvalidOperationException("Unable to synchronize Xtream categories after multiple attempts.");
+    }
+
+    public async Task<IReadOnlyList<SourceCategorySnapshot>> GetSourceCategoriesAsync(
+        int sourceId,
+        ContentType contentType,
+        CancellationToken cancellationToken)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var query = dbContext.UpstreamCategories
+            .AsNoTracking()
+            .Where(category => category.XtreamSourceId == sourceId && category.ContentType == contentType);
+
+        return await query
+            .OrderBy(category => category.DedicatedOutputCategory.SortOrder)
+            .ThenBy(category => category.UpstreamCategoryName)
+            .Select(category => new SourceCategorySnapshot(
+                category.Id,
+                category.XtreamSourceId,
+                category.ContentType,
+                category.UpstreamCategoryId,
+                category.UpstreamCategoryName,
+                category.IsExcluded,
+                category.DedicatedOutputCategoryId,
+                category.DedicatedOutputCategory.XtreamForgeCategoryId,
+                category.DedicatedOutputCategory.DisplayName,
+                category.DedicatedOutputCategory.SortOrder,
+                category.CustomCategoryId,
+                category.CustomCategory != null ? category.CustomCategory.XtreamForgeCategoryId : null,
+                category.CustomCategory != null ? category.CustomCategory.DisplayName : null,
+                category.FirstDiscoveredAtUtc,
+                category.LastDiscoveredAtUtc))
+            .ToListAsync(cancellationToken);
+    }
+
+    private static List<DiscoveredCategory> NormalizeDiscoveredCategories(IReadOnlyList<DiscoveredCategory> discoveredCategories)
+    {
+        var normalizedCategories = new List<DiscoveredCategory>(discoveredCategories.Count);
+        var categoryIndexById = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (var category in discoveredCategories)
+        {
+            if (string.IsNullOrWhiteSpace(category.UpstreamCategoryId) || string.IsNullOrWhiteSpace(category.UpstreamCategoryName))
+            {
+                continue;
+            }
+
+            var normalizedCategory = new DiscoveredCategory(category.UpstreamCategoryId.Trim(), category.UpstreamCategoryName.Trim());
+            if (categoryIndexById.TryGetValue(normalizedCategory.UpstreamCategoryId, out var existingIndex))
+            {
+                normalizedCategories[existingIndex] = normalizedCategory;
+                continue;
+            }
+
+            categoryIndexById[normalizedCategory.UpstreamCategoryId] = normalizedCategories.Count;
+            normalizedCategories.Add(normalizedCategory);
+        }
+
+        return normalizedCategories;
+    }
+
     private static async Task<SynchronizedCategoryBatch> SynchronizeUpstreamCategoriesAsync(
         XtreamForgeDbContext dbContext,
         XtreamSource source,
         ContentType contentType,
-        IReadOnlyList<DiscoveredCategory> normalizedCategories,
+        List<DiscoveredCategory> normalizedCategories,
         DateTimeOffset discoveredAt,
         CancellationToken cancellationToken)
     {

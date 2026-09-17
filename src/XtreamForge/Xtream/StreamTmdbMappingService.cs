@@ -1,42 +1,22 @@
 using Microsoft.EntityFrameworkCore;
 using XtreamForge.Categories;
 using XtreamForge.Data;
-using XtreamForge.Source;
 
 namespace XtreamForge.Xtream;
 
-public sealed class StreamTmdbMappingService(
-    IDbContextFactory<XtreamForgeDbContext> dbContextFactory,
-    SourceService sourceService)
+public sealed class StreamTmdbMappingService(IDbContextFactory<XtreamForgeDbContext> dbContextFactory)
 {
     public async Task<StreamTmdbMappingSet> GetMappingsAsync(
-        XtreamSourceDescriptor sourceDescriptor,
+        int sourceId,
         ContentType contentType,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(sourceDescriptor);
-
-        var sourceId = await sourceService.GetSourceIdAsync(sourceDescriptor, cancellationToken);
-
-        if (sourceId is null)
-        {
-            return new StreamTmdbMappingSet(null, new Dictionary<string, long>(StringComparer.Ordinal));
-        }
-
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         var mappings = await dbContext.StreamTmdbMappings
-            .Where(mapping => mapping.XtreamSourceId == sourceId.Value && mapping.ContentType == contentType)
+            .Where(mapping => mapping.XtreamSourceId == sourceId && mapping.ContentType == contentType)
             .ToDictionaryAsync(mapping => mapping.StreamId, mapping => mapping.TmdbId, StringComparer.Ordinal, cancellationToken);
 
-        return new StreamTmdbMappingSet(sourceId.Value, mappings);
-    }
-
-    public async Task<int?> GetSourceIdAsync(
-        XtreamSourceDescriptor sourceDescriptor,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(sourceDescriptor);
-        return await sourceService.GetSourceIdAsync(sourceDescriptor, cancellationToken);
+        return new StreamTmdbMappingSet(sourceId, mappings);
     }
 
     public Task UpsertMappingAsync(

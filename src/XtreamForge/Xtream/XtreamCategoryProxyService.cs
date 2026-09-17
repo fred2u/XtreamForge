@@ -1,9 +1,7 @@
 using System.Text.Json;
-using System.Diagnostics;
-using XtreamForge.Xtream;
 using XtreamForge.Categories;
-using XtreamForge.Source;
 using XtreamForge.ServiceDefaults;
+using XtreamForge.Source;
 
 namespace XtreamForge.Xtream;
 
@@ -12,8 +10,6 @@ public sealed class XtreamCategoryProxyService(
     XtreamCategoryMappingService categoryMappingService,
     ILogger<XtreamCategoryProxyService> logger)
 {
-    private static readonly ActivitySource ActivitySource = new("XtreamForge");
-
     public async Task<IResult?> TryHandleAsync(
         XtreamUpstreamDestination destination,
         XtreamRequestClassification classification,
@@ -28,41 +24,27 @@ public sealed class XtreamCategoryProxyService(
         {
             var contentType = classification.ContentType.Value;
             using var requestMessage = XtreamProxyHttpRequestFactory.Create(destination.TargetUri, context.Request);
-            using var requestActivity = ActivitySource.StartActivity("Xtream.Categories.Request", ActivityKind.Internal);
-            requestActivity?.SetTag("xtream.action", classification.Action);
-            requestActivity?.SetTag("xtream.content_type", contentType.ToString());
 
-            using var responseMessage = await SendUpstreamRequestAsync(upstreamClient, requestMessage, context.RequestAborted);
+            using var responseMessage = await upstreamClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted);
             if (!responseMessage.IsSuccessStatusCode)
             {
                 await XtreamProxyResponseWriter.WriteAsync(responseMessage, context.Response, context.Request.Method, context.RequestAborted);
                 return Results.Empty;
             }
 
-            var upstreamCategories = await ReadUpstreamCategoriesAsync(upstreamClient, responseMessage.Content, context.RequestAborted);
-            requestActivity?.SetTag("xtream.categories.upstream_count", upstreamCategories.Count);
+            var upstreamCategories = await upstreamClient.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(responseMessage.Content, context.RequestAborted) ?? [];
 
             var rewrittenCategories = await categoryMappingService.SyncCategoriesAsync(
                 new XtreamSourceDescriptor(destination.Protocol, destination.Host, destination.Port),
                 contentType,
-                upstreamCategories
-                    .Select(category => new DiscoveredCategory(category.CategoryId ?? string.Empty, category.CategoryName ?? string.Empty))
-                    .ToList(),
+                [.. upstreamCategories
+                    .Where(category => !string.IsNullOrWhiteSpace(category.CategoryId) && !string.IsNullOrWhiteSpace(category.CategoryName))
+                    .Select(category => new DiscoveredCategory(category.CategoryId!, category.CategoryName!))],
                 context.RequestAborted);
-            requestActivity?.SetTag("xtream.categories.output_count", rewrittenCategories.Count);
 
-            List<XtreamCategoryResponseDto> payload;
-            using (var activity = ActivitySource.StartActivity("Xtream.Categories.Output", ActivityKind.Internal))
-            {
-                payload = rewrittenCategories
-                    .Select(category => new XtreamCategoryResponseDto(category.CategoryId, category.CategoryName))
-                    .ToList();
-            }
+            List<XtreamCategoryResponseDto> payload = [.. rewrittenCategories.Select(category => new XtreamCategoryResponseDto(category.CategoryId, category.CategoryName))];
 
-            using (var activity = ActivitySource.StartActivity("Xtream.Categories.Serialize", ActivityKind.Internal))
-            {
-                await context.Response.WriteAsJsonAsync(payload, context.RequestAborted);
-            }
+            await context.Response.WriteAsJsonAsync(payload, context.RequestAborted);
 
             return Results.Empty;
         }
@@ -106,23 +88,5 @@ public sealed class XtreamCategoryProxyService(
 
             return Results.StatusCode(StatusCodes.Status502BadGateway);
         }
-    }
-
-    private static async Task<HttpResponseMessage> SendUpstreamRequestAsync(
-        XtreamUpstreamClient upstreamClient,
-        HttpRequestMessage requestMessage,
-        CancellationToken cancellationToken)
-    {
-        using var activity = ActivitySource.StartActivity("Xtream.Categories.Upstream", ActivityKind.Internal);
-        return await upstreamClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-    }
-
-    private static async Task<List<XtreamUpstreamCategoryDto>> ReadUpstreamCategoriesAsync(
-        XtreamUpstreamClient upstreamClient,
-        HttpContent content,
-        CancellationToken cancellationToken)
-    {
-        using var activity = ActivitySource.StartActivity("Xtream.Categories.Deserialize", ActivityKind.Internal);
-        return await upstreamClient.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(content, cancellationToken) ?? [];
     }
 }

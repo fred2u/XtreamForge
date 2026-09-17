@@ -23,21 +23,12 @@ public sealed class ItemRuleService(
     }
 
     public async Task<ItemRuleSet> GetRuleSetAsync(
-        XtreamSourceDescriptor sourceDescriptor,
+        int sourceId,
         ContentType contentType,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(sourceDescriptor);
-
-        var sourceId = await sourceService.GetSourceIdAsync(sourceDescriptor, cancellationToken);
-
-        if (sourceId is null)
-        {
-            return new ItemRuleSet(null, []);
-        }
-
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var rules = await LoadRuleDefinitionsAsync(dbContext, sourceId.Value, contentType, cancellationToken);
+        var rules = await LoadRuleDefinitionsAsync(dbContext, sourceId, contentType, cancellationToken);
         return new ItemRuleSet(sourceId, rules);
     }
 

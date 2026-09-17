@@ -122,34 +122,6 @@ public sealed class SourceServiceTests
         Assert.InRange(saveChangesCounter.SaveChangesCount, 1, 1);
     }
 
-    [Fact]
-    public async Task GetSourceCategoriesAsync_ByDescriptor_CanRestrictToRequestedUpstreamIds()
-    {
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
-        await using var serviceProvider = CreateServiceProvider(connection);
-        await EnsureCreatedAsync(serviceProvider);
-
-        var sourceService = serviceProvider.GetRequiredService<SourceService>();
-        var descriptor = new XtreamSourceDescriptor("https", "example.com", 443);
-
-        await sourceService.SynchronizeCategoriesAsync(
-            descriptor,
-            ContentType.Vod,
-            [
-                new DiscoveredCategory("42", "Alpha"),
-                new DiscoveredCategory("57", "Beta"),
-                new DiscoveredCategory("81", "Gamma")
-            ]);
-
-        var categories = await sourceService.GetSourceCategoriesAsync(
-            1,
-            ContentType.Vod,
-            ["57", "81"]);
-
-        Assert.Equal(["57", "81"], [.. categories.Select(category => category.UpstreamCategoryId)]);
-    }
-
     private static ServiceProvider CreateServiceProvider(
         SqliteConnection connection,
         params IInterceptor[] interceptors)

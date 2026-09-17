@@ -10,7 +10,7 @@ public sealed class SourceService(IDbContextFactory<XtreamForgeDbContext> dbCont
 {
     private const int MaxSyncAttempts = 3;
 
-    public async Task<IReadOnlyList<XtreamSourceSummary>> GetSourcesAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<XtreamSourceSummary>> GetSourcesAsync(CancellationToken cancellationToken = default)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         return await dbContext.XtreamSources
@@ -21,7 +21,7 @@ public sealed class SourceService(IDbContextFactory<XtreamForgeDbContext> dbCont
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<int?> GetSourceIdAsync(XtreamSourceDescriptor sourceDescriptor, CancellationToken cancellationToken)
+    public async Task<int?> GetSourceIdAsync(XtreamSourceDescriptor sourceDescriptor, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(sourceDescriptor);
 
@@ -35,7 +35,7 @@ public sealed class SourceService(IDbContextFactory<XtreamForgeDbContext> dbCont
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<bool> SourceExistsAsync(int sourceId, CancellationToken cancellationToken)
+    public async Task<bool> SourceExistsAsync(int sourceId, CancellationToken cancellationToken = default)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
         return await dbContext.XtreamSources
@@ -95,7 +95,7 @@ public sealed class SourceService(IDbContextFactory<XtreamForgeDbContext> dbCont
         XtreamSourceDescriptor sourceDescriptor,
         ContentType contentType,
         IReadOnlyList<DiscoveredCategory> discoveredCategories,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(sourceDescriptor);
         ArgumentNullException.ThrowIfNull(discoveredCategories);
@@ -159,7 +159,7 @@ public sealed class SourceService(IDbContextFactory<XtreamForgeDbContext> dbCont
     public async Task<IReadOnlyList<SourceCategorySnapshot>> GetSourceCategoriesAsync(
         int sourceId,
         ContentType contentType,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 

@@ -1,10 +1,10 @@
+using Microsoft.AspNetCore.Http.Extensions;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Microsoft.AspNetCore.Http.Extensions;
-using XtreamForge.Items;
-using XtreamForge.Xtream;
 using XtreamForge.Categories;
+using XtreamForge.Items;
 using XtreamForge.ServiceDefaults;
+using XtreamForge.Source;
 
 namespace XtreamForge.Xtream;
 
@@ -15,6 +15,7 @@ public sealed class XtreamContentProxyService(
     ItemRuleEvaluator itemRuleEvaluator,
     StreamTmdbMappingService streamTmdbMappingService,
     TmdbResolutionQueue tmdbResolutionQueue,
+    SourceService sourceService,
     ILogger<XtreamContentProxyService> logger)
 {
     public async Task<IResult?> TryHandleAsync(
@@ -27,10 +28,15 @@ public sealed class XtreamContentProxyService(
             return null;
         }
 
+        var sourceDescriptor = new XtreamSourceDescriptor(destination.Protocol, destination.Host, destination.Port);
+        var sourceId = await sourceService.GetSourceIdAsync(sourceDescriptor, context.RequestAborted);
+        if (sourceId is null)
+            return TypedResults.BadRequest("Unknown Xtream source.");
+
         return classification.Action switch
         {
-            "get_vod_streams" or "get_series" => await HandleStreamCollectionAsync(destination, classification, context),
-            "get_vod_info" or "get_series_info" => await HandleDetailPayloadAsync(destination, classification, context),
+            "get_vod_streams" or "get_series" => await HandleStreamCollectionAsync(destination, classification, sourceId.Value, context),
+            "get_vod_info" or "get_series_info" => await HandleDetailPayloadAsync(destination, classification, sourceId.Value, context),
             _ => null
         };
     }
@@ -38,15 +44,15 @@ public sealed class XtreamContentProxyService(
     private async Task<IResult> HandleStreamCollectionAsync(
         XtreamUpstreamDestination destination,
         XtreamRequestClassification classification,
+        int sourceId,
         HttpContext context)
     {
         try
         {
             var contentType = classification.ContentType!.Value;
-            var sourceDescriptor = new XtreamSourceDescriptor(destination.Protocol, destination.Host, destination.Port);
             var categoryContext = await RefreshCategoryContextAsync(destination, contentType, context, context.RequestAborted);
-            var itemRuleSet = await itemRuleService.GetRuleSetAsync(sourceDescriptor, contentType, context.RequestAborted);
-            var tmdbMappingSet = await streamTmdbMappingService.GetMappingsAsync(sourceDescriptor, contentType, context.RequestAborted);
+            var itemRuleSet = await itemRuleService.GetRuleSetAsync(sourceId, contentType, context.RequestAborted);
+            var tmdbMappingSet = await streamTmdbMappingService.GetMappingsAsync(sourceId, contentType, context.RequestAborted);
             var categoryRequest = ClassifyCategoryRequest(context.Request.Query);
             var seenIds = new HashSet<string>(StringComparer.Ordinal);
             var knownTmdbMappings = new Dictionary<string, long>(tmdbMappingSet.Mappings, StringComparer.Ordinal);
@@ -148,6 +154,7 @@ public sealed class XtreamContentProxyService(
     private async Task<IResult> HandleDetailPayloadAsync(
         XtreamUpstreamDestination destination,
         XtreamRequestClassification classification,
+        int sourceId,
         HttpContext context)
     {
         try
@@ -166,11 +173,8 @@ public sealed class XtreamContentProxyService(
                 return Results.Empty;
             }
 
-            var payload = await upstreamClient.ReadFromJsonAsync<JsonNode>(responseMessage.Content, context.RequestAborted);
-            if (payload is null)
-            {
-                throw new JsonException("Expected a JSON payload for Xtream detail responses.");
-            }
+            var payload = await upstreamClient.ReadFromJsonAsync<JsonNode>(responseMessage.Content, context.RequestAborted)
+                ?? throw new JsonException("Expected a JSON payload for Xtream detail responses.");
 
             var rewriteResult = RewriteCategoryReferences(payload, categoryContext.UpstreamToOutputCategoryIds);
             if (rewriteResult.FoundCategoryReference && rewriteResult.IncludedOutputCategoryIds.Count == 0)
@@ -178,7 +182,7 @@ public sealed class XtreamContentProxyService(
                 return Results.NotFound();
             }
 
-            await PersistDetailTmdbMappingAsync(payload, destination, classification, context.Request.Query, context.RequestAborted);
+            await PersistDetailTmdbMappingAsync(payload, sourceId, classification, context.Request.Query, context.RequestAborted);
             return Results.Json(payload);
         }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
@@ -208,7 +212,7 @@ public sealed class XtreamContentProxyService(
         var sourceDescriptor = new XtreamSourceDescriptor(destination.Protocol, destination.Host, destination.Port);
         var mappings = await categoryMappingService.GetEffectiveOutputCategoryMappingsAsync(sourceDescriptor, contentType, cancellationToken);
         if (mappings.Count == 0
-            && !await categoryMappingService.HasDiscoveredCategoriesAsync(sourceDescriptor, contentType, cancellationToken))
+            && !await sourceService.HasDiscoveredCategoriesAsync(sourceDescriptor, contentType, cancellationToken))
         {
             var categoryAction = contentType == ContentType.Vod ? "get_vod_categories" : "get_series_categories";
             var categoryTargetUri = BuildTargetUri(destination.TargetUri, context.Request.Query, ("action", categoryAction), ["category_id", "vod_id", "series_id"]);
@@ -225,9 +229,7 @@ public sealed class XtreamContentProxyService(
             await categoryMappingService.SyncCategoriesAsync(
                 sourceDescriptor,
                 contentType,
-                upstreamCategories
-                    .Select(category => new DiscoveredCategory(category.CategoryId ?? string.Empty, category.CategoryName ?? string.Empty))
-                    .ToList(),
+                [.. upstreamCategories.Select(category => new DiscoveredCategory(category.CategoryId ?? string.Empty, category.CategoryName ?? string.Empty))],
                 cancellationToken);
 
             mappings = await categoryMappingService.GetEffectiveOutputCategoryMappingsAsync(
@@ -238,7 +240,7 @@ public sealed class XtreamContentProxyService(
 
         var outputToUpstream = mappings.ToDictionary(
             mapping => mapping.XtreamForgeCategoryId.ToString(),
-            mapping => (IReadOnlyList<string>)mapping.IncludedUpstreamCategoryIds,
+            mapping => mapping.IncludedUpstreamCategoryIds,
             StringComparer.Ordinal);
 
         var upstreamToOutput = mappings
@@ -276,7 +278,7 @@ public sealed class XtreamContentProxyService(
         JsonElement upstreamItem,
         StreamCollectionContext requestContext,
         string action,
-        ISet<string> seenIds,
+        HashSet<string> seenIds,
         out JsonObject transformedItem)
     {
         var identifierProperty = action == "get_series" ? "series_id" : "stream_id";
@@ -318,7 +320,6 @@ public sealed class XtreamContentProxyService(
         else if (!string.IsNullOrWhiteSpace(streamId)
             && requestContext.KnownTmdbMappings.TryGetValue(streamId, out var persistedTmdbId))
         {
-            tmdbId = persistedTmdbId;
             SetTmdbId(clonedObject, persistedTmdbId);
         }
         else
@@ -415,7 +416,7 @@ public sealed class XtreamContentProxyService(
                 {
                     foundCategoryReference = true;
                     var rewrittenCategoryIds = GetRewrittenCategoryIds(property.Value, upstreamToOutputCategoryIds, includedOutputCategoryIds);
-                    jsonObject[property.Key] = new JsonArray(rewrittenCategoryIds.Select(id => (JsonNode?)JsonValue.Create(id)).ToArray());
+                    jsonObject[property.Key] = new JsonArray([.. rewrittenCategoryIds.Select(id => (JsonNode?)JsonValue.Create(id))]);
                     continue;
                 }
 
@@ -436,7 +437,7 @@ public sealed class XtreamContentProxyService(
         return foundCategoryReference;
     }
 
-    private static IReadOnlyList<string> GetRewrittenCategoryIds(
+    private static List<string> GetRewrittenCategoryIds(
         JsonNode categoryIdsNode,
         IReadOnlyDictionary<string, string> upstreamToOutputCategoryIds,
         ISet<string> includedOutputCategoryIds)
@@ -447,22 +448,21 @@ public sealed class XtreamContentProxyService(
             _ => ParseCategoryIdString(XtreamTmdbMetadata.TryGetScalarString(categoryIdsNode))
         };
 
-        return values
+        return [.. values
             .Where(upstreamToOutputCategoryIds.ContainsKey)
             .Select(upstreamCategoryId => upstreamToOutputCategoryIds[upstreamCategoryId])
             .Distinct(StringComparer.Ordinal)
-            .TapEach(id => includedOutputCategoryIds.Add(id))
-            .ToList();
+            .TapEach(id => includedOutputCategoryIds.Add(id))];
     }
 
-    private static IEnumerable<string> ParseCategoryIdString(string? value)
+    private static string[] ParseCategoryIdString(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
             return [];
         }
 
-        if (value.StartsWith("[", StringComparison.Ordinal))
+        if (value.StartsWith('['))
         {
             try
             {
@@ -579,7 +579,7 @@ public sealed class XtreamContentProxyService(
         bool FoundCategoryReference,
         IReadOnlyCollection<string> IncludedOutputCategoryIds);
 
-    private void TrackKnownTmdbMapping(StreamCollectionContext requestContext, string? streamId, long tmdbId)
+    private static void TrackKnownTmdbMapping(StreamCollectionContext requestContext, string? streamId, long tmdbId)
     {
         if (requestContext.SourceId is null || string.IsNullOrWhiteSpace(streamId))
         {
@@ -647,7 +647,7 @@ public sealed class XtreamContentProxyService(
 
     private async Task PersistDetailTmdbMappingAsync(
         JsonNode payload,
-        XtreamUpstreamDestination destination,
+        int sourceId,
         XtreamRequestClassification classification,
         IQueryCollection query,
         CancellationToken cancellationToken)
@@ -664,16 +664,8 @@ public sealed class XtreamContentProxyService(
             return;
         }
 
-        var sourceId = await streamTmdbMappingService.GetSourceIdAsync(
-            new XtreamSourceDescriptor(destination.Protocol, destination.Host, destination.Port),
-            cancellationToken);
-        if (sourceId is null)
-        {
-            return;
-        }
-
         await streamTmdbMappingService.UpsertMappingAsync(
-            sourceId.Value,
+            sourceId,
             classification.ContentType!.Value,
             streamId,
             tmdbId.Value,

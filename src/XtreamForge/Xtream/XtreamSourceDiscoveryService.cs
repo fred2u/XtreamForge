@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.WebUtilities;
 using XtreamForge.Categories;
 using XtreamForge.Data;
+using XtreamForge.Source;
 
 namespace XtreamForge.Xtream;
 
@@ -11,7 +12,7 @@ public sealed class XtreamSourceDiscoveryService(
     XtreamUpstreamDestinationResolver destinationResolver,
     XtreamUpstreamClient upstreamClient,
     XtreamCategoryMappingService categoryMappingService,
-    IDbContextFactory<XtreamForgeDbContext> dbContextFactory)
+    SourceService sourceService)
 {
     private readonly XtreamUpstreamClient _upstreamClient = upstreamClient;
 
@@ -29,13 +30,7 @@ public sealed class XtreamSourceDiscoveryService(
         await categoryMappingService.SyncCategoriesAsync(sourceDescriptor, ContentType.Vod, vodCategories, cancellationToken);
         await categoryMappingService.SyncCategoriesAsync(sourceDescriptor, ContentType.Series, seriesCategories, cancellationToken);
 
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var sourceId = await dbContext.XtreamSources
-            .Where(source => source.Protocol == destination.Protocol
-                && source.Host == destination.Host
-                && source.Port == destination.Port)
-            .Select(source => (int?)source.Id)
-            .SingleOrDefaultAsync(cancellationToken);
+        var sourceId = await sourceService.GetSourceIdAsync(sourceDescriptor, cancellationToken);
 
         if (sourceId is null)
         {

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -87,7 +88,8 @@ internal static class XtreamForgeApiFactoryExtensions
 
     internal static WebApplicationFactory<Program> WithSqliteDatabase(
         this WebApplicationFactory<Program> factory,
-        string? databasePath = null) =>
+        string? databasePath = null,
+        params IInterceptor[] interceptors) =>
         factory.WithWebHostBuilder(builder =>
         {
             var effectiveDatabasePath = databasePath ?? Path.Combine(Path.GetTempPath(), $"xtreamforge-api-tests-{Guid.NewGuid():N}.db");
@@ -102,6 +104,25 @@ internal static class XtreamForgeApiFactoryExtensions
                 {
                     ["ConnectionStrings:database"] = connectionString
                 });
+            });
+
+            if (interceptors.Length == 0)
+            {
+                return;
+            }
+
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IDbContextFactory<XtreamForgeDbContext>>();
+                services.RemoveAll<XtreamForgeDbContext>();
+                services.RemoveAll<DbContextOptions<XtreamForgeDbContext>>();
+                services.AddDbContextFactory<XtreamForgeDbContext>(options =>
+                {
+                    options.UseSqlite(connectionString);
+                    options.AddInterceptors(interceptors);
+                });
+                services.AddScoped(static serviceProvider =>
+                    serviceProvider.GetRequiredService<IDbContextFactory<XtreamForgeDbContext>>().CreateDbContext());
             });
         });
 }

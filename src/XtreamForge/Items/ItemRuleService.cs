@@ -1,11 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using XtreamForge.Categories;
 using XtreamForge.Data;
+using XtreamForge.Source;
 
 namespace XtreamForge.Items;
 
 public sealed class ItemRuleService(
     IDbContextFactory<XtreamForgeDbContext> dbContextFactory,
+    SourceService sourceService,
     ItemRuleEvaluator evaluator)
 {
     public const int SequenceStep = 10;
@@ -21,26 +23,12 @@ public sealed class ItemRuleService(
     }
 
     public async Task<ItemRuleSet> GetRuleSetAsync(
-        XtreamSourceDescriptor sourceDescriptor,
+        int sourceId,
         ContentType contentType,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(sourceDescriptor);
-
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var sourceId = await dbContext.XtreamSources
-            .Where(source => source.Protocol == sourceDescriptor.Protocol
-                && source.Host == sourceDescriptor.Host
-                && source.Port == sourceDescriptor.Port)
-            .Select(source => (int?)source.Id)
-            .SingleOrDefaultAsync(cancellationToken);
-
-        if (sourceId is null)
-        {
-            return new ItemRuleSet(null, []);
-        }
-
-        var rules = await LoadRuleDefinitionsAsync(dbContext, sourceId.Value, contentType, cancellationToken);
+        var rules = await LoadRuleDefinitionsAsync(dbContext, sourceId, contentType, cancellationToken);
         return new ItemRuleSet(sourceId, rules);
     }
 
@@ -50,12 +38,7 @@ public sealed class ItemRuleService(
         CancellationToken cancellationToken = default)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-
-        var sources = await dbContext.XtreamSources
-            .OrderBy(source => source.Host)
-            .ThenBy(source => source.Port)
-            .Select(source => new XtreamSourceSummary(source.Id, source.Protocol, source.Host, source.Port, source.LastSeenAtUtc))
-            .ToListAsync(cancellationToken);
+        var sources = await sourceService.GetSourcesAsync(cancellationToken);
 
         var effectiveSourceId = selectedSourceId ?? sources.FirstOrDefault()?.Id;
         if (effectiveSourceId is null)
@@ -87,7 +70,10 @@ public sealed class ItemRuleService(
         var normalizedPattern = ValidateAndNormalizePattern(command.Pattern);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        await EnsureSourceExistsAsync(dbContext, command.SelectedSourceId, cancellationToken);
+        if (!await sourceService.SourceExistsAsync(command.SelectedSourceId, cancellationToken))
+        {
+            throw new InvalidOperationException("Xtream source was not found.");
+        }
 
         var nextSequence = await dbContext.ItemRules
             .Where(rule => rule.XtreamSourceId == command.SelectedSourceId && rule.ContentType == command.SelectedContentType)
@@ -259,15 +245,6 @@ public sealed class ItemRuleService(
         }
 
         return normalizedPattern;
-    }
-
-    private static async Task EnsureSourceExistsAsync(XtreamForgeDbContext dbContext, int sourceId, CancellationToken cancellationToken)
-    {
-        var exists = await dbContext.XtreamSources.AnyAsync(source => source.Id == sourceId, cancellationToken);
-        if (!exists)
-        {
-            throw new InvalidOperationException("Xtream source was not found.");
-        }
     }
 
     private static void EnsureRuleScope(ItemRule rule, int sourceId, ContentType contentType)

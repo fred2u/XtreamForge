@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using XtreamForge.Data;
 using XtreamForge.Categories;
+using XtreamForge.Source;
 
 namespace XtreamForge.Tests;
 
@@ -423,6 +424,8 @@ public sealed class XtreamCategoryMappingServiceTests
         var services = new ServiceCollection();
         services.AddSingleton(new CategoryRuleEvaluator());
         services.AddDbContextFactory<XtreamForgeDbContext>(options => options.UseSqlite(connection));
+        services.AddScoped(static provider => provider.GetRequiredService<IDbContextFactory<XtreamForgeDbContext>>().CreateDbContext());
+        services.AddSingleton<SourceService>();
         services.AddScoped<CategoryRuleService>();
         services.AddScoped<XtreamCategoryMappingService>();
         return services.BuildServiceProvider();

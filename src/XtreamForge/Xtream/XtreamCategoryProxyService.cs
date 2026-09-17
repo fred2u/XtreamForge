@@ -1,7 +1,7 @@
 using System.Text.Json;
-using XtreamForge.Xtream;
 using XtreamForge.Categories;
 using XtreamForge.ServiceDefaults;
+using XtreamForge.Source;
 
 namespace XtreamForge.Xtream;
 
@@ -22,12 +22,10 @@ public sealed class XtreamCategoryProxyService(
 
         try
         {
+            var contentType = classification.ContentType.Value;
             using var requestMessage = XtreamProxyHttpRequestFactory.Create(destination.TargetUri, context.Request);
-            using var responseMessage = await upstreamClient.SendAsync(
-                requestMessage,
-                HttpCompletionOption.ResponseHeadersRead,
-                context.RequestAborted);
 
+            using var responseMessage = await upstreamClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted);
             if (!responseMessage.IsSuccessStatusCode)
             {
                 await XtreamProxyResponseWriter.WriteAsync(responseMessage, context.Response, context.Request.Method, context.RequestAborted);
@@ -35,19 +33,20 @@ public sealed class XtreamCategoryProxyService(
             }
 
             var upstreamCategories = await upstreamClient.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(responseMessage.Content, context.RequestAborted) ?? [];
+
             var rewrittenCategories = await categoryMappingService.SyncCategoriesAsync(
                 new XtreamSourceDescriptor(destination.Protocol, destination.Host, destination.Port),
-                classification.ContentType.Value,
-                upstreamCategories
-                    .Select(category => new DiscoveredCategory(category.CategoryId ?? string.Empty, category.CategoryName ?? string.Empty))
-                    .ToList(),
+                contentType,
+                [.. upstreamCategories
+                    .Where(category => !string.IsNullOrWhiteSpace(category.CategoryId) && !string.IsNullOrWhiteSpace(category.CategoryName))
+                    .Select(category => new DiscoveredCategory(category.CategoryId!, category.CategoryName!))],
                 context.RequestAborted);
 
-            var payload = rewrittenCategories
-                .Select(category => new XtreamCategoryResponseDto(category.CategoryId, category.CategoryName))
-                .ToList();
+            List<XtreamCategoryResponseDto> payload = [.. rewrittenCategories.Select(category => new XtreamCategoryResponseDto(category.CategoryId, category.CategoryName))];
 
-            return TypedResults.Ok(payload);
+            await context.Response.WriteAsJsonAsync(payload, context.RequestAborted);
+
+            return Results.Empty;
         }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {

@@ -1,11 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using XtreamForge.Data;
 using XtreamForge.Categories;
+using XtreamForge.Source;
 
 namespace XtreamForge.Categories;
 
 public sealed class CategoryRuleService(
     IDbContextFactory<XtreamForgeDbContext> dbContextFactory,
+    SourceService sourceService,
     CategoryRuleEvaluator evaluator)
 {
     public const int SequenceStep = 10;
@@ -73,7 +75,10 @@ public sealed class CategoryRuleService(
         var normalizedPattern = ValidateAndNormalizePattern(command.Pattern);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        await EnsureSourceExistsAsync(dbContext, command.SelectedSourceId, cancellationToken);
+        if (!await sourceService.SourceExistsAsync(command.SelectedSourceId, cancellationToken))
+        {
+            throw new InvalidOperationException("Xtream source was not found.");
+        }
 
         var nextSequence = await dbContext.CategoryRules
             .Where(rule => rule.XtreamSourceId == command.SelectedSourceId && rule.ContentType == command.SelectedContentType)
@@ -243,15 +248,6 @@ public sealed class CategoryRuleService(
         }
 
         return normalizedPattern;
-    }
-
-    private static async Task EnsureSourceExistsAsync(XtreamForgeDbContext dbContext, int sourceId, CancellationToken cancellationToken)
-    {
-        var exists = await dbContext.XtreamSources.AnyAsync(source => source.Id == sourceId, cancellationToken);
-        if (!exists)
-        {
-            throw new InvalidOperationException("Xtream source was not found.");
-        }
     }
 
     private static void EnsureRuleScope(CategoryRule rule, int sourceId, ContentType contentType)

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using XtreamForge.Categories;
 using XtreamForge.Data;
 using XtreamForge.Items;
+using XtreamForge.Source;
 
 namespace XtreamForge.Tests;
 
@@ -110,6 +111,7 @@ public sealed class ItemRuleServiceTests
         services.AddScoped(static provider => provider.GetRequiredService<IDbContextFactory<XtreamForgeDbContext>>().CreateDbContext());
         services.AddSingleton(new CategoryRuleEvaluator());
         services.AddSingleton(new ItemRuleEvaluator());
+        services.AddSingleton<SourceService>();
         services.AddScoped<XtreamCategoryMappingService>();
         services.AddScoped<ItemRuleService>();
         return services.BuildServiceProvider();

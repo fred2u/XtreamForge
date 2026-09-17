@@ -7,45 +7,16 @@ namespace XtreamForge.Xtream;
 public sealed class StreamTmdbMappingService(IDbContextFactory<XtreamForgeDbContext> dbContextFactory)
 {
     public async Task<StreamTmdbMappingSet> GetMappingsAsync(
-        XtreamSourceDescriptor sourceDescriptor,
+        int sourceId,
         ContentType contentType,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(sourceDescriptor);
-
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var sourceId = await dbContext.XtreamSources
-            .Where(source => source.Protocol == sourceDescriptor.Protocol
-                && source.Host == sourceDescriptor.Host
-                && source.Port == sourceDescriptor.Port)
-            .Select(source => (int?)source.Id)
-            .SingleOrDefaultAsync(cancellationToken);
-
-        if (sourceId is null)
-        {
-            return new StreamTmdbMappingSet(null, new Dictionary<string, long>(StringComparer.Ordinal));
-        }
-
         var mappings = await dbContext.StreamTmdbMappings
-            .Where(mapping => mapping.XtreamSourceId == sourceId.Value && mapping.ContentType == contentType)
+            .Where(mapping => mapping.XtreamSourceId == sourceId && mapping.ContentType == contentType)
             .ToDictionaryAsync(mapping => mapping.StreamId, mapping => mapping.TmdbId, StringComparer.Ordinal, cancellationToken);
 
-        return new StreamTmdbMappingSet(sourceId.Value, mappings);
-    }
-
-    public async Task<int?> GetSourceIdAsync(
-        XtreamSourceDescriptor sourceDescriptor,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(sourceDescriptor);
-
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        return await dbContext.XtreamSources
-            .Where(source => source.Protocol == sourceDescriptor.Protocol
-                && source.Host == sourceDescriptor.Host
-                && source.Port == sourceDescriptor.Port)
-            .Select(source => (int?)source.Id)
-            .SingleOrDefaultAsync(cancellationToken);
+        return new StreamTmdbMappingSet(sourceId, mappings);
     }
 
     public Task UpsertMappingAsync(

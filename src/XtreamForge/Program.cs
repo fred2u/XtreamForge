@@ -6,6 +6,7 @@ using XtreamForge.Configuration;
 using XtreamForge.Data;
 using XtreamForge.Endpoints;
 using XtreamForge.Items;
+using XtreamForge.Source;
 using XtreamForge.Xtream;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -45,6 +46,7 @@ builder.Services.AddHealthChecks()
 
 builder.Services.AddSingleton<CategoryRuleEvaluator>();
 builder.Services.AddSingleton<ItemRuleEvaluator>();
+builder.Services.AddSingleton<SourceService>();
 builder.Services.AddScoped<CategoryRuleService>();
 builder.Services.AddScoped<ItemRuleService>();
 builder.Services.AddSingleton<StreamTmdbMappingService>();

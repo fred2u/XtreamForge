@@ -122,15 +122,16 @@
                             <td>
                                 <div class="mapping-cell">
                                     <div class="mapping-control-row">
-                                        <FluentSelect @key="(context.Summary.Id, CustomCategoriesVersion)" Class="mapping-select" TOption="string" @bind-Value="context.MappingValue" @bind-Value:after="() => OnMappingChanged.InvokeAsync(new CategoryMappingChangeRequest(context.Summary.Id, context.MappingValue))" Disabled="@context.IsBusy" AriaLabel="Category mapping">
-                                            <FluentOption Value="disabled">Disabled</FluentOption>
-                                            <FluentOption Value="original">Original</FluentOption>
-                                            <FluentOption Value="new">New category</FluentOption>
-                                            @foreach (var customCategory in CustomCategories)
-                                            {
-                                                <FluentOption @key="customCategory.Summary.Id" Value="@CategoryRowState.GetCustomMappingValue(customCategory.Summary.Id)">@customCategory.Summary.DisplayName</FluentOption>
-                                            }
-                                        </FluentSelect>
+                                        <FluentSelect @key="context.Summary.Id"
+                                                      Class="mapping-select"
+                                                      TOption="CategoryMappingOption"
+                                                      Items="@MappingOptions"
+                                                      OptionText="@(option => option.Label)"
+                                                      OptionValue="@(option => option.Value)"
+                                                      Value="@context.MappingValue"
+                                                      ValueChanged="value => HandleMappingChangedAsync(context.Summary.Id, value)"
+                                                      Disabled="@context.IsBusy"
+                                                      AriaLabel="Category mapping" />
 
                                         @switch (context.SaveState)
                                         {
@@ -220,9 +221,6 @@
     public required IReadOnlyList<CustomCategoryRowState> CustomCategories { get; set; }
 
     [Parameter]
-    public required string CustomCategoriesVersion { get; set; }
-
-    [Parameter]
     public string? Message { get; set; }
 
     [Parameter]
@@ -282,6 +280,16 @@
         _ => "status-pill status-pill-disabled"
     };
 
+    private IReadOnlyList<CategoryMappingOption> MappingOptions =>
+    [
+        new("disabled", "Disabled"),
+        new("original", "Original"),
+        new("new", "New category"),
+        .. CustomCategories.Select(customCategory => new CategoryMappingOption(
+            CategoryRowState.GetCustomMappingValue(customCategory.Summary.Id),
+            customCategory.Summary.DisplayName))
+    ];
+
     private Task HandleSourceChangedAsync(string? value) =>
         OnSourceChanged.InvokeAsync(int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedValue) ? parsedValue : null);
 
@@ -294,4 +302,9 @@
         Enum.TryParse<CategoryStatusFilter>(value, true, out var statusFilter)
             ? OnStatusFilterChanged.InvokeAsync(statusFilter)
             : Task.CompletedTask;
+
+    private Task HandleMappingChangedAsync(int upstreamCategoryRecordId, string? value) =>
+        OnMappingChanged.InvokeAsync(new CategoryMappingChangeRequest(upstreamCategoryRecordId, value));
+
+    private sealed record CategoryMappingOption(string Value, string Label);
 }

@@ -26,10 +26,10 @@ public sealed class CategoriesClient(HttpClient httpClient)
         return await ReadAsync<AdminCategoryRulesPayload>(query, cancellationToken);
     }
 
-    public async Task UpdateCategoryMappingAsync(int upstreamCategoryRecordId, AdminCategoryMappingUpdate request, CancellationToken cancellationToken = default)
+    public async Task<AdminCategoryMappingResponse> UpdateCategoryMappingAsync(int upstreamCategoryRecordId, AdminCategoryMappingUpdate request, CancellationToken cancellationToken = default)
     {
         var response = await httpClient.PutAsJsonAsync($"/api/admin/categories/{upstreamCategoryRecordId}/mapping", request, cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        return await ReadResponseAsync<AdminCategoryMappingResponse>(response, cancellationToken);
     }
 
     public async Task<AdminSourceDiscoveryResult> DiscoverSourceAsync(AdminSourceDiscoveryCreate request, CancellationToken cancellationToken = default)

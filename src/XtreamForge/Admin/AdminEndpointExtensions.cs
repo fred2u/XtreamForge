@@ -108,6 +108,8 @@ public static class AdminEndpointExtensions
         var sourceCategoryCount = 0;
         var ruleCount = 0;
         var customCategoryCount = 0;
+        var itemRuleCount = 0;
+        var knownTmdbMappingCount = 0;
 
         try
         {
@@ -126,6 +128,8 @@ public static class AdminEndpointExtensions
                 sourceCategoryCount = await dbContext.UpstreamCategories.CountAsync(cancellationToken);
                 ruleCount = await dbContext.CategoryRules.CountAsync(cancellationToken);
                 customCategoryCount = await dbContext.CustomCategories.CountAsync(cancellationToken);
+                itemRuleCount = await dbContext.ItemRules.CountAsync(cancellationToken);
+                knownTmdbMappingCount = await dbContext.StreamTmdbMappings.CountAsync(mapping => mapping.TmdbId > 0, cancellationToken);
             }
         }
         catch
@@ -141,7 +145,9 @@ public static class AdminEndpointExtensions
             SourceCount: sourceCount,
             SourceCategoryCount: sourceCategoryCount,
             RuleCount: ruleCount,
-            CustomCategoryCount: customCategoryCount));
+            CustomCategoryCount: customCategoryCount,
+            ItemRuleCount: itemRuleCount,
+            KnownTmdbMappingCount: knownTmdbMappingCount));
     }
 
     private static async Task<IResult> GetCategoriesAsync(
@@ -185,7 +191,11 @@ public static class AdminEndpointExtensions
                     request.NewCustomCategoryName),
                 cancellationToken);
 
-            return TypedResults.Ok(new AdminMutationResponse(result.SourceId, result.ContentType.ToString()));
+            return TypedResults.Ok(new AdminCategoryMappingMutationResponse(
+                result.SourceId,
+                result.ContentType.ToString(),
+                result.MappingSelection.ToString(),
+                result.CustomCategory is null ? null : ToResponse(result.CustomCategory)));
         }
         catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
         {
@@ -757,7 +767,9 @@ public sealed record AdminStatusResponse(
     int SourceCount,
     int SourceCategoryCount,
     int RuleCount,
-    int CustomCategoryCount);
+    int CustomCategoryCount,
+    int ItemRuleCount,
+    int KnownTmdbMappingCount);
 
 public sealed record AdminCategoriesResponse(
     IReadOnlyList<AdminSourceResponse> Sources,
@@ -904,6 +916,12 @@ public sealed record AdminCustomCategoryUsageResponse(
     string UpstreamCategoryName);
 
 public sealed record AdminMutationResponse(int SourceId, string ContentType);
+
+public sealed record AdminCategoryMappingMutationResponse(
+    int SourceId,
+    string ContentType,
+    string MappingSelection,
+    AdminCustomCategoryResponse? CustomCategory);
 
 public sealed record AdminContentTypeMutationResponse(string ContentType);
 

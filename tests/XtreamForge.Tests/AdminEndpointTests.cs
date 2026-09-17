@@ -7,6 +7,8 @@ using Microsoft.Extensions.DependencyInjection;
 using XtreamForge.Admin;
 using XtreamForge.Categories;
 using XtreamForge.Data;
+using XtreamForge.Items;
+using XtreamForge.Xtream;
 
 namespace XtreamForge.Tests;
 
@@ -37,6 +39,8 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.Equal(0, payload.SourceCategoryCount);
         Assert.Equal(0, payload.RuleCount);
         Assert.Equal(0, payload.CustomCategoryCount);
+        Assert.Equal(0, payload.ItemRuleCount);
+        Assert.Equal(0, payload.KnownTmdbMappingCount);
     }
 
     [Fact]
@@ -59,6 +63,8 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.Equal(0, payload.SourceCategoryCount);
         Assert.Equal(0, payload.RuleCount);
         Assert.Equal(0, payload.CustomCategoryCount);
+        Assert.Equal(0, payload.ItemRuleCount);
+        Assert.Equal(0, payload.KnownTmdbMappingCount);
     }
 
     [Fact]
@@ -83,6 +89,8 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.Equal(4, payload.SourceCategoryCount);
         Assert.Equal(2, payload.RuleCount);
         Assert.Equal(2, payload.CustomCategoryCount);
+        Assert.Equal(2, payload.ItemRuleCount);
+        Assert.Equal(2, payload.KnownTmdbMappingCount);
     }
 
     [Fact]
@@ -133,8 +141,13 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
         var response = await client.PutAsJsonAsync(
             $"/api/admin/categories/{upstreamCategoryId}/mapping",
             new AdminCategoryMappingRequest(sourceId, "Vod", "Custom", null, "Movies 4K"));
+        var payload = await response.Content.ReadFromJsonAsync<AdminCategoryMappingMutationResponse>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Equal("Custom", payload.MappingSelection);
+        Assert.NotNull(payload.CustomCategory);
+        Assert.Equal("Movies 4K", payload.CustomCategory.DisplayName);
 
         await using var scope = setupFactory.Services.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
@@ -143,6 +156,36 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
         Assert.False(upstreamCategory.IsExcluded);
         Assert.NotNull(upstreamCategory.CustomCategory);
         Assert.Equal("Movies 4K", upstreamCategory.CustomCategory.DisplayName);
+    }
+
+    [Fact]
+    public async Task UpdateCategoryMapping_OnlyChangesTargetRow_WhenSimilarCategoriesExist()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"xtreamforge-admin-tests-{Guid.NewGuid():N}.db");
+        using var setupFactory = _factory.WithSqliteDatabase(databasePath);
+        await EnsureDatabaseCreatedAsync(setupFactory);
+
+        var (sourceAId, targetCategoryId, siblingCategoryId, otherSourceCategoryId) = await SeedSimilarCategoriesAsync(setupFactory);
+
+        using var factory = _factory.WithSqliteDatabase(databasePath);
+        using var client = factory.CreateClient();
+        var response = await client.PutAsJsonAsync(
+            $"/api/admin/categories/{targetCategoryId}/mapping",
+            new AdminCategoryMappingRequest(sourceAId, "Vod", "Custom", null, "Movies 4K"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        await using var verifyScope = setupFactory.Services.CreateAsyncScope();
+        var verifyContext = verifyScope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+        var categories = await verifyContext.UpstreamCategories
+            .AsNoTracking()
+            .OrderBy(category => category.Id)
+            .ToListAsync();
+
+        Assert.Equal(1, categories.Count(category => category.CustomCategoryId is not null));
+        Assert.NotNull(categories.Single(category => category.Id == targetCategoryId).CustomCategoryId);
+        Assert.Null(categories.Single(category => category.Id == siblingCategoryId).CustomCategoryId);
+        Assert.Null(categories.Single(category => category.Id == otherSourceCategoryId).CustomCategoryId);
     }
 
     [Fact]
@@ -592,6 +635,8 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
         await using var scope = factory.Services.CreateAsyncScope();
         var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
         var ruleService = scope.ServiceProvider.GetRequiredService<CategoryRuleService>();
+        var itemRuleService = scope.ServiceProvider.GetRequiredService<ItemRuleService>();
+        var tmdbMappingService = scope.ServiceProvider.GetRequiredService<StreamTmdbMappingService>();
         var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
 
         await mappingService.SyncCategoriesAsync(
@@ -624,6 +669,48 @@ public sealed class AdminEndpointTests : IClassFixture<XtreamForgeApiFactory>
 
         await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceAId, ContentType.Vod, CategoryRuleAction.Exclude, CategoryRuleOperator.Contains, "SPORT", false, true));
         await ruleService.CreateRuleAsync(new CategoryRuleEditorCommand(null, sourceBId, ContentType.Vod, CategoryRuleAction.Include, CategoryRuleOperator.StartsWith, "DOC", false, true));
+        await itemRuleService.CreateRuleAsync(new ItemRuleEditorCommand(null, sourceAId, ContentType.Vod, ItemRuleField.Name, ItemRuleAction.Include, ItemRuleOperator.Contains, "Movie", false, true));
+        await itemRuleService.CreateRuleAsync(new ItemRuleEditorCommand(null, sourceBId, ContentType.Vod, ItemRuleField.Name, ItemRuleAction.Exclude, ItemRuleOperator.Contains, "Cam", false, true));
+        await tmdbMappingService.UpsertMappingAsync(sourceAId, ContentType.Vod, "100", 551);
+        await tmdbMappingService.UpsertMappingAsync(sourceBId, ContentType.Vod, "200", 777);
+        dbContext.StreamTmdbMappings.Add(new StreamTmdbMapping
+        {
+            XtreamSourceId = sourceAId,
+            ContentType = ContentType.Vod,
+            StreamId = "999",
+            TmdbId = 0
+        });
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task<(int SourceAId, int TargetCategoryId, int SiblingCategoryId, int OtherSourceCategoryId)> SeedSimilarCategoriesAsync(WebApplicationFactory<Program> factory)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var mappingService = scope.ServiceProvider.GetRequiredService<XtreamCategoryMappingService>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<XtreamForgeDbContext>();
+
+        await mappingService.SyncCategoriesAsync(
+            new XtreamSourceDescriptor("https", "source-a.example", 443),
+            ContentType.Vod,
+            [
+                new DiscoveredCategory("10", "Movies A"),
+                new DiscoveredCategory("11", "Movies B")
+            ]);
+
+        await mappingService.SyncCategoriesAsync(
+            new XtreamSourceDescriptor("https", "source-b.example", 443),
+            ContentType.Vod,
+            [
+                new DiscoveredCategory("10", "Movies A Remote")
+            ]);
+
+        var sourceAId = await dbContext.XtreamSources.Where(source => source.Host == "source-a.example").Select(source => source.Id).SingleAsync();
+        var sourceBId = await dbContext.XtreamSources.Where(source => source.Host == "source-b.example").Select(source => source.Id).SingleAsync();
+        var targetCategoryId = await dbContext.UpstreamCategories.Where(category => category.XtreamSourceId == sourceAId && category.UpstreamCategoryId == "10").Select(category => category.Id).SingleAsync();
+        var siblingCategoryId = await dbContext.UpstreamCategories.Where(category => category.XtreamSourceId == sourceAId && category.UpstreamCategoryId == "11").Select(category => category.Id).SingleAsync();
+        var otherSourceCategoryId = await dbContext.UpstreamCategories.Where(category => category.XtreamSourceId == sourceBId && category.UpstreamCategoryId == "10").Select(category => category.Id).SingleAsync();
+
+        return (sourceAId, targetCategoryId, siblingCategoryId, otherSourceCategoryId);
     }
 
     private static string? ParseQuery(Uri? requestUri, string key)

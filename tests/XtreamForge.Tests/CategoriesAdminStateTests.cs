@@ -52,6 +52,7 @@ public sealed class CategoriesAdminStateTests
         var filteredRows = CategoriesPageState.FilterCategoryRows(rows, "sport", CategoryStatusFilter.Disabled);
 
         var filteredRow = Assert.Single(filteredRows);
+        Assert.Same(rows[0], filteredRow);
         Assert.Equal("|FR| SPORT", filteredRow.Summary.UpstreamCategoryName);
         Assert.Equal(2, rows.Count);
     }
@@ -154,6 +155,47 @@ public sealed class CategoriesAdminStateTests
 
         Assert.False(row.IsCreatingCustomCategory);
         Assert.Equal("custom:9", row.MappingValue);
+        Assert.Null(row.NewCustomCategoryName);
+    }
+
+    [Fact]
+    public void CategoryRowState_ApplyPersistedMapping_SelectsCreatedCustomCategoryImmediately()
+    {
+        var summary = new AdminUpstreamCategory(
+            4,
+            "50",
+            "|FR| 4K UHD",
+            false,
+            null,
+            null,
+            500,
+            "|FR| 4K UHD",
+            "Include",
+            "Include",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            true,
+            "Original");
+
+        var row = new CategoryRowState(summary)
+        {
+            MappingValue = "new",
+            NewCustomCategoryName = "Movies 4K"
+        };
+
+        row.BeginCustomCategoryCreate();
+        row.BeginSave("new", row.NewCustomCategoryName);
+        row.ApplyPersistedMapping(CategoryMappingSelectionOption.Custom, new AdminCustomCategory(42, 1042, "Movies 4K", 1));
+
+        Assert.False(row.IsCreatingCustomCategory);
+        Assert.Equal("custom:42", row.MappingValue);
+        Assert.Equal(42, row.Summary.CustomCategoryId);
+        Assert.Equal("Movies 4K", row.Summary.CustomCategoryName);
+        Assert.Equal("Custom", row.Summary.CurrentMappingSelection);
         Assert.Null(row.NewCustomCategoryName);
     }
 

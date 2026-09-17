@@ -501,6 +501,37 @@ else
         _categoryRows = payload.UpstreamCategories.Select(summary => new CategoryRowState(summary)).ToList();
     }
 
+    private CategoryRowState GetCategoryRow(int upstreamCategoryRecordId) =>
+        _categoryRows.Single(row => row.Summary.Id == upstreamCategoryRecordId);
+
+    private void ApplyCategoryMappingResponse(int upstreamCategoryRecordId, AdminCategoryMappingResponse response)
+    {
+        var row = GetCategoryRow(upstreamCategoryRecordId);
+        var mappingSelection = Enum.TryParse<CategoryMappingSelectionOption>(response.MappingSelection, true, out var parsedSelection)
+            ? parsedSelection
+            : throw new InvalidOperationException("The backend returned an invalid category mapping selection.");
+
+        row.ApplyPersistedMapping(mappingSelection, response.CustomCategory);
+
+        if (response.CustomCategory is null)
+        {
+            return;
+        }
+
+        var existingRow = _customCategoryRows.SingleOrDefault(customCategory => customCategory.Summary.Id == response.CustomCategory.Id);
+        if (existingRow is not null)
+        {
+            existingRow.RefreshSummary(response.CustomCategory);
+            return;
+        }
+
+        _customCategoryRows.Add(new CustomCategoryRowState(response.CustomCategory));
+        _customCategoryRows = _customCategoryRows
+            .OrderBy(customCategory => customCategory.Summary.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(customCategory => customCategory.Summary.Id)
+            .ToList();
+    }
+
     private void ApplyRulesView(AdminCategoryRulesPayload payload)
     {
         _rulesView = payload;
@@ -569,11 +600,13 @@ else
         }
     }
 
-    private async Task OnMappingSelectionChangedAsync(CategoryRowState row)
+    private async Task OnMappingSelectionChangedAsync(CategoryMappingChangeRequest request)
     {
+        var row = GetCategoryRow(request.UpstreamCategoryRecordId);
         _categoryMessage = null;
         _categoryErrorMessage = null;
         row.ClearFeedback();
+        row.MappingValue = request.MappingValue ?? row.MappingValue;
 
         if (row.MappingValue == "new")
         {
@@ -584,20 +617,25 @@ else
         await SaveCategoryMappingAsync(row, row.MappingValue, null);
     }
 
-    private Task CancelCustomCategoryCreate(CategoryRowState row)
+    private Task CancelCustomCategoryCreate(int upstreamCategoryRecordId)
     {
+        var row = GetCategoryRow(upstreamCategoryRecordId);
         row.CancelCustomCategoryCreate();
         return Task.CompletedTask;
     }
 
-    private Task RetryCategoryMappingAsync(CategoryRowState row) =>
-        SaveCategoryMappingAsync(
+    private Task RetryCategoryMappingAsync(int upstreamCategoryRecordId)
+    {
+        var row = GetCategoryRow(upstreamCategoryRecordId);
+        return SaveCategoryMappingAsync(
             row,
             row.PendingMappingValue ?? row.MappingValue,
             row.PendingNewCustomCategoryName ?? row.NewCustomCategoryName);
+    }
 
-    private Task OpenMatchedRuleAsync(CategoryRowState row)
+    private Task OpenMatchedRuleAsync(int upstreamCategoryRecordId)
     {
+        var row = GetCategoryRow(upstreamCategoryRecordId);
         if (row.Summary.MatchedRuleId is int matchedRuleId)
         {
             _highlightedRuleId = matchedRuleId;
@@ -607,8 +645,11 @@ else
         return Task.CompletedTask;
     }
 
-    private Task CreateCustomCategoryAsync(CategoryRowState row) =>
-        SaveCategoryMappingAsync(row, "new", row.NewCustomCategoryName);
+    private Task CreateCustomCategoryAsync(int upstreamCategoryRecordId)
+    {
+        var row = GetCategoryRow(upstreamCategoryRecordId);
+        return SaveCategoryMappingAsync(row, "new", row.NewCustomCategoryName);
+    }
 
     private async Task SaveCategoryMappingAsync(CategoryRowState row, string mappingValue, string? newCustomCategoryName)
     {
@@ -633,8 +674,9 @@ else
                 _ => throw new InvalidOperationException("Invalid category mapping selection.")
             };
 
-            await CategoriesClient.UpdateCategoryMappingAsync(row.Summary.Id, request);
-            await RefreshCategoriesViewAsync(row.Summary.Id, "Mapping saved.");
+            var response = await CategoriesClient.UpdateCategoryMappingAsync(row.Summary.Id, request);
+            ApplyCategoryMappingResponse(row.Summary.Id, response);
+            await RefreshCategoriesViewAsync(message: "Mapping saved.");
         }
         catch (Exception exception)
         {

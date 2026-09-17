@@ -60,6 +60,22 @@ else
                 </div>
                 <div class="dashboard-metric-value">@_status.CustomCategoryCount</div>
             </FluentCard>
+
+            <FluentCard Class="dashboard-metric-card">
+                <div class="dashboard-metric-label">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.Filter())" />
+                    <span>Item rules</span>
+                </div>
+                <div class="dashboard-metric-value">@_status.ItemRuleCount</div>
+            </FluentCard>
+
+            <FluentCard Class="dashboard-metric-card">
+                <div class="dashboard-metric-label">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.Tag())" />
+                    <span>Known TMDB mappings</span>
+                </div>
+                <div class="dashboard-metric-value">@_status.KnownTmdbMappingCount</div>
+            </FluentCard>
         </div>
 
         <FluentCard Class="dashboard-health-card">

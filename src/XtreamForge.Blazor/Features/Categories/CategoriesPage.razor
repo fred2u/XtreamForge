@@ -1,5 +1,6 @@
 @page "/categories"
 @using System.Globalization
+@using System.Diagnostics.CodeAnalysis
 @using Microsoft.AspNetCore.WebUtilities
 @using XtreamForge.Blazor.Features.Categories.CategoryRules
 @using XtreamForge.Blazor.Features.Categories.CustomCategories
@@ -501,12 +502,19 @@ else
         _categoryRows = payload.UpstreamCategories.Select(summary => new CategoryRowState(summary)).ToList();
     }
 
-    private CategoryRowState GetCategoryRow(int upstreamCategoryRecordId) =>
-        _categoryRows.Single(row => row.Summary.Id == upstreamCategoryRecordId);
+    private bool TryGetCategoryRow(int upstreamCategoryRecordId, [NotNullWhen(true)] out CategoryRowState? row)
+    {
+        row = _categoryRows.SingleOrDefault(candidate => candidate.Summary.Id == upstreamCategoryRecordId);
+        return row is not null;
+    }
 
     private void ApplyCategoryMappingResponse(int upstreamCategoryRecordId, AdminCategoryMappingResponse response)
     {
-        var row = GetCategoryRow(upstreamCategoryRecordId);
+        if (!TryGetCategoryRow(upstreamCategoryRecordId, out var row))
+        {
+            return;
+        }
+
         var previousCustomCategoryId = row.Summary.CustomCategoryId;
         var mappingSelection = Enum.TryParse<CategoryMappingSelectionOption>(response.MappingSelection, true, out var parsedSelection)
             ? parsedSelection
@@ -610,7 +618,12 @@ else
 
     private async Task OnMappingSelectionChangedAsync(CategoryMappingChangeRequest request)
     {
-        var row = GetCategoryRow(request.UpstreamCategoryRecordId);
+        if (!TryGetCategoryRow(request.UpstreamCategoryRecordId, out var row))
+        {
+            _categoryErrorMessage = "The selected category is no longer available. Refresh and try again.";
+            return;
+        }
+
         _categoryMessage = null;
         _categoryErrorMessage = null;
         row.ClearFeedback();
@@ -627,14 +640,23 @@ else
 
     private Task CancelCustomCategoryCreate(int upstreamCategoryRecordId)
     {
-        var row = GetCategoryRow(upstreamCategoryRecordId);
+        if (!TryGetCategoryRow(upstreamCategoryRecordId, out var row))
+        {
+            return Task.CompletedTask;
+        }
+
         row.CancelCustomCategoryCreate();
         return Task.CompletedTask;
     }
 
     private Task RetryCategoryMappingAsync(int upstreamCategoryRecordId)
     {
-        var row = GetCategoryRow(upstreamCategoryRecordId);
+        if (!TryGetCategoryRow(upstreamCategoryRecordId, out var row))
+        {
+            _categoryErrorMessage = "The selected category is no longer available. Refresh and try again.";
+            return Task.CompletedTask;
+        }
+
         return SaveCategoryMappingAsync(
             row,
             row.PendingMappingValue ?? row.MappingValue,
@@ -643,7 +665,11 @@ else
 
     private Task OpenMatchedRuleAsync(int upstreamCategoryRecordId)
     {
-        var row = GetCategoryRow(upstreamCategoryRecordId);
+        if (!TryGetCategoryRow(upstreamCategoryRecordId, out var row))
+        {
+            return Task.CompletedTask;
+        }
+
         if (row.Summary.MatchedRuleId is int matchedRuleId)
         {
             _highlightedRuleId = matchedRuleId;
@@ -655,7 +681,12 @@ else
 
     private Task CreateCustomCategoryAsync(int upstreamCategoryRecordId)
     {
-        var row = GetCategoryRow(upstreamCategoryRecordId);
+        if (!TryGetCategoryRow(upstreamCategoryRecordId, out var row))
+        {
+            _categoryErrorMessage = "The selected category is no longer available. Refresh and try again.";
+            return Task.CompletedTask;
+        }
+
         return SaveCategoryMappingAsync(row, "new", row.NewCustomCategoryName);
     }
 

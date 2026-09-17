@@ -122,13 +122,13 @@
                             <td>
                                 <div class="mapping-cell">
                                     <div class="mapping-control-row">
-                                        <FluentSelect Class="mapping-select" TOption="string" @bind-Value="context.MappingValue" @bind-Value:after="() => OnMappingChanged.InvokeAsync(new CategoryMappingChangeRequest(context.Summary.Id, context.MappingValue))" Disabled="@context.IsBusy" AriaLabel="Category mapping">
+                                        <FluentSelect @key="context.Summary.Id" Class="mapping-select" TOption="string" @bind-Value="context.MappingValue" @bind-Value:after="() => OnMappingChanged.InvokeAsync(new CategoryMappingChangeRequest(context.Summary.Id, context.MappingValue))" Disabled="@context.IsBusy" AriaLabel="Category mapping">
                                             <FluentOption Value="disabled">Disabled</FluentOption>
                                             <FluentOption Value="original">Original</FluentOption>
                                             <FluentOption Value="new">New category</FluentOption>
                                             @foreach (var customCategory in CustomCategories)
                                             {
-                                                <FluentOption Value="@CategoryRowState.GetCustomMappingValue(customCategory.Summary.Id)">@customCategory.Summary.DisplayName</FluentOption>
+                                                <FluentOption @key="customCategory.Summary.Id" Value="@CategoryRowState.GetCustomMappingValue(customCategory.Summary.Id)">@customCategory.Summary.DisplayName</FluentOption>
                                             }
                                         </FluentSelect>
 

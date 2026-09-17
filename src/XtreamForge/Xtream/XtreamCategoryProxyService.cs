@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Diagnostics;
 using XtreamForge.Xtream;
 using XtreamForge.Categories;
 using XtreamForge.ServiceDefaults;
@@ -10,6 +11,8 @@ public sealed class XtreamCategoryProxyService(
     XtreamCategoryMappingService categoryMappingService,
     ILogger<XtreamCategoryProxyService> logger)
 {
+    private static readonly ActivitySource ActivitySource = new("XtreamForge");
+
     public async Task<IResult?> TryHandleAsync(
         XtreamUpstreamDestination destination,
         XtreamRequestClassification classification,
@@ -23,18 +26,20 @@ public sealed class XtreamCategoryProxyService(
         try
         {
             using var requestMessage = XtreamProxyHttpRequestFactory.Create(destination.TargetUri, context.Request);
-            using var responseMessage = await upstreamClient.SendAsync(
-                requestMessage,
-                HttpCompletionOption.ResponseHeadersRead,
-                context.RequestAborted);
+            using var requestActivity = ActivitySource.StartActivity("Xtream.Categories.Request", ActivityKind.Internal);
+            requestActivity?.SetTag("xtream.action", classification.Action);
+            requestActivity?.SetTag("xtream.content_type", classification.ContentType?.ToString());
 
+            using var responseMessage = await SendUpstreamRequestAsync(upstreamClient, requestMessage, context.RequestAborted);
             if (!responseMessage.IsSuccessStatusCode)
             {
                 await XtreamProxyResponseWriter.WriteAsync(responseMessage, context.Response, context.Request.Method, context.RequestAborted);
                 return Results.Empty;
             }
 
-            var upstreamCategories = await upstreamClient.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(responseMessage.Content, context.RequestAborted) ?? [];
+            var upstreamCategories = await ReadUpstreamCategoriesAsync(upstreamClient, responseMessage.Content, context.RequestAborted);
+            requestActivity?.SetTag("xtream.categories.upstream_count", upstreamCategories.Count);
+
             var rewrittenCategories = await categoryMappingService.SyncCategoriesAsync(
                 new XtreamSourceDescriptor(destination.Protocol, destination.Host, destination.Port),
                 classification.ContentType.Value,
@@ -42,12 +47,22 @@ public sealed class XtreamCategoryProxyService(
                     .Select(category => new DiscoveredCategory(category.CategoryId ?? string.Empty, category.CategoryName ?? string.Empty))
                     .ToList(),
                 context.RequestAborted);
+            requestActivity?.SetTag("xtream.categories.output_count", rewrittenCategories.Count);
 
-            var payload = rewrittenCategories
-                .Select(category => new XtreamCategoryResponseDto(category.CategoryId, category.CategoryName))
-                .ToList();
+            List<XtreamCategoryResponseDto> payload;
+            using (var activity = ActivitySource.StartActivity("Xtream.Categories.Output", ActivityKind.Internal))
+            {
+                payload = rewrittenCategories
+                    .Select(category => new XtreamCategoryResponseDto(category.CategoryId, category.CategoryName))
+                    .ToList();
+            }
 
-            return TypedResults.Ok(payload);
+            using (var activity = ActivitySource.StartActivity("Xtream.Categories.Serialize", ActivityKind.Internal))
+            {
+                await context.Response.WriteAsJsonAsync(payload, context.RequestAborted);
+            }
+
+            return Results.Empty;
         }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {
@@ -89,5 +104,23 @@ public sealed class XtreamCategoryProxyService(
 
             return Results.StatusCode(StatusCodes.Status502BadGateway);
         }
+    }
+
+    private static async Task<HttpResponseMessage> SendUpstreamRequestAsync(
+        XtreamUpstreamClient upstreamClient,
+        HttpRequestMessage requestMessage,
+        CancellationToken cancellationToken)
+    {
+        using var activity = ActivitySource.StartActivity("Xtream.Categories.Upstream", ActivityKind.Internal);
+        return await upstreamClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+    }
+
+    private static async Task<List<XtreamUpstreamCategoryDto>> ReadUpstreamCategoriesAsync(
+        XtreamUpstreamClient upstreamClient,
+        HttpContent content,
+        CancellationToken cancellationToken)
+    {
+        using var activity = ActivitySource.StartActivity("Xtream.Categories.Deserialize", ActivityKind.Internal);
+        return await upstreamClient.ReadFromJsonAsync<List<XtreamUpstreamCategoryDto>>(content, cancellationToken) ?? [];
     }
 }

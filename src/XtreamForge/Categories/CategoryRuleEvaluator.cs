@@ -6,10 +6,21 @@ public sealed class CategoryRuleEvaluator
 {
     public CategoryRuleEvaluationResult Evaluate(string categoryName, IReadOnlyList<CategoryRuleDefinition> rules)
     {
-        ArgumentNullException.ThrowIfNull(categoryName);
         ArgumentNullException.ThrowIfNull(rules);
+        return EvaluateOrdered(
+            categoryName,
+            rules
+                .OrderBy(rule => rule.Sequence)
+                .ThenBy(rule => rule.Id ?? int.MaxValue)
+                .ToArray());
+    }
 
-        foreach (var rule in rules.OrderBy(rule => rule.Sequence).ThenBy(rule => rule.Id ?? int.MaxValue))
+    public CategoryRuleEvaluationResult EvaluateOrdered(string categoryName, IReadOnlyList<CategoryRuleDefinition> orderedRules)
+    {
+        ArgumentNullException.ThrowIfNull(categoryName);
+        ArgumentNullException.ThrowIfNull(orderedRules);
+
+        foreach (var rule in orderedRules)
         {
             if (!rule.IsEnabled)
             {

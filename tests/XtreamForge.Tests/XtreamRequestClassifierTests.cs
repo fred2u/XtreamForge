@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using XtreamForge.Xtream;
-using XtreamForge.Categories;
+using XtreamForge.Enums;
 
 namespace XtreamForge.Tests;
 

@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using XtreamForge.Data;
+using XtreamForge.Enums;
 
 namespace XtreamForge.Categories;
 

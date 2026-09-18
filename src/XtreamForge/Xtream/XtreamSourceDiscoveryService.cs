@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.WebUtilities;
 using XtreamForge.Categories;
 using XtreamForge.Data;
 using XtreamForge.Source;
+using XtreamForge.Enums;
 
 namespace XtreamForge.Xtream;
 

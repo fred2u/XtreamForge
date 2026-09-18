@@ -1,4 +1,4 @@
-using XtreamForge.Categories;
+using XtreamForge.Enums;
 using XtreamForge.Xtream;
 
 namespace XtreamForge.Tests;

@@ -19,21 +19,25 @@ public sealed class DbContextTests
         await using (var dbContext = new XtreamForgeDbContext(options))
         {
             await dbContext.Database.EnsureCreatedAsync();
-            dbContext.Settings.Add(new Setting
+            dbContext.XtreamSources.Add(new Domain.XtreamSource
             {
-                Key = "Ui:Theme",
-                Value = "Default",
-                Description = "Development-only sample setting"
+                Id = 1,
+                Protocol = "http",
+                Host = "provider.net",
+                Port = 8080
             });
+
             await dbContext.SaveChangesAsync();
         }
 
         await using (var dbContext = new XtreamForgeDbContext(options))
         {
-            var setting = await dbContext.Settings.SingleAsync();
+            var source = await dbContext.XtreamSources.SingleAsync();
 
-            Assert.Equal("Ui:Theme", setting.Key);
-            Assert.Equal("Default", setting.Value);
+            Assert.Equal(1, source.Id);
+            Assert.Equal("http", source.Protocol);
+            Assert.Equal("provider.net", source.Host);
+            Assert.Equal(8080, source.Port);
         }
     }
 }

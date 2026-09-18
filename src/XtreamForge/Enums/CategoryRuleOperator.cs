@@ -1,4 +1,4 @@
-namespace XtreamForge.Categories;
+namespace XtreamForge.Enums;
 
 public enum CategoryRuleOperator
 {

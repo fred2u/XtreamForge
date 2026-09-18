@@ -10,6 +10,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using XtreamForge.Categories;
 using XtreamForge.Data;
+using XtreamForge.Enums;
 using XtreamForge.Items;
 using XtreamForge.Source;
 using XtreamForge.Xtream;

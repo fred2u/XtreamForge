@@ -1,8 +1,8 @@
-using XtreamForge.Categories;
+using XtreamForge.Enums;
 
-namespace XtreamForge.Data;
+namespace XtreamForge.Domain;
 
-public sealed class StreamTmdbMapping
+public sealed class OutputCategory
 {
     public int Id { get; set; }
 
@@ -12,11 +12,15 @@ public sealed class StreamTmdbMapping
 
     public ContentType ContentType { get; set; }
 
-    public required string StreamId { get; set; }
+    public int XtreamForgeCategoryId { get; set; }
 
-    public long TmdbId { get; set; }
+    public required string DisplayName { get; set; }
+
+    public int SortOrder { get; set; }
 
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+
+    public ICollection<UpstreamCategory> DedicatedUpstreamCategories { get; set; } = [];
 }

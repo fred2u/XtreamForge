@@ -1,4 +1,4 @@
-namespace XtreamForge.Data;
+namespace XtreamForge.Domain;
 
 public sealed class XtreamSource
 {

@@ -1,4 +1,4 @@
-namespace XtreamForge.Items;
+namespace XtreamForge.Enums;
 
 public enum ItemInclusionDecision
 {

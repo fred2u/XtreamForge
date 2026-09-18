@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
-using XtreamForge.Categories;
+using XtreamForge.Enums;
 
 namespace XtreamForge.Xtream;
 

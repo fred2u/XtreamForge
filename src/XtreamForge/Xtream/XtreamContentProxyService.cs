@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http.Extensions;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using XtreamForge.Categories;
+using XtreamForge.Enums;
 using XtreamForge.Items;
 using XtreamForge.ServiceDefaults;
 using XtreamForge.Source;

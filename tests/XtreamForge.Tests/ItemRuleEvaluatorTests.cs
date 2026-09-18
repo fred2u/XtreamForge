@@ -1,3 +1,4 @@
+using XtreamForge.Enums;
 using XtreamForge.Items;
 
 namespace XtreamForge.Tests;

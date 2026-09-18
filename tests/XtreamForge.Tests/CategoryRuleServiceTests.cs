@@ -4,6 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using XtreamForge.Data;
 using XtreamForge.Categories;
 using XtreamForge.Source;
+using XtreamForge.Domain;
+using XtreamForge.Enums;
 
 namespace XtreamForge.Tests;
 

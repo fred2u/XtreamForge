@@ -1,14 +1,15 @@
-using System.Net;
-using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using XtreamForge.Admin;
+using System.Net;
+using System.Net.Http.Json;
+using XtreamForge.Admin.Dto;
 using XtreamForge.Categories;
 using XtreamForge.Data;
-using XtreamForge.Source;
+using XtreamForge.Domain;
+using XtreamForge.Enums;
 using XtreamForge.Items;
+using XtreamForge.Source;
 using XtreamForge.Xtream;
 
 namespace XtreamForge.Tests;

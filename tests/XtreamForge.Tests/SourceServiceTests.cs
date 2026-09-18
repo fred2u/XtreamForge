@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using XtreamForge.Categories;
 using XtreamForge.Data;
+using XtreamForge.Enums;
 using XtreamForge.Source;
 
 namespace XtreamForge.Tests;

@@ -1,3 +1,5 @@
+using XtreamForge.Enums;
+
 namespace XtreamForge.Items;
 
 public sealed class ItemRuleEvaluator

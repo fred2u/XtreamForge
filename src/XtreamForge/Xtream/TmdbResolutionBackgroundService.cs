@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.WebUtilities;
-using XtreamForge.Categories;
+using XtreamForge.Enums;
 using XtreamForge.ServiceDefaults;
 
 namespace XtreamForge.Xtream;

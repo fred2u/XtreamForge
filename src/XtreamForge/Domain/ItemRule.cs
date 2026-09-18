@@ -1,7 +1,6 @@
-using XtreamForge.Categories;
-using XtreamForge.Items;
+using XtreamForge.Enums;
 
-namespace XtreamForge.Data;
+namespace XtreamForge.Domain;
 
 public sealed class ItemRule
 {

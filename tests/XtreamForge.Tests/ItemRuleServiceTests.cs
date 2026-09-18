@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using XtreamForge.Categories;
 using XtreamForge.Data;
+using XtreamForge.Enums;
 using XtreamForge.Items;
 using XtreamForge.Source;
 

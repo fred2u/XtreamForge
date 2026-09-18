@@ -22,7 +22,7 @@ namespace XtreamForge.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("XtreamForge.Data.CategoryRule", b =>
+            modelBuilder.Entity("XtreamForge.Domain.CategoryRule", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -89,7 +89,7 @@ namespace XtreamForge.Data.Migrations
                     b.ToTable("category_rules", (string)null);
                 });
 
-            modelBuilder.Entity("XtreamForge.Data.CustomCategory", b =>
+            modelBuilder.Entity("XtreamForge.Domain.CustomCategory", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -138,7 +138,7 @@ namespace XtreamForge.Data.Migrations
                     b.ToTable("custom_categories", (string)null);
                 });
 
-            modelBuilder.Entity("XtreamForge.Data.ItemRule", b =>
+            modelBuilder.Entity("XtreamForge.Domain.ItemRule", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -211,7 +211,7 @@ namespace XtreamForge.Data.Migrations
                     b.ToTable("item_rules", (string)null);
                 });
 
-            modelBuilder.Entity("XtreamForge.Data.OutputCategory", b =>
+            modelBuilder.Entity("XtreamForge.Domain.OutputCategory", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -262,44 +262,7 @@ namespace XtreamForge.Data.Migrations
                     b.ToTable("output_categories", (string)null);
                 });
 
-            modelBuilder.Entity("XtreamForge.Data.Setting", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("description");
-
-                    b.Property<string>("Key")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("key");
-
-                    b.Property<DateTimeOffset>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at_utc");
-
-                    b.Property<string>("Value")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)")
-                        .HasColumnName("value");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Key")
-                        .IsUnique();
-
-                    b.ToTable("settings", (string)null);
-                });
-
-            modelBuilder.Entity("XtreamForge.Data.StreamTmdbMapping", b =>
+            modelBuilder.Entity("XtreamForge.Domain.StreamTmdbMapping", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -346,7 +309,7 @@ namespace XtreamForge.Data.Migrations
                     b.ToTable("stream_tmdb_mappings", (string)null);
                 });
 
-            modelBuilder.Entity("XtreamForge.Data.UpstreamCategory", b =>
+            modelBuilder.Entity("XtreamForge.Domain.UpstreamCategory", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -411,7 +374,7 @@ namespace XtreamForge.Data.Migrations
                     b.ToTable("upstream_categories", (string)null);
                 });
 
-            modelBuilder.Entity("XtreamForge.Data.XtreamSource", b =>
+            modelBuilder.Entity("XtreamForge.Domain.XtreamSource", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -452,9 +415,9 @@ namespace XtreamForge.Data.Migrations
                     b.ToTable("xtream_sources", (string)null);
                 });
 
-            modelBuilder.Entity("XtreamForge.Data.CategoryRule", b =>
+            modelBuilder.Entity("XtreamForge.Domain.CategoryRule", b =>
                 {
-                    b.HasOne("XtreamForge.Data.XtreamSource", "XtreamSource")
+                    b.HasOne("XtreamForge.Domain.XtreamSource", "XtreamSource")
                         .WithMany("CategoryRules")
                         .HasForeignKey("XtreamSourceId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -463,9 +426,9 @@ namespace XtreamForge.Data.Migrations
                     b.Navigation("XtreamSource");
                 });
 
-            modelBuilder.Entity("XtreamForge.Data.ItemRule", b =>
+            modelBuilder.Entity("XtreamForge.Domain.ItemRule", b =>
                 {
-                    b.HasOne("XtreamForge.Data.XtreamSource", "XtreamSource")
+                    b.HasOne("XtreamForge.Domain.XtreamSource", "XtreamSource")
                         .WithMany("ItemRules")
                         .HasForeignKey("XtreamSourceId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -474,9 +437,9 @@ namespace XtreamForge.Data.Migrations
                     b.Navigation("XtreamSource");
                 });
 
-            modelBuilder.Entity("XtreamForge.Data.OutputCategory", b =>
+            modelBuilder.Entity("XtreamForge.Domain.OutputCategory", b =>
                 {
-                    b.HasOne("XtreamForge.Data.XtreamSource", "XtreamSource")
+                    b.HasOne("XtreamForge.Domain.XtreamSource", "XtreamSource")
                         .WithMany("OutputCategories")
                         .HasForeignKey("XtreamSourceId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -485,9 +448,9 @@ namespace XtreamForge.Data.Migrations
                     b.Navigation("XtreamSource");
                 });
 
-            modelBuilder.Entity("XtreamForge.Data.StreamTmdbMapping", b =>
+            modelBuilder.Entity("XtreamForge.Domain.StreamTmdbMapping", b =>
                 {
-                    b.HasOne("XtreamForge.Data.XtreamSource", "XtreamSource")
+                    b.HasOne("XtreamForge.Domain.XtreamSource", "XtreamSource")
                         .WithMany("StreamTmdbMappings")
                         .HasForeignKey("XtreamSourceId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -496,20 +459,20 @@ namespace XtreamForge.Data.Migrations
                     b.Navigation("XtreamSource");
                 });
 
-            modelBuilder.Entity("XtreamForge.Data.UpstreamCategory", b =>
+            modelBuilder.Entity("XtreamForge.Domain.UpstreamCategory", b =>
                 {
-                    b.HasOne("XtreamForge.Data.CustomCategory", "CustomCategory")
+                    b.HasOne("XtreamForge.Domain.CustomCategory", "CustomCategory")
                         .WithMany("UpstreamCategories")
                         .HasForeignKey("CustomCategoryId")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("XtreamForge.Data.OutputCategory", "DedicatedOutputCategory")
+                    b.HasOne("XtreamForge.Domain.OutputCategory", "DedicatedOutputCategory")
                         .WithMany("DedicatedUpstreamCategories")
                         .HasForeignKey("DedicatedOutputCategoryId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("XtreamForge.Data.XtreamSource", "XtreamSource")
+                    b.HasOne("XtreamForge.Domain.XtreamSource", "XtreamSource")
                         .WithMany("UpstreamCategories")
                         .HasForeignKey("XtreamSourceId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -522,17 +485,17 @@ namespace XtreamForge.Data.Migrations
                     b.Navigation("XtreamSource");
                 });
 
-            modelBuilder.Entity("XtreamForge.Data.CustomCategory", b =>
+            modelBuilder.Entity("XtreamForge.Domain.CustomCategory", b =>
                 {
                     b.Navigation("UpstreamCategories");
                 });
 
-            modelBuilder.Entity("XtreamForge.Data.OutputCategory", b =>
+            modelBuilder.Entity("XtreamForge.Domain.OutputCategory", b =>
                 {
                     b.Navigation("DedicatedUpstreamCategories");
                 });
 
-            modelBuilder.Entity("XtreamForge.Data.XtreamSource", b =>
+            modelBuilder.Entity("XtreamForge.Domain.XtreamSource", b =>
                 {
                     b.Navigation("CategoryRules");
 

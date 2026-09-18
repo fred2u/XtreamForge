@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using XtreamForge.Categories;
 using XtreamForge.Data;
+using XtreamForge.Domain;
+using XtreamForge.Enums;
 
 namespace XtreamForge.Xtream;
 

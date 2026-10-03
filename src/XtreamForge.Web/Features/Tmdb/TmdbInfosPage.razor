@@ -1,0 +1,673 @@
+@page "/tmdb"
+@page "/tmdb/infos"
+@using XtreamForge.Web.Features.Categories
+@using XtreamForge.Web.Features.Rules
+@implements IDisposable
+@inject TmdbInfosClient TmdbInfosClient
+@inject CategoriesClient CategoriesClient
+@inject INotificationService NotificationService
+@inject NavigationManager NavigationManager
+@inject TmdbScreenState ScreenState
+
+<PageTitle>TMDB infos - XtreamForge</PageTitle>
+
+<PageHeader Title="TMDB infos" Subtitle="TMDB metadata of the movies and series, shared by every source. See which ones clients receive and why, exclude them manually or with TMDB rules.">
+    <Actions>
+        <FluentButton Appearance="ButtonAppearance.Outline"
+                      IconStart="@(new Icons.Regular.Size16.ArrowClockwise())"
+                      Loading="@_isRefreshing"
+                      OnClick="@RefreshAsync">
+            Refresh
+        </FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary"
+                      IconStart="@(new Icons.Regular.Size16.Filter())"
+                      Disabled="@(_contentType is null || _rulesError is not null)"
+                      Tooltip="Add a TMDB rule for this content type; the current search is proposed as its pattern"
+                      OnClick="@(() => NewTmdbRuleAsync(_filter.Search?.Trim(), TmdbRuleField.Title))">
+            New TMDB rule
+        </FluentButton>
+    </Actions>
+</PageHeader>
+
+<FluentCard Class="surface filter-bar">
+    <CategoryScopeBar Sources="null" ContentType="@_contentType" ContentTypeChanged="@SetContentTypeAsync">
+        <div class="filter-search">
+            <FluentTextInput Label="Search"
+                             Value="@_filter.Search"
+                             ValueChanged="@((string? value) => SetFilterAsync(_filter with { Search = value }))"
+                             Immediate="true"
+                             ImmediateDelay="300"
+                             Placeholder="Title, original title or TMDB ID"
+                             Width="100%">
+                <StartTemplate>
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Search())" aria-hidden="true" />
+                </StartTemplate>
+            </FluentTextInput>
+        </div>
+    </CategoryScopeBar>
+
+    <div class="filter-row">
+        <SegmentedControl TValue="DecisionFilter" Label="Effective state" Options="@DecisionOptions"
+                          Value="@_filter.Decision" ValueChanged="@(value => SetFilterAsync(_filter with { Decision = value }))" />
+        <SegmentedControl TValue="ManualExclusionFilter" Label="Manual exclusion" Options="@ManualExclusionOptions"
+                          Value="@_filter.ManualExclusion" ValueChanged="@(value => SetFilterAsync(_filter with { ManualExclusion = value }))" />
+        <SegmentedControl TValue="LoadStateFilter" Label="Metadata" Options="@LoadStateOptions"
+                          Value="@_filter.LoadState" ValueChanged="@(value => SetFilterAsync(_filter with { LoadState = value }))" />
+        <FluentSelect TOption="string"
+                      TValue="string"
+                      Label="Genre"
+                      Items="@GenreOptions"
+                      OptionText="@(genre => string.IsNullOrEmpty(genre) ? AllGenresText : genre)"
+                      OptionValue="@(genre => genre)"
+                      Value="@(_filter.Genre ?? string.Empty)"
+                      ValueChanged="@((string? value) => SetFilterAsync(_filter with { Genre = string.IsNullOrEmpty(value) ? null : value }))"
+                      Width="200px" />
+    </div>
+</FluentCard>
+
+<FluentCard Class="surface grid-surface">
+    @if (_contentType is null)
+    {
+        <EmptyState Title="Select a content type"
+                    Description="TMDB infos are listed per content type. Choose one above to see the movies or series and their state."
+                    Icon="@(new Icons.Regular.Size24.Filter())" />
+    }
+    else if (_loadError is not null)
+    {
+        <LoadErrorState Title="Unable to load the TMDB infos" Error="@_loadError" IsRetrying="@_isRefreshing" OnRetry="@RefreshAsync" />
+    }
+    else if (_page is { TotalCount: 0 })
+    {
+        <EmptyState Title="No TMDB info yet"
+                    Description="TMDB infos appear once clients request the movies or series of a source through the proxy and their TMDB metadata is found."
+                    Icon="@(new Icons.Regular.Size24.Video())" />
+    }
+    else
+    {
+        <div class="grid-caption" aria-live="polite">
+            @if (_page is { } counters)
+            {
+                <span>
+                    Showing <strong>@counters.MatchingCount.ToString("N0", CultureInfo.CurrentCulture)</strong>
+                    of @counters.TotalCount.ToString("N0", CultureInfo.CurrentCulture)
+                    <ContentTypePill ContentType="@_contentType.Value" />
+                    TMDB infos
+                </span>
+                <span class="grid-caption-stats">
+                    <span>@counters.ExcludedCount.ToString("N0", CultureInfo.CurrentCulture) excluded</span>
+                    <span>@counters.ManuallyExcludedCount.ToString("N0", CultureInfo.CurrentCulture) excluded manually</span>
+                    <span>@counters.NotLoadedCount.ToString("N0", CultureInfo.CurrentCulture) not loaded</span>
+                </span>
+            }
+            @if (!_filter.IsEmpty)
+            {
+                <FluentButton Appearance="ButtonAppearance.Subtle"
+                              Size="ButtonSize.Small"
+                              IconStart="@(new Icons.Regular.Size16.Dismiss())"
+                              OnClick="@(() => SetFilterAsync(new TmdbInfoFilter()))">
+                    Clear filters
+                </FluentButton>
+            }
+        </div>
+
+        @if (_page is { MatchingCount: 0 })
+        {
+            <EmptyState Compact="true"
+                        Title="No matching TMDB info"
+                        Description="Change the filters or the search text."
+                        Icon="@(new Icons.Regular.Size24.Search())">
+                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => SetFilterAsync(new TmdbInfoFilter()))">Clear filters</FluentButton>
+            </EmptyState>
+        }
+        else
+        {
+            <div class="grid-viewport">
+                <FluentDataGrid @ref="_grid"
+                                TGridItem="TmdbInfoDto"
+                                ItemsProvider="@_itemsProvider"
+                                ItemKey="@(info => info.Id)"
+                                Virtualize="true"
+                                ItemSize="64"
+                                ShowHover="true"
+                                RowClass="@GetRowClass"
+                                OnRowClick="@OnRowClickAsync"
+                                GridTemplateColumns="minmax(180px, 2.2fr) minmax(120px, 1.4fr) 88px minmax(210px, 1.2fr) 100px">
+                    <TemplateColumn Title="Title">
+                        <div class="media-cell">
+                            @if (context.PosterThumbnailUrl is { } posterUrl)
+                            {
+                                <img class="poster-thumb" src="@posterUrl" alt="" loading="lazy" />
+                            }
+                            else
+                            {
+                                <span class="poster-thumb poster-thumb-empty" aria-hidden="true">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Image())" />
+                                </span>
+                            }
+                            <div class="cell-stack">
+                                <span class="cell-primary cell-truncate" title="@context.DisplayTitle">@context.DisplayTitle</span>
+                                @if (SubtitleText(context) is { Length: > 0 } subtitle)
+                                {
+                                    <span class="cell-secondary cell-truncate" title="@subtitle">@subtitle</span>
+                                }
+                            </div>
+                        </div>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Genres">
+                        @if (!context.IsLoaded)
+                        {
+                            <span class="status-pill status-pill-warning" title="The TMDB metadata is loaded in the background">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.ArrowSync())" aria-hidden="true" />
+                                Not loaded
+                            </span>
+                        }
+                        else if (context.Genres.Count == 0)
+                        {
+                            <span class="cell-secondary">No genre</span>
+                        }
+                        else
+                        {
+                            <div class="genre-chips" title="@string.Join(", ", context.Genres)">
+                                @foreach (var genre in context.Genres.Take(MaxGenreChips))
+                                {
+                                    <span class="genre-chip">@genre</span>
+                                }
+                                @if (context.Genres.Count > MaxGenreChips)
+                                {
+                                    <span class="genre-more">+@((context.Genres.Count - MaxGenreChips).ToString(CultureInfo.CurrentCulture))</span>
+                                }
+                            </div>
+                        }
+                    </TemplateColumn>
+                    <TemplateColumn Title="Rating" HeaderTooltip="TMDB average vote">
+                        @if (context.VoteAverage is { } voteAverage && context.VoteCount is int voteCount and > 0)
+                        {
+                            <div class="cell-stack">
+                                <span class="rating-value">
+                                    <FluentIcon Value="@(new Icons.Filled.Size12.Star())" aria-hidden="true" />
+                                    @voteAverage.ToString("0.0", CultureInfo.CurrentCulture)
+                                </span>
+                                <span class="cell-secondary">@voteCount.ToString("N0", CultureInfo.CurrentCulture) votes</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <span class="cell-secondary">No votes</span>
+                        }
+                    </TemplateColumn>
+                    <TemplateColumn Title="Effective state" HeaderTooltip="What clients receive, decided by the backend">
+                        <div class="decision-cell">
+                            <TmdbDecisionBadge Decision="@context.Decision" />
+                            <span class="reason-chip @ReasonCssClass(context)">
+                                @ReasonText(context)
+                                <FluentIcon Value="@(new Icons.Regular.Size12.Info())" aria-hidden="true" />
+                            </span>
+                        </div>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Excluded" HeaderTooltip="Manual exclusion by an administrator, for every source">
+                        @* the switch changes the exclusion without opening the details of the row *@
+                        <div class="switch-cell" @onclick:stopPropagation="true">
+                            <FluentSwitch Value="@context.IsExcluded"
+                                          ValueChanged="@((bool value) => SetExcludedAsync(context, value))"
+                                          Disabled="@_busyIds.Contains(context.Id)"
+                                          AriaLabel="@($"Exclude {context.DisplayTitle} manually")" />
+                        </div>
+                    </TemplateColumn>
+                </FluentDataGrid>
+            </div>
+        }
+    }
+</FluentCard>
+
+@* Modal="false" renders a "modal" dialog (with backdrop) that a click outside closes; Modal="true" renders an "alert" dialog. *@
+<FluentDialog @ref="_detailsDialog" Modal="false" OnStateChange="@OnDetailsDialogStateChange">
+    <FluentDialogBody>
+        <TitleTemplate>
+            @(_detailsTarget?.DisplayTitle ?? "TMDB info")
+        </TitleTemplate>
+        <ChildContent>
+            @if (_detailsTarget is not null)
+            {
+                @if (_details is { } details)
+                {
+                    <TmdbInfoDetails Details="@details" Rules="@_rules">
+                        <Controls>
+                            <div class="details-controls">
+                                <div class="details-control">
+                                    <div class="cell-stack">
+                                        <span class="cell-primary">Excluded manually</span>
+                                        <span class="cell-secondary">Never returned to clients, whatever the source and the TMDB rules.</span>
+                                    </div>
+                                    <div class="switch-cell">
+                                        <FluentSwitch Value="@details.Info.IsExcluded"
+                                                      ValueChanged="@((bool value) => SetExcludedFromDetailsAsync(details.Info, value))"
+                                                      Disabled="@_busyIds.Contains(details.Info.Id)"
+                                                      AriaLabel="@($"Exclude {details.Info.DisplayTitle} manually")" />
+                                    </div>
+                                </div>
+                            </div>
+                        </Controls>
+                    </TmdbInfoDetails>
+                }
+                else if (_detailsError is not null)
+                {
+                    <p class="cell-secondary">@_detailsError</p>
+                }
+                else
+                {
+                    <div class="skeleton-list" aria-busy="true">
+                        <FluentSkeleton Width="100%" Height="10rem" Shimmer="true" />
+                        <FluentSkeleton Width="60%" Height="1.5rem" Shimmer="true" />
+                    </div>
+                }
+            }
+        </ChildContent>
+        <ActionTemplate>
+            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="@CloseDetailsAsync">Close</FluentButton>
+        </ActionTemplate>
+    </FluentDialogBody>
+</FluentDialog>
+
+<RuleEditorDialog @ref="_ruleEditor"
+                  Kind="@RuleKind.Tmdb"
+                  SourceId="null"
+                  ContentType="@_contentType"
+                  Rules="@_rules"
+                  Saved="@OnRuleSavedAsync" />
+
+@code {
+    // the API returns at most 200 entries per request; the virtualized grid requests the visible rows and a few more
+    private const int PageSize = 100;
+
+    // the genre chips stay on one line; the other genres are counted and listed in the tooltip
+    private const int MaxGenreChips = 3;
+
+    // text of the genre option that keeps every genre (its value is the empty string)
+    private const string AllGenresText = "All genres";
+
+    private static readonly IReadOnlyList<SegmentOption<DecisionFilter>> DecisionOptions =
+        [new(DecisionFilter.All, "All"), new(DecisionFilter.Included, "Included"), new(DecisionFilter.Excluded, "Excluded")];
+
+    private static readonly IReadOnlyList<SegmentOption<ManualExclusionFilter>> ManualExclusionOptions =
+        [new(ManualExclusionFilter.All, "All"), new(ManualExclusionFilter.Excluded, "Excluded"), new(ManualExclusionFilter.NotExcluded, "Not excluded")];
+
+    private static readonly IReadOnlyList<SegmentOption<LoadStateFilter>> LoadStateOptions =
+        [new(LoadStateFilter.All, "All"), new(LoadStateFilter.Loaded, "Loaded"), new(LoadStateFilter.NotLoaded, "Not loaded")];
+
+    // The content type and the search are kept in the query string so that they survive a reload and can be linked.
+    [SupplyParameterFromQuery(Name = "type")]
+    public string? ContentTypeQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "search")]
+    public string? SearchQuery { get; set; }
+
+    // Filters that can be set by a link (for example from the dashboard); values are the filter enum names.
+    [SupplyParameterFromQuery(Name = "decision")]
+    public string? DecisionQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "manual")]
+    public string? ManualExclusionQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "load")]
+    public string? LoadStateQuery { get; set; }
+
+    private readonly CancellationTokenSource _disposal = new();
+    private readonly HashSet<int> _busyIds = [];
+    private GridItemsProvider<TmdbInfoDto>? _itemsProvider;
+    private FluentDataGrid<TmdbInfoDto>? _grid;
+    private ContentType? _contentType;
+    private TmdbInfoFilter _filter = new();
+    private TmdbInfoPageDto? _page;
+    private IReadOnlyList<string> _genres = []; // genres of the content type, kept while the rows reload
+    private Exception? _loadError;
+    private IReadOnlyList<RuleDto> _rules = [];
+    private Exception? _rulesError;
+    private bool _isRefreshing;
+    private RuleEditorDialog? _ruleEditor;
+    private FluentDialog? _detailsDialog;
+    private TmdbInfoDto? _detailsTarget;
+    private TmdbInfoDetailsDto? _details;
+    private string? _detailsError;
+
+    // The selected genre stays listed even when no entry has it anymore.
+    private IReadOnlyList<string> GenreOptions =>
+        _filter.Genre is { } genre && !_genres.Contains(genre, StringComparer.OrdinalIgnoreCase)
+            ? [string.Empty, genre, .. _genres]
+            : [string.Empty, .. _genres];
+
+    protected override void OnInitialized()
+    {
+        _itemsProvider = ProvideItemsAsync;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Without a content type in the query string, the last one of the circuit (or the first one) is shown.
+        var contentType = ParseContentType(ContentTypeQuery) ?? ScreenState.ContentType ?? CategoryLabels.ContentTypes[0];
+        if (contentType == _contentType)
+        {
+            return;
+        }
+
+        _contentType = contentType;
+        var linkedFilter = TmdbInfoFilter.FromLink(SearchQuery, DecisionQuery, ManualExclusionQuery, LoadStateQuery);
+        _filter = linkedFilter ?? (SearchQuery is null ? ScreenState.Filter : ScreenState.Filter with { Search = SearchQuery });
+        if (contentType != ScreenState.ContentType)
+        {
+            // genres differ between movies and series
+            _filter = _filter with { Genre = null };
+        }
+
+        _genres = [];
+        RememberState();
+        if (ParseContentType(ContentTypeQuery) != contentType || linkedFilter is not null)
+        {
+            UpdateQueryString();
+        }
+
+        await LoadRulesAsync();
+        await ReloadAsync();
+    }
+
+    // Called by the virtualized grid for the visible rows; the API filters, sorts, and pages the entries.
+    private async ValueTask<GridItemsProviderResult<TmdbInfoDto>> ProvideItemsAsync(GridItemsProviderRequest<TmdbInfoDto> request)
+    {
+        if (_contentType is not { } contentType)
+        {
+            return GridItemsProviderResult.From<TmdbInfoDto>([], 0);
+        }
+
+        try
+        {
+            var count = request.Count is int requested && requested > 0 ? Math.Min(requested, PageSize) : PageSize;
+            var page = await TmdbInfosClient.GetPageAsync(contentType, _filter, request.StartIndex, count, request.CancellationToken);
+
+            var countersChanged = _page is not { } previous
+                || (previous.MatchingCount, previous.TotalCount, previous.ExcludedCount, previous.ManuallyExcludedCount, previous.NotLoadedCount)
+                    != (page.MatchingCount, page.TotalCount, page.ExcludedCount, page.ManuallyExcludedCount, page.NotLoadedCount);
+            var genresChanged = !page.Genres.SequenceEqual(_genres);
+            _page = page;
+            _genres = page.Genres;
+            if (countersChanged || genresChanged)
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+
+            return GridItemsProviderResult.From([.. page.Items], page.MatchingCount);
+        }
+        catch (OperationCanceledException) when (request.CancellationToken.IsCancellationRequested || _disposal.IsCancellationRequested)
+        {
+            return GridItemsProviderResult.From<TmdbInfoDto>([], 0);
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            _loadError = exception;
+            await InvokeAsync(StateHasChanged);
+            return GridItemsProviderResult.From<TmdbInfoDto>([], 0);
+        }
+    }
+
+    // The grid is shown again (and loads its first rows) after an error or an empty result; otherwise it reloads its rows.
+    private async Task ReloadAsync()
+    {
+        var isGridShown = _loadError is null && _page is not { MatchingCount: 0 };
+        _loadError = null;
+        if (isGridShown && _grid is { } grid)
+        {
+            await grid.RefreshDataAsync();
+        }
+        else
+        {
+            _page = null;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadRulesAsync()
+    {
+        if (_contentType is not { } contentType)
+        {
+            return;
+        }
+
+        try
+        {
+            _rules = await CategoriesClient.GetRulesAsync(RuleKind.Tmdb, null, contentType, _disposal.Token);
+            _rulesError = null;
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            _rules = [];
+            _rulesError = exception;
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        _isRefreshing = true;
+        try
+        {
+            await LoadRulesAsync();
+            await ReloadAsync();
+        }
+        finally
+        {
+            _isRefreshing = false;
+        }
+    }
+
+    private async Task SetContentTypeAsync(ContentType? contentType)
+    {
+        if (contentType is null || contentType == _contentType)
+        {
+            return;
+        }
+
+        _contentType = contentType;
+        _filter = _filter with { Genre = null }; // genres differ between movies and series
+        _genres = [];
+        RememberState();
+        UpdateQueryString();
+        await LoadRulesAsync();
+        await ReloadAsync();
+    }
+
+    private async Task SetFilterAsync(TmdbInfoFilter filter)
+    {
+        if (filter == _filter)
+        {
+            return;
+        }
+
+        _filter = filter;
+        RememberState();
+        await ReloadAsync();
+    }
+
+    private void RememberState()
+    {
+        ScreenState.ContentType = _contentType;
+        ScreenState.Filter = _filter;
+    }
+
+    private void UpdateQueryString()
+    {
+        var uri = NavigationManager.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["type"] = _contentType?.ToString(),
+            ["search"] = null,
+            ["decision"] = null,
+            ["manual"] = null,
+            ["load"] = null
+        });
+        NavigationManager.NavigateTo(uri, replace: true);
+    }
+
+    private static ContentType? ParseContentType(string? value) =>
+        Enum.TryParse<ContentType>(value, ignoreCase: true, out var contentType) && Enum.IsDefined(contentType) ? contentType : null;
+
+    private static string? GetRowClass(TmdbInfoDto info) =>
+        info.Decision == InclusionDecision.Exclude ? "row-dimmed" : null;
+
+    private static string ReasonText(TmdbInfoDto info) => info switch
+    {
+        { ExclusionReason: TmdbExclusionReason.ManuallyExcluded } => "Manual",
+        { DecidingRule: { } rule } => $"Rule #{rule.Id}",
+        _ => "Default"
+    };
+
+    private static string ReasonCssClass(TmdbInfoDto info) => info switch
+    {
+        { ExclusionReason: TmdbExclusionReason.ManuallyExcluded } => "reason-chip-manual",
+        { DecidingRule: not null } => "reason-chip-rule",
+        _ => "reason-chip-neutral"
+    };
+
+    // Release year, TMDB ID (unless already displayed as the title), and original title when it differs from the title.
+    private static string SubtitleText(TmdbInfoDto info)
+    {
+        List<string> parts = [];
+        if (info.ReleaseDate is { } releaseDate)
+        {
+            parts.Add(releaseDate.Year.ToString(CultureInfo.InvariantCulture));
+        }
+
+        if (!string.IsNullOrWhiteSpace(info.Title))
+        {
+            parts.Add($"TMDB #{info.TmdbId.ToString(CultureInfo.InvariantCulture)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(info.OriginalTitle) && info.OriginalTitle != info.Title)
+        {
+            parts.Add(info.OriginalTitle);
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    // ─── TMDB rules ─────────────────────────────────────────────────────────
+
+    private Task NewTmdbRuleAsync(string? pattern, TmdbRuleField field) =>
+        _ruleEditor is null ? Task.CompletedTask : _ruleEditor.ShowAsync(pattern: pattern, field: field);
+
+    // A new or changed rule can change the decision of every entry.
+    private async Task OnRuleSavedAsync()
+    {
+        await LoadRulesAsync();
+        await ReloadAsync();
+    }
+
+    // ─── Manual exclusion ───────────────────────────────────────────────────
+
+    private async Task SetExcludedAsync(TmdbInfoDto info, bool isExcluded)
+    {
+        if (info.IsExcluded == isExcluded || !_busyIds.Add(info.Id))
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await TmdbInfosClient.SetExcludedAsync(info.Id, isExcluded, _disposal.Token);
+            if (result == AdminOperationResult.Success)
+            {
+                await NotificationService.ShowSuccessToastAsync($"\"{info.DisplayTitle}\" {(isExcluded ? "excluded manually" : "no longer excluded manually")}.");
+            }
+            else
+            {
+                await NotificationService.ShowWarningToastAsync($"\"{info.DisplayTitle}\" no longer exists.", "The list is reloaded.");
+            }
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            await NotificationService.ShowErrorToastAsync($"Unable to update \"{info.DisplayTitle}\".", ApiErrorMessage.Describe(exception));
+        }
+        finally
+        {
+            _busyIds.Remove(info.Id);
+        }
+
+        // the decision is computed by the backend: the rows are reloaded (also restores the switch after a failure)
+        await ReloadAsync();
+    }
+
+    // ─── Details ────────────────────────────────────────────────────────────
+
+    private Task OnRowClickAsync(FluentDataGridRow<TmdbInfoDto> row) =>
+        row.Item is { } info ? ShowDetailsAsync(info) : Task.CompletedTask;
+
+    private async Task ShowDetailsAsync(TmdbInfoDto info)
+    {
+        if (_detailsDialog is null)
+        {
+            return;
+        }
+
+        _detailsTarget = info;
+        _details = null;
+        _detailsError = null;
+        await _detailsDialog.ShowAsync();
+        await LoadDetailsAsync(info);
+    }
+
+    private async Task LoadDetailsAsync(TmdbInfoDto info)
+    {
+        try
+        {
+            var details = await TmdbInfosClient.GetAsync(info.Id, _disposal.Token);
+            if (_detailsTarget?.Id != info.Id)
+            {
+                return;
+            }
+
+            _details = details;
+            _detailsError = details is null ? "This TMDB info no longer exists." : null;
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            _detailsError = $"Unable to load the details. {ApiErrorMessage.Describe(exception)}";
+        }
+    }
+
+    // The details are reloaded with the list: the decision is computed by the backend.
+    private async Task SetExcludedFromDetailsAsync(TmdbInfoDto info, bool isExcluded)
+    {
+        await SetExcludedAsync(info, isExcluded);
+        if (_detailsTarget?.Id == info.Id)
+        {
+            await LoadDetailsAsync(info);
+        }
+    }
+
+    private async Task CloseDetailsAsync()
+    {
+        if (_detailsDialog is not null)
+        {
+            await _detailsDialog.HideAsync();
+        }
+
+        ResetDetails();
+    }
+
+    // Also called when the dialog is dismissed with Escape.
+    private void OnDetailsDialogStateChange(DialogEventArgs args)
+    {
+        if (args.State == DialogState.Closed)
+        {
+            ResetDetails();
+        }
+    }
+
+    private void ResetDetails()
+    {
+        _detailsTarget = null;
+        _details = null;
+        _detailsError = null;
+    }
+
+    public void Dispose()
+    {
+        _disposal.Cancel();
+        _disposal.Dispose();
+    }
+}

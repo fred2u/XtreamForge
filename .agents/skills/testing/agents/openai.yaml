@@ -1,0 +1,4 @@
+interface:
+  display_name: "XtreamForge – Testing"
+  short_description: "Write unit, API and integration tests"
+  default_prompt: "Use $testing to write tests for the new XtreamForge proxy endpoint I just added."

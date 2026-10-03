@@ -1,0 +1,672 @@
+@page "/categories/custom"
+@using System.Net
+@implements IDisposable
+@inject CategoriesClient CategoriesClient
+@inject INotificationService NotificationService
+@inject IDialogService DialogService
+@inject NavigationManager NavigationManager
+@inject CategoryScreenState ScreenState
+
+<PageTitle>Custom categories - XtreamForge</PageTitle>
+
+<PageHeader Title="Custom categories" Subtitle="Your own categories, shared by every source. Xtream categories mapped to a custom category are presented to clients under its name.">
+    <Actions>
+        <FluentButton Appearance="ButtonAppearance.Outline"
+                      IconStart="@(new Icons.Regular.Size16.ArrowClockwise())"
+                      Loading="@_isRefreshing"
+                      Disabled="@(_contentType is null || _isLoading)"
+                      OnClick="@RefreshAsync">
+            Refresh
+        </FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary"
+                      IconStart="@(new Icons.Regular.Size16.Add())"
+                      Disabled="@(_contentType is null || _isLoading || _loadError is not null)"
+                      OnClick="@StartCreate">
+            New custom category
+        </FluentButton>
+    </Actions>
+</PageHeader>
+
+<FluentCard Class="surface filter-bar">
+    <CategoryScopeBar ContentType="@_contentType" ContentTypeChanged="@SetContentTypeAsync">
+        <div class="filter-search">
+            <FluentTextInput Label="Search"
+                             Value="@_search"
+                             ValueChanged="@((string? value) => SetSearch(value))"
+                             Immediate="true"
+                             ImmediateDelay="150"
+                             Disabled="@(_contentType is null)"
+                             Placeholder="@(_contentType is null ? "Select a content type first" : "Custom category name")"
+                             Width="100%">
+                <StartTemplate>
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Search())" aria-hidden="true" />
+                </StartTemplate>
+            </FluentTextInput>
+        </div>
+    </CategoryScopeBar>
+</FluentCard>
+
+<FluentCard Class="surface grid-surface">
+    @if (_contentType is not { } contentType)
+    {
+        <EmptyState Title="Select a content type"
+                    Description="Custom categories exist separately for VOD and series. Choose one above to manage its custom categories."
+                    Icon="@(new Icons.Regular.Size24.Tag())" />
+    }
+    else if (_isLoading)
+    {
+        <div class="skeleton-list" aria-busy="true">
+            @for (var index = 0; index < 6; index++)
+            {
+                <FluentSkeleton Width="100%" Height="2.5rem" Shimmer="true" />
+            }
+        </div>
+    }
+    else if (_loadError is not null)
+    {
+        <LoadErrorState Title="Unable to load the custom categories" Error="@_loadError" IsRetrying="@_isRefreshing" OnRetry="@RefreshAsync" />
+    }
+    else
+    {
+        @if (_categories.Count == 0)
+        {
+            <EmptyState Title="@($"No {CategoryLabels.ContentTypeName(contentType)} custom category yet")"
+                        Description="Create custom categories to regroup provider categories under your own names."
+                        Icon="@(new Icons.Regular.Size24.Tag())">
+                <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size16.Add())" OnClick="@StartCreate">New custom category</FluentButton>
+            </EmptyState>
+        }
+        else
+        {
+            <div class="grid-caption" aria-live="polite">
+                <span>
+                    Showing <strong>@Filtered.Count.ToString("N0", CultureInfo.CurrentCulture)</strong>
+                    of @_categories.Count.ToString("N0", CultureInfo.CurrentCulture)
+                    <ContentTypePill ContentType="@contentType" />
+                    custom categories
+                </span>
+                @if (!string.IsNullOrWhiteSpace(_search))
+                {
+                    <FluentButton Appearance="ButtonAppearance.Subtle"
+                                  Size="ButtonSize.Small"
+                                  IconStart="@(new Icons.Regular.Size16.Dismiss())"
+                                  OnClick="@(() => SetSearch(null))">
+                        Clear filters
+                    </FluentButton>
+                }
+            </div>
+
+            @if (Filtered.Count == 0)
+            {
+                <EmptyState Compact="true" Title="No matching custom category" Description="Change the search text." Icon="@(new Icons.Regular.Size24.Search())">
+                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => SetSearch(null))">Clear filters</FluentButton>
+                </EmptyState>
+            }
+            else
+            {
+                <ul class="item-list" aria-label="Custom categories">
+                    @foreach (var category in Filtered)
+                    {
+                        var isBusy = _busyIds.Contains(category.Id);
+                        <li class="item-row" @key="category.Id">
+                            <div class="cell-stack item-row-main">
+                                <span class="cell-primary cell-truncate" title="@category.Name">@category.Name</span>
+                                <span class="cell-secondary">ID @category.Id</span>
+                            </div>
+                            <div class="item-row-actions">
+                                <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" IconOnly="true"
+                                              IconStart="@(new Icons.Regular.Size16.Link())"
+                                              aria-label="@($"Xtream categories mapped to {category.Name}")" Tooltip="Mapped Xtream categories"
+                                              Disabled="@isBusy"
+                                              OnClick="@(() => ShowMappingsAsync(category))" />
+                                <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" IconOnly="true"
+                                              IconStart="@(new Icons.Regular.Size16.Edit())"
+                                              aria-label="@($"Rename {category.Name}")" Tooltip="Rename"
+                                              Disabled="@isBusy"
+                                              OnClick="@(() => StartEditAsync(category))" />
+                                <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" IconOnly="true"
+                                              IconStart="@(new Icons.Regular.Size16.Delete())"
+                                              aria-label="@($"Delete {category.Name}")" Tooltip="Delete"
+                                              Loading="@isBusy"
+                                              Disabled="@isBusy"
+                                              OnClick="@(() => DeleteAsync(category))" />
+                            </div>
+                        </li>
+                    }
+                </ul>
+            }
+        }
+    }
+</FluentCard>
+
+<FluentDialog @ref="_dialog" OnStateChange="@OnDialogStateChange" PreventDismissOnEscape="@_isSaving">
+    <FluentDialogBody>
+        <TitleTemplate>
+            @EditorTitle
+        </TitleTemplate>
+        <ChildContent>
+            @if (_isEditorOpen)
+            {
+                <form class="dialog-form" @onsubmit="@SaveAsync">
+                    <FluentTextInput Label="Name"
+                                     @bind-Value="_editorName"
+                                     Immediate="true"
+                                     MaxLength="@NameMaxLength"
+                                     Autofocus="true"
+                                     Disabled="@_isSaving"
+                                     Placeholder="For example: Movies for kids"
+                                     Message="@_editorError"
+                                     MessageCondition="@(field => !string.IsNullOrEmpty(field.Message))"
+                                     MessageState="@(_editorError is null ? null : MessageState.Error)"
+                                     Width="100%" />
+                </form>
+            }
+        </ChildContent>
+        <ActionTemplate>
+            <FluentButton Appearance="ButtonAppearance.Primary" Loading="@_isSaving" Disabled="@(!CanSave)" OnClick="@SaveAsync">
+                @(_renamed is null ? "Create" : "Save")
+            </FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@_isSaving" OnClick="@CloseEditorAsync">Cancel</FluentButton>
+        </ActionTemplate>
+    </FluentDialogBody>
+</FluentDialog>
+
+<FluentDialog @ref="_mappingsDialog" OnStateChange="@OnMappingsDialogStateChange">
+    <FluentDialogBody>
+        <TitleTemplate>
+            @(_mappingsOf is null ? null : $"Xtream categories mapped to \"{_mappingsOf.Name}\"")
+        </TitleTemplate>
+        <ChildContent>
+            @if (_mappingsOf is not null)
+            {
+                @if (_isLoadingMappings)
+                {
+                    <div class="skeleton-list" aria-busy="true">
+                        @for (var index = 0; index < 3; index++)
+                        {
+                            <FluentSkeleton Width="100%" Height="2.5rem" Shimmer="true" />
+                        }
+                    </div>
+                }
+                else if (_mappingsError is not null)
+                {
+                    <LoadErrorState Title="Unable to load the mapped Xtream categories" Error="@_mappingsError" OnRetry="@LoadMappingsAsync" />
+                }
+                else if (_mappings.Count == 0)
+                {
+                    <EmptyState Compact="true"
+                                Title="No mapped Xtream category"
+                                Description="Map Xtream categories to this custom category on the Xtream categories screen."
+                                Icon="@(new Icons.Regular.Size24.Link())" />
+                }
+                else
+                {
+                    <ul class="item-list mapping-list" aria-label="Mapped Xtream categories">
+                        @foreach (var mapping in _mappings)
+                        {
+                            var isUnlinking = _unlinkingIds.Contains(mapping.Category.Id);
+                            <li class="item-row" @key="mapping.Category.Id">
+                                <div class="cell-stack item-row-main">
+                                    <span class="cell-primary cell-truncate" title="@mapping.Category.Name">@mapping.Category.Name</span>
+                                    <span class="cell-secondary">@mapping.Source.DisplayName · ID @mapping.Category.XtreamId</span>
+                                </div>
+                                <div class="item-row-actions">
+                                    <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" IconOnly="true"
+                                                  IconStart="@(new Icons.Regular.Size16.LinkDismiss())"
+                                                  aria-label="@($"Remove the mapping of {mapping.Category.Name}")" Tooltip="Remove the mapping"
+                                                  Loading="@isUnlinking"
+                                                  Disabled="@isUnlinking"
+                                                  OnClick="@(() => UnlinkAsync(mapping))" />
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                }
+            }
+        </ChildContent>
+        <ActionTemplate>
+            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="@CloseMappingsAsync">Close</FluentButton>
+        </ActionTemplate>
+    </FluentDialogBody>
+</FluentDialog>
+
+@code {
+    private const int NameMaxLength = 255; // custom_categories.name column length
+
+    [SupplyParameterFromQuery(Name = "type")]
+    public string? ContentTypeQuery { get; set; }
+
+    private readonly CancellationTokenSource _disposal = new();
+    private readonly HashSet<int> _busyIds = [];
+    private ContentType? _contentType;
+    private IReadOnlyList<CustomCategoryDto> _categories = [];
+    private string? _search;
+    private bool _isLoading;
+    private bool _isRefreshing;
+    private bool _isSaving;
+    private Exception? _loadError;
+    private FluentDialog? _dialog;
+    private FluentDialog? _mappingsDialog;
+    private CustomCategoryDto? _mappingsOf;
+    private List<CustomCategoryMapping> _mappings = [];
+    private readonly HashSet<int> _unlinkingIds = [];
+    private bool _isLoadingMappings;
+    private Exception? _mappingsError;
+    private bool _isEditorOpen;
+    private CustomCategoryDto? _renamed; // null when creating
+    private string? _editorName;
+    private string? _editorError;
+    private int _loadVersion;
+
+    private IReadOnlyList<CustomCategoryDto> Filtered => string.IsNullOrWhiteSpace(_search)
+        ? _categories
+        : [.. _categories.Where(category => category.Name.Contains(_search.Trim(), StringComparison.CurrentCultureIgnoreCase))];
+
+    private bool CanSave => !string.IsNullOrWhiteSpace(_editorName) && _editorName.Trim() != _renamed?.Name;
+
+    private string EditorTitle
+    {
+        get
+        {
+            if (_renamed is not null)
+            {
+                return $"Rename \"{_renamed.Name}\"";
+            }
+
+            return _contentType is { } contentType ? $"New {CategoryLabels.ContentTypeName(contentType)} custom category" : "New custom category";
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var queryContentType = Enum.TryParse<ContentType>(ContentTypeQuery, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed) ? parsed : (ContentType?)null;
+
+        // Without a content type in the query string, the last one of the circuit (or the first one) is shown.
+        var contentType = queryContentType ?? ScreenState.CustomCategoriesContentType ?? CategoryLabels.ContentTypes[0];
+        if (contentType != _contentType)
+        {
+            _search = ScreenState.CustomCategoriesSearch;
+            _contentType = contentType;
+            RememberState();
+            if (queryContentType != contentType)
+            {
+                NavigationManager.NavigateTo(NavigationManager.GetUriWithQueryParameter("type", contentType.ToString()), replace: true);
+            }
+
+            await LoadAsync();
+        }
+    }
+
+    private async Task SetContentTypeAsync(ContentType? contentType)
+    {
+        _contentType = contentType;
+        RememberState();
+        NavigationManager.NavigateTo(NavigationManager.GetUriWithQueryParameter("type", contentType?.ToString()), replace: true);
+        await LoadAsync();
+    }
+
+    private void SetSearch(string? search)
+    {
+        _search = search;
+        ScreenState.CustomCategoriesSearch = search;
+    }
+
+    private void RememberState()
+    {
+        ScreenState.CustomCategoriesContentType = _contentType;
+        ScreenState.CustomCategoriesSearch = _search;
+    }
+
+    private async Task LoadAsync(bool showLoading = true)
+    {
+        if (_contentType is not { } contentType)
+        {
+            _categories = [];
+            return;
+        }
+
+        var version = ++_loadVersion;
+        _isLoading = showLoading;
+        try
+        {
+            var categories = await CategoriesClient.GetCustomCategoriesAsync(contentType, _disposal.Token);
+            if (version == _loadVersion)
+            {
+                _categories = [.. categories.OrderBy(category => category.Name, StringComparer.CurrentCultureIgnoreCase)];
+                _loadError = null;
+            }
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested && version == _loadVersion)
+        {
+            _loadError = exception;
+        }
+        finally
+        {
+            if (version == _loadVersion)
+            {
+                _isLoading = false;
+            }
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        _isRefreshing = true;
+        try
+        {
+            await LoadAsync();
+        }
+        finally
+        {
+            _isRefreshing = false;
+        }
+    }
+
+    private Task StartCreate() => OpenEditorAsync(null);
+
+    private Task StartEditAsync(CustomCategoryDto category) => OpenEditorAsync(category);
+
+    private async Task OpenEditorAsync(CustomCategoryDto? renamed)
+    {
+        if (_dialog is null)
+        {
+            return;
+        }
+
+        _renamed = renamed;
+        _editorName = renamed?.Name;
+        _editorError = null;
+        _isEditorOpen = true;
+        await _dialog.ShowAsync();
+    }
+
+    private async Task CloseEditorAsync()
+    {
+        if (_dialog is not null)
+        {
+            await _dialog.HideAsync();
+        }
+
+        ResetEditor();
+    }
+
+    // Also called when the dialog is dismissed with Escape.
+    private void OnDialogStateChange(DialogEventArgs args)
+    {
+        if (args.State == DialogState.Closed)
+        {
+            ResetEditor();
+        }
+    }
+
+    private void ResetEditor()
+    {
+        _isEditorOpen = false;
+        _renamed = null;
+        _editorName = null;
+        _editorError = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!_isEditorOpen || _isSaving)
+        {
+            return;
+        }
+
+        var name = _editorName?.Trim();
+        if (string.IsNullOrEmpty(name))
+        {
+            _editorError = "Enter a name.";
+            return;
+        }
+
+        _isSaving = true;
+        try
+        {
+            var closeEditor = _renamed is { } category
+                ? await RenameAsync(category, name)
+                : await CreateAsync(name);
+            if (closeEditor)
+            {
+                await CloseEditorAsync();
+                await LoadAsync(showLoading: false);
+            }
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            _editorError = $"Unable to save the custom category. {ApiErrorMessage.Describe(exception)}";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    // Returns false when the editor must stay open to show an error.
+    private async Task<bool> CreateAsync(string name)
+    {
+        if (_contentType is not { } contentType)
+        {
+            return true;
+        }
+
+        var result = await CategoriesClient.CreateCustomCategoryAsync(new CustomCategoryRequest(name, contentType), _disposal.Token);
+        if (result == AdminOperationResult.Conflict)
+        {
+            _editorError = $"A {CategoryLabels.ContentTypeName(contentType)} custom category named \"{name}\" already exists.";
+            return false;
+        }
+
+        await NotificationService.ShowSuccessToastAsync($"Custom category \"{name}\" created.");
+        return true;
+    }
+
+    // Returns false when the editor must stay open to show an error.
+    private async Task<bool> RenameAsync(CustomCategoryDto category, string name)
+    {
+        if (name == category.Name)
+        {
+            return true;
+        }
+
+        // The API renames only: the content type of a custom category cannot change.
+        var result = await CategoriesClient.UpdateCustomCategoryAsync(category.Id, new CustomCategoryRequest(name, category.ContentType), _disposal.Token);
+        switch (result)
+        {
+            case AdminOperationResult.Conflict:
+                _editorError = $"A {CategoryLabels.ContentTypeName(category.ContentType)} custom category named \"{name}\" already exists.";
+                return false;
+            case AdminOperationResult.NotFound:
+                await NotificationService.ShowWarningToastAsync($"\"{category.Name}\" no longer exists.");
+                return true;
+            default:
+                await NotificationService.ShowSuccessToastAsync($"\"{category.Name}\" renamed to \"{name}\".");
+                return true;
+        }
+    }
+
+    // ─── Mapped Xtream categories ───────────────────────────────────────────
+
+    private async Task ShowMappingsAsync(CustomCategoryDto category)
+    {
+        if (_mappingsDialog is null)
+        {
+            return;
+        }
+
+        _mappingsOf = category;
+        _mappings = [];
+        await _mappingsDialog.ShowAsync();
+        await LoadMappingsAsync();
+    }
+
+    private async Task LoadMappingsAsync()
+    {
+        if (_mappingsOf is not { } category)
+        {
+            return;
+        }
+
+        _isLoadingMappings = true;
+        _mappingsError = null;
+        try
+        {
+            var mappings = await CategoriesClient.GetCustomCategoryMappingsAsync(category.Id, _disposal.Token);
+
+            // The dialog may have been closed or opened for another custom category meanwhile.
+            if (_mappingsOf?.Id == category.Id)
+            {
+                _mappings = [.. mappings
+                    .OrderBy(mapping => mapping.Source.DisplayName, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(mapping => mapping.Category.Name, StringComparer.CurrentCultureIgnoreCase)];
+            }
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested && _mappingsOf?.Id == category.Id)
+        {
+            _mappingsError = exception;
+        }
+        finally
+        {
+            if (_mappingsOf?.Id == category.Id)
+            {
+                _isLoadingMappings = false;
+            }
+        }
+    }
+
+    private async Task CloseMappingsAsync()
+    {
+        if (_mappingsDialog is not null)
+        {
+            await _mappingsDialog.HideAsync();
+        }
+
+        ResetMappings();
+    }
+
+    // Also called when the dialog is dismissed with Escape.
+    private void OnMappingsDialogStateChange(DialogEventArgs args)
+    {
+        if (args.State == DialogState.Closed)
+        {
+            ResetMappings();
+        }
+    }
+
+    private void ResetMappings()
+    {
+        _mappingsOf = null;
+        _mappings = [];
+        _mappingsError = null;
+        _isLoadingMappings = false;
+    }
+
+    private async Task UnlinkAsync(CustomCategoryMapping mapping)
+    {
+        var category = mapping.Category;
+        if (!_unlinkingIds.Add(category.Id))
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await CategoriesClient.PatchXtreamCategoryAsync(category.Id, new XtreamCategoryPatchRequest(UnassignCustomCategory: true), _disposal.Token);
+            if (result == AdminOperationResult.Success)
+            {
+                _mappings.Remove(mapping);
+                await NotificationService.ShowSuccessToastAsync($"\"{category.Name}\" is no longer mapped.");
+            }
+            else if (result == AdminOperationResult.NotFound)
+            {
+                _mappings.Remove(mapping);
+                await NotificationService.ShowWarningToastAsync($"\"{category.Name}\" no longer exists.");
+            }
+            else
+            {
+                await NotificationService.ShowWarningToastAsync($"Unable to remove the mapping of \"{category.Name}\".");
+            }
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            await NotificationService.ShowErrorToastAsync($"Unable to remove the mapping of \"{category.Name}\".", ApiErrorMessage.Describe(exception));
+        }
+        finally
+        {
+            _unlinkingIds.Remove(category.Id);
+        }
+    }
+
+    // The API refuses to delete a custom category that Xtream categories still map to (the database restricts it),
+    // so the mappings are checked first and the administrator is told which categories to unmap.
+    private async Task DeleteAsync(CustomCategoryDto category)
+    {
+        if (!_busyIds.Add(category.Id))
+        {
+            return;
+        }
+
+        try
+        {
+            var mappings = await CategoriesClient.GetCustomCategoryMappingsAsync(category.Id, _disposal.Token);
+            if (mappings.Count > 0)
+            {
+                await DialogService.ShowWarningAsync(DescribeMappings(category, mappings), "Custom category in use", "OK");
+                return;
+            }
+
+            var confirmation = await DialogService.ShowConfirmationAsync(
+                $"Delete the custom category <strong>{WebUtility.HtmlEncode(category.Name)}</strong>? No Xtream category is mapped to it. This cannot be undone.",
+                "Delete custom category",
+                "Delete",
+                "Cancel");
+            if (confirmation.Cancelled)
+            {
+                return;
+            }
+
+            var result = await CategoriesClient.DeleteCustomCategoryAsync(category.Id, _disposal.Token);
+            if (result == AdminOperationResult.NotFound)
+            {
+                await NotificationService.ShowWarningToastAsync($"\"{category.Name}\" no longer exists.");
+            }
+            else
+            {
+                await NotificationService.ShowSuccessToastAsync($"Custom category \"{category.Name}\" deleted.");
+            }
+
+            await LoadAsync(showLoading: false);
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            // Most likely an Xtream category was mapped to it in the meantime.
+            await NotificationService.ShowErrorToastAsync(
+                $"Unable to delete \"{category.Name}\".",
+                $"{ApiErrorMessage.Describe(exception)} Check that no Xtream category is mapped to it.");
+        }
+        finally
+        {
+            _busyIds.Remove(category.Id);
+        }
+    }
+
+    private static string DescribeMappings(CustomCategoryDto category, IReadOnlyList<CustomCategoryMapping> mappings)
+    {
+        const int MaxListed = 5;
+        var listed = mappings
+            .Take(MaxListed)
+            .Select(mapping => $"<li>{WebUtility.HtmlEncode(mapping.Category.Name)} <span>({WebUtility.HtmlEncode(mapping.Source.DisplayName)})</span></li>");
+        var more = mappings.Count > MaxListed ? $"<p>…and {mappings.Count - MaxListed} more.</p>" : string.Empty;
+
+        return $"<p><strong>{WebUtility.HtmlEncode(category.Name)}</strong> cannot be deleted because {mappings.Count} Xtream "
+            + $"{(mappings.Count == 1 ? "category is" : "categories are")} mapped to it:</p><ul>{string.Concat(listed)}</ul>{more}"
+            + "<p>Remove these mappings on the Xtream categories screen first.</p>";
+    }
+
+    public void Dispose()
+    {
+        _disposal.Cancel();
+        _disposal.Dispose();
+    }
+}

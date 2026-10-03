@@ -1,0 +1,33 @@
+@if (Error is not null)
+{
+    <FluentCard Class="status-card" role="alert">
+        <EmptyState Title="@Title"
+                    Description="@ApiErrorMessage.Describe(Error)"
+                    Icon="@(new Icons.Regular.Size24.PlugDisconnected())">
+            <FluentButton Appearance="ButtonAppearance.Primary"
+                          IconStart="@(new Icons.Regular.Size16.ArrowClockwise())"
+                          Loading="@IsRetrying"
+                          OnClick="@OnRetry">
+                Retry
+            </FluentButton>
+            <details class="error-details">
+                <summary>Technical details</summary>
+                <code>@Error.GetType().Name: @Error.Message</code>
+            </details>
+        </EmptyState>
+    </FluentCard>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public Exception? Error { get; set; }
+
+    [Parameter]
+    public bool IsRetrying { get; set; }
+
+    [Parameter]
+    public EventCallback OnRetry { get; set; }
+}

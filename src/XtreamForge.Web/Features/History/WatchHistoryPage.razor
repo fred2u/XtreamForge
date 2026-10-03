@@ -1,0 +1,150 @@
+@page "/history"
+@using XtreamForge.Web.Features.Categories
+@implements IDisposable
+@inject WatchHistoryClient WatchHistoryClient
+
+<PageTitle>Watch history - XtreamForge</PageTitle>
+
+<PageHeader Title="Watch history" Subtitle="Movies played through the proxy, the most recent first. A movie played several times appears once per playback.">
+    <Actions>
+        <FluentButton Appearance="ButtonAppearance.Outline"
+                      IconStart="@(new Icons.Regular.Size16.ArrowClockwise())"
+                      Loading="@_isRefreshing"
+                      OnClick="@RefreshAsync">
+            Refresh
+        </FluentButton>
+    </Actions>
+</PageHeader>
+
+<FluentCard Class="surface grid-surface">
+    @if (_loadError is not null)
+    {
+        <LoadErrorState Title="Unable to load the watch history" Error="@_loadError" IsRetrying="@_isRefreshing" OnRetry="@RefreshAsync" />
+    }
+    else if (_page is { MatchingCount: 0 })
+    {
+        <EmptyState Title="No playback yet"
+                    Description="A playback appears once a client plays a movie through the proxy and its TMDB ID is known."
+                    Icon="@(new Icons.Regular.Size24.History())" />
+    }
+    else
+    {
+        <div class="grid-caption" aria-live="polite">
+            @if (_page is { } counters)
+            {
+                <span><strong>@counters.MatchingCount.ToString("N0", CultureInfo.CurrentCulture)</strong> playbacks</span>
+            }
+        </div>
+
+        <div class="grid-viewport">
+            <FluentDataGrid @ref="_grid"
+                            TGridItem="WatchHistoryEntryDto"
+                            ItemsProvider="@_itemsProvider"
+                            ItemKey="@(entry => entry.Id)"
+                            Virtualize="true"
+                            ItemSize="64"
+                            GridTemplateColumns="minmax(150px, 0.8fr) minmax(260px, 2.5fr) 120px">
+                <TemplateColumn Title="Started" HeaderTooltip="Start of the playback, in local time">
+                    <span class="cell-secondary">@context.StartedAtUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)</span>
+                </TemplateColumn>
+                <TemplateColumn Title="Title">
+                    <div class="media-cell">
+                        @if (context.PosterThumbnailUrl is { } posterUrl)
+                        {
+                            <img class="poster-thumb" src="@posterUrl" alt="" loading="lazy" />
+                        }
+                        else
+                        {
+                            <span class="poster-thumb poster-thumb-empty" aria-hidden="true">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Image())" />
+                            </span>
+                        }
+                        <div class="cell-stack">
+                            <a class="text-link cell-primary cell-truncate" href="@context.TmdbUrl" target="_blank" rel="noopener noreferrer" title="@context.DisplayTitle">@context.DisplayTitle</a>
+                            <span class="cell-secondary cell-truncate">@context.Subtitle</span>
+                        </div>
+                    </div>
+                </TemplateColumn>
+                <TemplateColumn Title="Type">
+                    <ContentTypePill ContentType="@context.ContentType" />
+                </TemplateColumn>
+            </FluentDataGrid>
+        </div>
+    }
+</FluentCard>
+
+@code {
+    // the API returns at most 200 entries per request; the virtualized grid requests the visible rows and a few more
+    private const int PageSize = 100;
+
+    private readonly CancellationTokenSource _disposal = new();
+    private GridItemsProvider<WatchHistoryEntryDto>? _itemsProvider;
+    private FluentDataGrid<WatchHistoryEntryDto>? _grid;
+    private WatchHistoryPageDto? _page;
+    private bool _isRefreshing;
+    private Exception? _loadError;
+
+    protected override void OnInitialized()
+    {
+        _itemsProvider = ProvideItemsAsync;
+    }
+
+    // Called by the virtualized grid for the visible rows; the API sorts and pages the history.
+    private async ValueTask<GridItemsProviderResult<WatchHistoryEntryDto>> ProvideItemsAsync(GridItemsProviderRequest<WatchHistoryEntryDto> request)
+    {
+        try
+        {
+            var count = request.Count is int requested && requested > 0 ? Math.Min(requested, PageSize) : PageSize;
+            var page = await WatchHistoryClient.GetPageAsync(request.StartIndex, count, request.CancellationToken);
+
+            var countChanged = _page?.MatchingCount != page.MatchingCount;
+            _page = page;
+            if (countChanged)
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+
+            return GridItemsProviderResult.From([.. page.Items], page.MatchingCount);
+        }
+        catch (OperationCanceledException) when (request.CancellationToken.IsCancellationRequested || _disposal.IsCancellationRequested)
+        {
+            return GridItemsProviderResult.From<WatchHistoryEntryDto>([], 0);
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            _loadError = exception;
+            await InvokeAsync(StateHasChanged);
+            return GridItemsProviderResult.From<WatchHistoryEntryDto>([], 0);
+        }
+    }
+
+    // The grid is shown again (and loads its first rows) after an error or an empty result; otherwise it reloads its rows.
+    private async Task RefreshAsync()
+    {
+        _isRefreshing = true;
+        try
+        {
+            var isGridShown = _loadError is null && _page is not { MatchingCount: 0 };
+            _loadError = null;
+            if (isGridShown && _grid is { } grid)
+            {
+                await grid.RefreshDataAsync();
+            }
+            else
+            {
+                _page = null;
+                StateHasChanged();
+            }
+        }
+        finally
+        {
+            _isRefreshing = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposal.Cancel();
+        _disposal.Dispose();
+    }
+}

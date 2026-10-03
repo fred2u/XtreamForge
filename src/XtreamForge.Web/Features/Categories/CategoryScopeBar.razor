@@ -1,0 +1,60 @@
+@*
+    Scope selection of the category screens: a source (when Sources is set) and then a content type.
+    There is deliberately no "all sources" or "all content types" choice: the user picks one of each.
+*@
+<div class="scope-bar" role="group" aria-label="Scope">
+    @if (Sources is not null)
+    {
+        <FluentSelect TOption="XtreamSourceDto"
+                      TValue="int?"
+                      Label="Source"
+                      Items="@Sources"
+                      OptionText="@(source => source?.DisplayName ?? string.Empty)"
+                      OptionValue="@(source => source?.Id)"
+                      Placeholder="Select a source"
+                      Value="@SourceId"
+                      ValueChanged="@SourceIdChanged"
+                      Disabled="@Disabled"
+                      Width="min(340px, 100%)" />
+    }
+
+    <SegmentedControl TValue="ContentType?"
+                      Label="Content type"
+                      Options="@ContentTypeOptions"
+                      Value="@ContentType"
+                      ValueChanged="@ContentTypeChanged"
+                      Disabled="@(Disabled || !IsContentTypeEnabled)" />
+
+    @ChildContent
+</div>
+
+@code {
+    private static readonly IReadOnlyList<SegmentOption<ContentType?>> ContentTypeOptions =
+        [.. CategoryLabels.ContentTypes.Select(type => new SegmentOption<ContentType?>(type, CategoryLabels.ContentTypeName(type), CategoryLabels.ContentTypeIcon(type)))];
+
+    /// <summary>Sources to choose from; null hides the source step (source-independent screens).</summary>
+    [Parameter]
+    public IReadOnlyList<XtreamSourceDto>? Sources { get; set; }
+
+    [Parameter]
+    public int? SourceId { get; set; }
+
+    [Parameter]
+    public EventCallback<int?> SourceIdChanged { get; set; }
+
+    [Parameter]
+    public ContentType? ContentType { get; set; }
+
+    [Parameter]
+    public EventCallback<ContentType?> ContentTypeChanged { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    /// <summary>Extra controls placed on the same line, after the content type (for example a search field).</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    // The content type is chosen after the source.
+    private bool IsContentTypeEnabled => Sources is null || SourceId is not null;
+}

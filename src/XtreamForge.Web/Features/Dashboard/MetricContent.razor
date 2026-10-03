@@ -1,0 +1,12 @@
+<div class="dashboard-metric-label">
+    <span class="metric-icon">
+        <FluentIcon Value="@Metric.Icon" aria-hidden="true" />
+    </span>
+    <span>@Metric.Label</span>
+</div>
+<div class="dashboard-metric-value">@Metric.Value.ToString("N0", CultureInfo.CurrentCulture)</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public DashboardMetric Metric { get; set; } = default!;
+}

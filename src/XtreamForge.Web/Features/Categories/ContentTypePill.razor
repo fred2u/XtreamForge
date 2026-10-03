@@ -1,0 +1,9 @@
+<span class="status-pill type-pill @CategoryLabels.ContentTypeCssClass(ContentType)">
+    <FluentIcon Value="@CategoryLabels.ContentTypeIcon(ContentType)" aria-hidden="true" />
+    @CategoryLabels.ContentTypeName(ContentType)
+</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public ContentType ContentType { get; set; }
+}

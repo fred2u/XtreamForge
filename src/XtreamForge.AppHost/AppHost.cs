@@ -1,17 +1,20 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
-var postgres = builder.AddPostgres("postgres")
-    .WithDataVolume("xtreamforge-postgres-data")
+var postgres = builder.AddPostgres("postserv")
+    .WithDataVolume("xtreamforge-postserv-data")
     .WithPgAdmin();
 
 var database = postgres.AddDatabase("database", "xtreamforge");
 
-var backend = builder.AddProject<Projects.XtreamForge>("xtreamforge")
+var apiService = builder.AddProject<Projects.XtreamForge_ApiService>("xtreamforge-apiservice")
+    .WithHttpHealthCheck("/health")
     .WithReference(database)
     .WaitFor(database);
 
-builder.AddProject<Projects.XtreamForge_Blazor>("xtreamforge-blazor")
-    .WithReference(backend)
-    .WaitFor(backend);
+builder.AddProject<Projects.XtreamForge_Web>("xtreamforge-blazor")
+    .WithExternalHttpEndpoints()
+    .WithHttpHealthCheck("/health")
+    .WithReference(apiService)
+    .WaitFor(apiService);
 
-builder.Build().Run();
+await builder.Build().RunAsync();

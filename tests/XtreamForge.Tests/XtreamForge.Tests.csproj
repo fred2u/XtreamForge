@@ -1,28 +1,38 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
   </PropertyGroup>
 
+
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Aspire.Hosting.Testing" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit" />
-    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <ProjectReference Include="../..\src\XtreamForge.AppHost\XtreamForge.AppHost.csproj" />
+    <ProjectReference Include="../..\src\XtreamForge.ApiService\XtreamForge.ApiService.csproj" />
+    <ProjectReference Include="../..\src\XtreamForge.Domain\XtreamForge.Domain.csproj" />
+    <ProjectReference Include="..\..\src\XtreamForge.Web\XtreamForge.Web.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <Using Include="System.Net" />
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Aspire.Hosting.ApplicationModel" />
+    <Using Include="Aspire.Hosting.Testing" />
     <Using Include="Xunit" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\XtreamForge.Blazor\XtreamForge.Blazor.csproj" />
-    <ProjectReference Include="..\..\src\XtreamForge\XtreamForge.csproj" />
   </ItemGroup>
 
 </Project>

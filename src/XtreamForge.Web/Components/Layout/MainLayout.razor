@@ -1,0 +1,119 @@
+@using System.Text.Json
+@using Microsoft.JSInterop
+@inherits LayoutComponentBase
+@inject IThemeService ThemeService
+@inject IJSRuntime JSRuntime
+
+<div class="layout-shell">
+    <aside class="sidebar">
+        <div class="brand-block">
+            <div class="brand-logo" aria-hidden="true">
+                <FluentIcon Value="@(new Icons.Filled.Size20.Apps())" />
+            </div>
+            <div>
+                <div class="brand">XtreamForge</div>
+                <div class="brand-subtitle">Administration</div>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav" aria-label="Primary administration navigation">
+            <FluentNav Width="100%" BackgroundColor="transparent">
+                <FluentNavSectionHeader Title="Overview" />
+                <FluentNavItem Href="/" Match="NavLinkMatch.All" IconRest="@(new Icons.Regular.Size20.Home())" IconActive="@(new Icons.Filled.Size20.Home())">Dashboard</FluentNavItem>
+                <FluentNavItem Href="/monitoring" IconRest="@(new Icons.Regular.Size20.Pulse())" IconActive="@(new Icons.Filled.Size20.Pulse())">Monitoring</FluentNavItem>
+                <FluentNavItem Href="/history" IconRest="@(new Icons.Regular.Size20.History())" IconActive="@(new Icons.Filled.Size20.History())">Watch history</FluentNavItem>
+
+                <FluentNavSectionHeader Title="Sources" />
+                <FluentNavItem Href="/sources" IconRest="@(new Icons.Regular.Size20.PlugConnected())" IconActive="@(new Icons.Filled.Size20.PlugConnected())">Xtream sources</FluentNavItem>
+
+                <FluentNavSectionHeader Title="Categories" />
+                <FluentNavItem Href="/categories/xtream" IconRest="@(new Icons.Regular.Size20.Grid())" IconActive="@(new Icons.Filled.Size20.Grid())">Xtream categories</FluentNavItem>
+                <FluentNavItem Href="/categories/custom" IconRest="@(new Icons.Regular.Size20.Tag())" IconActive="@(new Icons.Filled.Size20.Tag())">Custom categories</FluentNavItem>
+                <FluentNavItem Href="/categories/rules" IconRest="@(new Icons.Regular.Size20.Filter())" IconActive="@(new Icons.Filled.Size20.Filter())">Category rules</FluentNavItem>
+
+                <FluentNavSectionHeader Title="Items" />
+                <FluentNavItem Href="/items/rules" IconRest="@(new Icons.Regular.Size20.Filter())" IconActive="@(new Icons.Filled.Size20.Filter())">Item rules</FluentNavItem>
+                <FluentNavItem Href="/items/tmdb-mappings" IconRest="@(new Icons.Regular.Size20.Link())" IconActive="@(new Icons.Filled.Size20.Link())">TMDB mappings</FluentNavItem>
+
+                <FluentNavSectionHeader Title="TMDB" />
+                <FluentNavItem Href="/tmdb/infos" IconRest="@(new Icons.Regular.Size20.Video())" IconActive="@(new Icons.Filled.Size20.Video())">TMDB infos</FluentNavItem>
+                <FluentNavItem Href="/tmdb/rules" IconRest="@(new Icons.Regular.Size20.Filter())" IconActive="@(new Icons.Filled.Size20.Filter())">TMDB rules</FluentNavItem>
+            </FluentNav>
+        </nav>
+
+        <div class="sidebar-footer">
+            <SegmentedControl TValue="ThemeMode?" Label="Appearance" Options="@ThemeOptions" Value="@_themeMode" ValueChanged="@SetThemeAsync" />
+        </div>
+    </aside>
+
+    <main class="content">
+        <div class="content-frame">
+            @Body
+        </div>
+    </main>
+</div>
+
+<FluentProviders />
+
+@code {
+    // Key documented by Fluent UI Blazor for the theme preferences written by ThemeService.
+    private const string ThemeStorageKey = "fluentui-blazor:theme-settings";
+
+    private static readonly IReadOnlyList<SegmentOption<ThemeMode?>> ThemeOptions =
+    [
+        new(ThemeMode.Light, "Light", new Icons.Regular.Size16.WeatherSunny()),
+        new(ThemeMode.Dark, "Dark", new Icons.Regular.Size16.WeatherMoon()),
+        new(ThemeMode.System, "System", new Icons.Regular.Size16.Desktop())
+    ];
+
+    private ThemeMode? _themeMode;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _themeMode = await ReadStoredThemeModeAsync();
+        StateHasChanged();
+    }
+
+    private async Task SetThemeAsync(ThemeMode? mode)
+    {
+        if (mode is { } value)
+        {
+            _themeMode = value;
+            await ThemeService.SetThemeAsync(value);
+        }
+    }
+
+    // ThemeService stores { "mode": "light" | "dark" } and removes the mode for the system theme.
+    private async Task<ThemeMode> ReadStoredThemeModeAsync()
+    {
+        try
+        {
+            var json = await JSRuntime.InvokeAsync<string?>("localStorage.getItem", ThemeStorageKey);
+            if (!string.IsNullOrEmpty(json))
+            {
+                using var document = JsonDocument.Parse(json);
+                if (document.RootElement.ValueKind == JsonValueKind.Object
+                    && document.RootElement.TryGetProperty("mode", out var mode))
+                {
+                    return mode.GetString() switch
+                    {
+                        "light" => ThemeMode.Light,
+                        "dark" => ThemeMode.Dark,
+                        _ => ThemeMode.System
+                    };
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Unreadable settings: the library falls back to the system theme as well.
+        }
+
+        return ThemeMode.System;
+    }
+}

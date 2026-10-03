@@ -1,0 +1,124 @@
+@using XtreamForge.Web.Features.Categories
+@using XtreamForge.Web.Features.Rules
+@* Every value of a TMDB info and the explanation of the decision computed by the API. It does not evaluate any rule itself. *@
+<div class="tmdb-details">
+    @if (Info.PosterUrl is { } posterUrl)
+    {
+        <img class="tmdb-details-poster" src="@posterUrl" alt="@($"Poster of {Info.DisplayTitle}")" />
+    }
+    else
+    {
+        <span class="tmdb-details-poster poster-thumb-empty" aria-hidden="true">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Image())" />
+        </span>
+    }
+
+    <div class="tmdb-details-body">
+        @* the title is the title of the dialog *@
+        <div class="decision-details-header">
+            <span class="cell-secondary">
+                @CategoryLabels.ContentTypeName(Info.ContentType) ·
+                <a class="text-link" href="@Info.TmdbUrl" target="_blank" rel="noopener noreferrer">TMDB #@Info.TmdbId.ToString(CultureInfo.InvariantCulture)</a>
+            </span>
+            <TmdbDecisionBadge Decision="@Info.Decision" />
+        </div>
+
+        @if (Info.ExclusionReason == TmdbExclusionReason.ManuallyExcluded)
+        {
+            <p class="decision-details-reason">
+                <strong>Excluded manually.</strong> It is never returned to clients, whatever the source; TMDB rules are not evaluated.
+            </p>
+        }
+        else if (Info.DecidingRule is { } rule)
+        {
+            <div class="decision-details-reason">
+                <p>
+                    <strong>@(Info.Decision == InclusionDecision.Exclude ? "Excluded" : "Included") by TMDB rule #@rule.Id,</strong>
+                    the first enabled rule that matches.
+                </p>
+                <RuleSentence Action="@rule.Action" Operator="@rule.Operator" Pattern="@rule.Pattern" CaseSensitive="@rule.CaseSensitive" Subject="items"
+                              FieldName="@RuleKindTexts.FieldName(RuleKind.Tmdb, rule.Field)" />
+                <p class="cell-secondary">@PriorityText(rule)</p>
+                <a class="text-link" href="@($"/tmdb/rules?type={Info.ContentType}&rule={rule.Id}")">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Open())" aria-hidden="true" />
+                    Open in TMDB rules
+                </a>
+            </div>
+        }
+        else
+        {
+            <p class="decision-details-reason">
+                <strong>No enabled TMDB rule matches.</strong> Items that no rule matches are included.
+            </p>
+        }
+
+        @Controls
+
+        <dl class="rule-facts">
+            @if (!string.IsNullOrWhiteSpace(Info.OriginalTitle) && Info.OriginalTitle != Info.Title)
+            {
+                <dt>Original title</dt>
+                <dd>@Info.OriginalTitle</dd>
+            }
+            <dt>Release date</dt>
+            <dd>@(Info.ReleaseDate?.ToString("d", CultureInfo.CurrentCulture) ?? "Unknown")</dd>
+            <dt>Genres</dt>
+            <dd>@JoinOrUnknown(Info.Genres)</dd>
+            <dt>@(Info.ContentType == ContentType.Series ? "Creators" : "Directors")</dt>
+            <dd>@JoinOrUnknown(Details.Directors)</dd>
+            <dt>Cast</dt>
+            <dd>@JoinOrUnknown(Details.Cast)</dd>
+            <dt>Duration</dt>
+            <dd>@(Details.DurationMinutes is { } minutes ? $"{minutes.ToString(CultureInfo.CurrentCulture)} min" : "Unknown")</dd>
+            <dt>Rating</dt>
+            <dd>@RatingText()</dd>
+            <dt>Metadata</dt>
+            <dd>@LoadStateText()</dd>
+        </dl>
+
+        @if (!string.IsNullOrWhiteSpace(Details.Overview))
+        {
+            <p class="tmdb-details-overview">@Details.Overview</p>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public TmdbInfoDetailsDto Details { get; set; } = default!;
+
+    /// <summary>TMDB rules of the same content type, used to show the position of the deciding rule.</summary>
+    [Parameter]
+    public IReadOnlyList<RuleDto> Rules { get; set; } = [];
+
+    /// <summary>Settings changed from the details (for example the manual exclusion), shown under the decision.</summary>
+    [Parameter]
+    public RenderFragment? Controls { get; set; }
+
+    private TmdbInfoDto Info => Details.Info;
+
+    private static string JoinOrUnknown(IReadOnlyList<string> values) =>
+        values.Count == 0 ? "Unknown" : string.Join(", ", values);
+
+    private string RatingText() =>
+        Info.VoteAverage is { } voteAverage && Info.VoteCount is int voteCount and > 0
+            ? $"{voteAverage.ToString("0.0", CultureInfo.CurrentCulture)} / 10 ({voteCount.ToString("N0", CultureInfo.CurrentCulture)} votes)"
+            : "No votes";
+
+    private string LoadStateText()
+    {
+        var nextLoad = Info.NextLoadAtUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
+        return Info.LoadedAtUtc is { } loadedAt
+            ? $"Loaded {loadedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)}, next refresh {nextLoad}"
+            : $"Not loaded yet ({Info.LoadAttemptCount.ToString(CultureInfo.CurrentCulture)} failed attempts), next attempt {nextLoad}";
+    }
+
+    private string PriorityText(RuleDto rule)
+    {
+        var ordered = Rules.OrderBy(r => r.Sequence).ToList();
+        var index = ordered.FindIndex(r => r.Id == rule.Id);
+        return index < 0
+            ? $"Sequence {rule.Sequence}"
+            : $"Priority {index + 1} of {ordered.Count} (sequence {rule.Sequence})";
+    }
+}

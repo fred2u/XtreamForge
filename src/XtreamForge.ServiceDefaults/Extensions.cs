@@ -2,13 +2,13 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
-using XtreamForge.ServiceDefaults;
 
-namespace Microsoft.Extensions.Hosting;
+namespace XtreamForge.ServiceDefaults;
 
 public static class Extensions
 {
@@ -41,7 +41,9 @@ public static class Extensions
         builder.Services.AddOpenTelemetry()
             .WithMetrics(metrics =>
             {
-                metrics.AddAspNetCoreInstrumentation()
+                // application metrics are published by a meter named after the application (for example queue sizes)
+                metrics.AddMeter(builder.Environment.ApplicationName)
+                    .AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddRuntimeInstrumentation();
             })
@@ -63,9 +65,7 @@ public static class Extensions
                     });
             });
 
-        builder.AddOpenTelemetryExporters();
-
-        return builder;
+        return builder.AddOpenTelemetryExporters();
     }
 
     public static TBuilder AddDefaultHealthChecks<TBuilder>(this TBuilder builder) where TBuilder : IHostApplicationBuilder

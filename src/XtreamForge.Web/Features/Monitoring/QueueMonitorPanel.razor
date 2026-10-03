@@ -1,0 +1,217 @@
+@*
+    Background queues of the API (size, one hour history, processed items) and the upstream hosts that rate limited.
+    Refreshed every RefreshInterval while the component is displayed.
+    Each queue is one row with the same column template (summary, waiting chart, processed chart), so that the titles,
+    the plots and the axes of every queue are aligned.
+*@
+@implements IDisposable
+@inject MonitoringClient MonitoringClient
+
+<section class="monitor-section" aria-labelledby="queue-panel-title">
+    <div class="dashboard-section-heading">
+        <h2 id="queue-panel-title">Background queues</h2>
+        <span class="section-count live-status">
+            @if (_status is not null)
+            {
+                <span class="live-indicator" aria-hidden="true"></span>
+                <text>Live · refreshed every @RefreshInterval.TotalSeconds.ToString("N0", CultureInfo.CurrentCulture) s · last hour kept in memory</text>
+            }
+        </span>
+    </div>
+
+    @if (_status is null && _loadError is null)
+    {
+        <FluentCard Class="surface">
+            <div class="skeleton-list" aria-busy="true">
+                <FluentSkeleton Width="30%" Height="1.5rem" Shimmer="true" />
+                <FluentSkeleton Width="100%" Height="8rem" Shimmer="true" />
+            </div>
+        </FluentCard>
+    }
+    else if (_status is null)
+    {
+        <LoadErrorState Title="Unable to load the queues" Error="@_loadError" IsRetrying="@_isRetrying" OnRetry="@RetryAsync" />
+    }
+    else
+    {
+        @if (_loadError is not null)
+        {
+            <div class="queue-stale" role="status">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" aria-hidden="true" />
+                The last refresh failed (@ApiErrorMessage.Describe(_loadError)); the values below may be out of date.
+            </div>
+        }
+
+        @foreach (var queue in _status.Queues)
+        {
+            var samples = queue.Samples;
+            var times = samples.Select(sample => sample.At).ToList();
+            <FluentCard Class="surface queue-row" @key="queue.Name">
+                <div class="queue-summary">
+                    <h3 class="queue-summary-title" title="@queue.Name">@queue.Name</h3>
+                    <dl class="queue-summary-stats">
+                        <div class="queue-summary-stat queue-summary-stat-main">
+                            <dt>Waiting now</dt>
+                            <dd>@Format(queue.Size)</dd>
+                        </div>
+                        <div class="queue-summary-stat">
+                            <dt>Peak (1 h)</dt>
+                            <dd>@Format(samples.Count == 0 ? queue.Size : samples.Max(sample => sample.Size))</dd>
+                        </div>
+                        <div class="queue-summary-stat chart-series-success">
+                            <dt><span class="line-chart-legend-dot"></span>Succeeded (1 h)</dt>
+                            <dd>@Format(samples.Sum(sample => sample.Succeeded))</dd>
+                        </div>
+                        <div class="queue-summary-stat chart-series-neutral">
+                            <dt><span class="line-chart-legend-dot"></span>No result (1 h)</dt>
+                            <dd>@Format(samples.Sum(sample => sample.NoResult))</dd>
+                        </div>
+                        <div class="queue-summary-stat chart-series-danger">
+                            <dt><span class="line-chart-legend-dot"></span>Failed (1 h)</dt>
+                            <dd>@Format(samples.Sum(sample => sample.Failed))</dd>
+                        </div>
+                    </dl>
+                </div>
+
+                <LineChart Title="Items waiting"
+                           Label="@($"{queue.Name}: items waiting")"
+                           Times="@times"
+                           Series="@([new ChartSeries("Waiting", "chart-series-brand", [.. samples.Select(sample => (double)sample.Size)])])" />
+
+                <LineChart Title="@($"Processed per {_status.SampleInterval.TotalSeconds.ToString("N0", CultureInfo.CurrentCulture)} s")"
+                           Label="@($"{queue.Name}: items processed")"
+                           Times="@times"
+                           Series="@ProcessedSeries(samples)" />
+            </FluentCard>
+        }
+    }
+</section>
+
+@if (_status is not null)
+{
+    <section class="monitor-section" aria-labelledby="rate-limit-title">
+        <div class="dashboard-section-heading">
+            <h2 id="rate-limit-title">Upstream rate limits (HTTP 429)</h2>
+            <span class="section-count">Since the API started</span>
+        </div>
+
+        <FluentCard Class="surface">
+            @if (_status.RateLimitedHosts.Count == 0)
+            {
+                <p class="cell-secondary monitor-empty">No upstream host has rate limited XtreamForge since the API started.</p>
+            }
+            else
+            {
+                <table class="monitor-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Host</th>
+                            <th scope="col" class="monitor-table-number">HTTP 429</th>
+                            <th scope="col" class="monitor-table-pace">Current pace</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var host in _status.RateLimitedHosts)
+                        {
+                            var isSlowed = host.Interval > TimeSpan.Zero;
+                            <tr @key="host.Host">
+                                <td><span class="cell-truncate" title="@host.Host">@host.Host</span></td>
+                                <td class="monitor-table-number">@Format(host.RateLimitedCount)</td>
+                                <td>
+                                    <span class="status-pill @(isSlowed ? "status-pill-warning" : "status-pill-success")">
+                                        @(isSlowed ? $"Slowed down: 1 request every {host.Interval.TotalSeconds.ToString("0.#", CultureInfo.CurrentCulture)} s" : "Full speed")
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </FluentCard>
+    </section>
+}
+
+@code {
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(5);
+
+    private readonly CancellationTokenSource _disposal = new();
+    private readonly PeriodicTimer _timer = new(RefreshInterval);
+    private QueuesStatusDto? _status;
+    private Exception? _loadError;
+    private bool _isRetrying;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    // Polling starts once the component is interactive (OnAfterRender does not run during prerendering).
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _ = PollAsync();
+        }
+    }
+
+    // Stops when the component is disposed: the disposed timer ends WaitForNextTickAsync.
+    private async Task PollAsync()
+    {
+        try
+        {
+            while (await _timer.WaitForNextTickAsync())
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadAsync();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (Exception) when (_disposal.IsCancellationRequested)
+        {
+            // a refresh was running when the component was disposed
+            _timer.Dispose();
+        }
+    }
+
+    // A failed refresh keeps the last values on screen and reports the error.
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _status = await MonitoringClient.GetQueuesAsync(_disposal.Token);
+            _loadError = null;
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            _loadError = exception;
+        }
+    }
+
+    private async Task RetryAsync()
+    {
+        _isRetrying = true;
+        try
+        {
+            await LoadAsync();
+        }
+        finally
+        {
+            _isRetrying = false;
+        }
+    }
+
+    private static List<ChartSeries> ProcessedSeries(IReadOnlyList<QueueSampleDto> samples) =>
+    [
+        new("Succeeded", "chart-series-success", [.. samples.Select(sample => (double)sample.Succeeded)]),
+        new("No result", "chart-series-neutral", [.. samples.Select(sample => (double)sample.NoResult)]),
+        new("Failed", "chart-series-danger", [.. samples.Select(sample => (double)sample.Failed)])
+    ];
+
+    private static string Format(long value) => value.ToString("N0", CultureInfo.CurrentCulture);
+
+    public void Dispose()
+    {
+        _timer.Dispose();
+        _disposal.Cancel();
+        _disposal.Dispose();
+    }
+}

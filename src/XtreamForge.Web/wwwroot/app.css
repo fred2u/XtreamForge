@@ -1,0 +1,1738 @@
+/* ─── Design tokens ──────────────────────────────────────────────────────────
+   Everything is expressed with Fluent UI v5 design tokens (--colorNeutral*, --colorBrand*,
+   --colorStatus*), which the library switches between light and dark themes (body[data-theme]).
+   The fallbacks only apply before the Fluent UI script has set the tokens. */
+
+:root {
+    --xf-radius-lg: var(--borderRadiusXLarge, 8px);
+    --xf-radius-md: var(--borderRadiusMedium, 4px);
+    --xf-radius-pill: 999px;
+    --xf-surface: var(--colorNeutralBackground1, #ffffff);
+    --xf-surface-muted: var(--colorNeutralBackground2, #fafafa);
+    --xf-surface-subtle: var(--colorNeutralBackground3, #f5f5f5);
+    --xf-border: var(--colorNeutralStroke2, #e0e0e0);
+    --xf-border-strong: var(--colorNeutralStroke1, #d1d1d1);
+    --xf-text: var(--colorNeutralForeground1, #242424);
+    --xf-text-muted: var(--colorNeutralForeground3, #616161);
+    --xf-accent: var(--colorBrandForeground1, #0f6cbd);
+    --xf-accent-background: var(--colorBrandBackground2, #ebf3fc);
+    --xf-shadow: var(--shadow2, 0 1px 2px rgb(0 0 0 / 10%));
+}
+
+/* ─── Base ───────────────────────────────────────────────────────────────── */
+
+body {
+    background: var(--xf-surface-muted);
+    color: var(--xf-text);
+}
+
+body[data-theme="dark"] {
+    color-scheme: dark;
+    background: var(--colorNeutralBackground2, #1f1f1f);
+}
+
+/* Scoped to the content so that they win over the element styles Fluent UI injects at runtime (default-fuib.css). */
+.content-frame h1,
+.content-frame h2,
+.content-frame h3 {
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.content-frame h1 {
+    font-size: 1.375rem;
+    line-height: 1.3;
+}
+
+/* FocusOnNavigate (Routes.razor) focuses the page title after each navigation for screen readers;
+   the title is not interactive, so the focus outline is not shown. */
+.content-frame h1:focus {
+    outline: none;
+}
+
+.content-frame h2 {
+    font-size: 1rem;
+    line-height: 1.4;
+}
+
+.content-frame h3 {
+    font-size: 0.9375rem;
+    line-height: 1.4;
+}
+
+p {
+    margin: 0;
+}
+
+code {
+    font-family: var(--fontFamilyMonospace, Consolas, monospace);
+}
+
+.section-count {
+    color: var(--xf-text-muted);
+    font-size: 0.8125rem;
+}
+
+/* ─── Layout ─────────────────────────────────────────────────────────────── */
+
+.layout-shell {
+    display: grid;
+    grid-template-columns: 248px minmax(0, 1fr);
+    height: 100dvh;
+}
+
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 0;
+    padding: 1rem 0.75rem;
+    background: var(--xf-surface);
+    border-right: 1px solid var(--xf-border);
+}
+
+.brand-block {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0 0.5rem 0.5rem;
+}
+
+.brand-logo {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--xf-radius-md);
+    background: var(--colorBrandBackground, #0f6cbd);
+    color: var(--colorNeutralForegroundOnBrand, #ffffff);
+}
+
+.brand {
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.brand-subtitle {
+    color: var(--xf-text-muted);
+    font-size: 0.75rem;
+}
+
+.sidebar-nav {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.sidebar-footer {
+    padding: 0.75rem 0.5rem 0;
+    border-top: 1px solid var(--xf-border);
+}
+
+.content {
+    min-width: 0;
+    overflow-y: auto;
+}
+
+.content-frame {
+    display: grid;
+    gap: 0.75rem;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 1.25rem 1.5rem 2rem;
+}
+
+.page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
+}
+
+.page-subtitle {
+    margin-top: 0.125rem;
+    max-width: 72ch;
+    color: var(--xf-text-muted);
+    font-size: 0.875rem;
+}
+
+.page-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.surface,
+.status-card {
+    padding: 0.875rem 1rem;
+    border-radius: var(--xf-radius-lg);
+}
+
+/* ─── Toolbars and filters ───────────────────────────────────────────────── */
+
+.filter-bar {
+    display: grid;
+    gap: 0.75rem;
+}
+
+/* Filters are aligned on their top edge: Fluent UI fields may reserve space under the input for a message,
+   so aligning on the bottom edge would push the custom controls (segmented controls) down. */
+.filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.75rem 1rem;
+}
+
+.filter-search {
+    flex: 1 1 220px;
+    min-width: 220px;
+    max-width: 320px;
+}
+
+/* Same look as the labels of the Fluent UI inputs next to them. */
+.toolbar-label {
+    color: var(--xf-text);
+    font-size: var(--fontSizeBase300, 14px);
+    line-height: var(--lineHeightBase300, 20px);
+}
+
+.scope-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.75rem 1.25rem;
+}
+
+/* Segmented control: native buttons with role="radio" for keyboard and screen reader support. */
+.segmented {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 2px;
+    border-radius: var(--xf-radius-md);
+    background: var(--xf-surface-subtle);
+    border: 1px solid var(--xf-border);
+}
+
+.segmented-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3125rem;
+    min-height: 1.625rem; /* with the padding and border of .segmented: 32px, the height of the Fluent UI inputs */
+    padding: 0 0.625rem;
+    border: 0;
+    border-radius: calc(var(--xf-radius-md) - 1px);
+    background: transparent;
+    color: var(--xf-text-muted);
+    font: inherit;
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
+.segmented-item:hover:not(:disabled) {
+    color: var(--xf-text);
+    background: var(--colorSubtleBackgroundHover, rgb(0 0 0 / 4%));
+}
+
+.segmented-item.is-active {
+    background: var(--xf-surface);
+    color: var(--xf-text);
+    font-weight: 600;
+    box-shadow: var(--xf-shadow);
+}
+
+.segmented-item:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2, #000000);
+    outline-offset: 1px;
+}
+
+.segmented-item:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.sidebar-footer .segmented {
+    display: flex;
+}
+
+.sidebar-footer .segmented-item {
+    flex: 1;
+    justify-content: center;
+    padding: 0 0.375rem;
+}
+
+.xf-select {
+    min-height: 1.875rem;
+    max-width: 100%;
+    padding: 0 1.75rem 0 0.5rem;
+    border: 1px solid var(--xf-border-strong);
+    border-radius: var(--xf-radius-md);
+    background-color: var(--xf-surface);
+    color: var(--xf-text);
+    font: inherit;
+    font-size: 0.8125rem;
+}
+
+.xf-select:hover:not(:disabled) {
+    border-color: var(--colorNeutralStroke1Hover, #c7c7c7);
+}
+
+.xf-select:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2, #000000);
+    outline-offset: 1px;
+}
+
+.xf-select:disabled {
+    opacity: 0.6;
+}
+
+.xf-select.is-empty {
+    color: var(--xf-text-muted);
+}
+
+/* ─── Status pills ───────────────────────────────────────────────────────── */
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.0625rem 0.5rem;
+    border-radius: var(--xf-radius-pill);
+    border: 1px solid transparent;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.25rem;
+    white-space: nowrap;
+}
+
+.status-pill-success {
+    background: var(--colorStatusSuccessBackground1, #f1faf1);
+    border-color: var(--colorStatusSuccessBorder1, #9fd89f);
+    color: var(--colorStatusSuccessForeground1, #0e700e);
+}
+
+.status-pill-warning {
+    background: var(--colorStatusWarningBackground1, #fff9f5);
+    border-color: var(--colorStatusWarningBorder1, #fdcfb4);
+    color: var(--colorStatusWarningForeground1, #bc4b09);
+}
+
+.status-pill-danger {
+    background: var(--colorStatusDangerBackground1, #fdf3f4);
+    border-color: var(--colorStatusDangerBorder1, #eeacb2);
+    color: var(--colorStatusDangerForeground1, #b10e1c);
+}
+
+.status-pill-accent {
+    background: var(--xf-accent-background);
+    border-color: var(--colorBrandStroke2, #b4d6fa);
+    color: var(--xf-accent);
+}
+
+.status-pill-neutral {
+    background: var(--xf-surface-subtle);
+    border-color: var(--xf-border);
+    color: var(--xf-text-muted);
+}
+
+.status-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.type-pill-vod {
+    background: var(--xf-accent-background);
+    color: var(--xf-accent);
+}
+
+.type-pill-series {
+    background: var(--colorPaletteBerryBackground1, #fdf5fc);
+    color: var(--colorPaletteBerryForeground1, #af33a1);
+}
+
+.count-badge {
+    padding: 0 0.4375rem;
+    border-radius: var(--xf-radius-pill);
+    background: var(--xf-surface-subtle);
+    color: var(--xf-text-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* ─── Empty, loading and error states ────────────────────────────────────── */
+
+.empty-state {
+    display: grid;
+    justify-items: center;
+    gap: 0.375rem;
+    padding: 2.5rem 1rem;
+    text-align: center;
+}
+
+.empty-state-compact {
+    padding: 1.25rem 1rem;
+}
+
+.empty-state-icon {
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    margin-bottom: 0.25rem;
+    border-radius: 50%;
+    background: var(--xf-accent-background);
+    color: var(--xf-accent);
+}
+
+.empty-state p {
+    max-width: 56ch;
+    color: var(--xf-text-muted);
+    font-size: 0.875rem;
+}
+
+.empty-state-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.error-details {
+    width: 100%;
+    color: var(--xf-text-muted);
+    font-size: 0.75rem;
+}
+
+.error-details code {
+    display: block;
+    margin-top: 0.25rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.skeleton-list {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.saving-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    color: var(--xf-text-muted);
+    font-size: 0.8125rem;
+}
+
+/* ─── Grids and lists ────────────────────────────────────────────────────── */
+
+.grid-surface {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem 0.75rem;
+}
+
+.grid-caption {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem 1rem;
+    padding: 0.25rem 0.25rem 0;
+    color: var(--xf-text-muted);
+    font-size: 0.8125rem;
+}
+
+.grid-caption strong {
+    color: var(--xf-text);
+}
+
+.grid-caption-stats {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.75rem;
+}
+
+.grid-caption-stats span + span::before {
+    content: "·";
+    margin-right: 0.75rem;
+}
+
+/* A fixed-height scroll container is required by the virtualized data grid.
+   The offset is the height of everything around it on the Xtream categories page (header, two filter rows,
+   caption, paddings), so that the page itself does not scroll. */
+.grid-viewport {
+    height: clamp(320px, calc(100dvh - 460px), 1200px);
+    overflow: auto;
+    border: 1px solid var(--xf-border);
+    border-radius: var(--xf-radius-md);
+}
+
+/* Header labels start at the same position as the cell content (Fluent UI pads the cells by 18px,
+   the header cell and its wrapper by 2 + 6px, then the label by 12px or the sort button by 1px border + 12px). */
+.grid-viewport .fluent-data-grid [col-title] {
+    padding-inline: 10px;
+}
+
+.grid-viewport .fluent-data-grid [col-sort-button] {
+    padding-inline: 9px;
+}
+
+/* The virtualized grid gives its header the height of the rows (ItemSize, inline style): every grid keeps
+   the same header height, also when its rows are taller (TMDB infos). */
+.grid-viewport .fluent-data-grid th[cell-type=columnheader] {
+    height: 48px !important;
+}
+
+.row-dimmed .cell-primary {
+    color: var(--xf-text-muted);
+}
+
+.cell-stack {
+    display: grid;
+    min-width: 0;
+    line-height: 1.3;
+}
+
+.cell-primary {
+    font-weight: 600;
+}
+
+.cell-secondary {
+    color: var(--xf-text-muted);
+    font-size: 0.75rem;
+}
+
+.cell-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* A Fluent UI switch is an inline grid with a reserved message row: as a flex box it is centered like the other cells.
+   The switch also keeps a 12px right margin for a label: without label, it is removed so that the switch aligns on the right. */
+.switch-cell,
+.switch-cell fluent-field {
+    display: flex;
+    align-items: center;
+}
+
+.switch-cell fluent-switch {
+    margin: 0;
+}
+
+.decision-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+/* Reason of the decision; a click on the row (the chip included) opens the details. */
+.reason-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.0625rem 0.4375rem;
+    border: 1px dashed var(--xf-border-strong);
+    border-radius: var(--xf-radius-pill);
+    color: var(--xf-text-muted);
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    white-space: nowrap;
+}
+
+.reason-chip-manual {
+    border-color: var(--colorStatusDangerBorder1, #eeacb2);
+    color: var(--colorStatusDangerForeground1, #b10e1c);
+}
+
+.reason-chip-provider {
+    border-color: var(--colorStatusWarningBorder1, #fdcfb4);
+    color: var(--colorStatusWarningForeground1, #bc4b09);
+}
+
+.reason-chip-rule {
+    border-color: var(--colorBrandStroke2, #b4d6fa);
+    color: var(--xf-accent);
+}
+
+.mapping-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-width: 0;
+    color: var(--xf-text-muted);
+}
+
+.mapping-cell .xf-select {
+    flex: 1;
+    min-width: 0;
+}
+
+/* TMDB infos: title with its poster thumbnail (TMDB posters have a 2:3 ratio), genre chips, rating, and details */
+.media-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.poster-thumb {
+    flex: none;
+    display: block;
+    width: 36px;
+    height: 54px;
+    object-fit: cover;
+    border-radius: var(--xf-radius-sm, 4px);
+    background: var(--colorNeutralBackground3);
+}
+
+.poster-thumb-empty {
+    display: grid;
+    place-items: center;
+    color: var(--xf-text-muted);
+}
+
+/* One line of chips: the chips that do not fit wrap to a hidden second line instead of being cut. */
+.genre-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+    overflow: hidden;
+    max-height: 1.375rem;
+}
+
+.genre-chip {
+    padding: 0 0.4375rem;
+    border: 1px solid var(--xf-border);
+    border-radius: var(--xf-radius-pill);
+    background: var(--colorNeutralBackground2);
+    color: var(--xf-text);
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    white-space: nowrap;
+}
+
+.genre-more {
+    color: var(--xf-text-muted);
+    font-size: 0.75rem;
+    line-height: 1.375rem;
+}
+
+.rating-value {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-weight: 600;
+}
+
+.rating-value svg {
+    color: var(--colorPaletteMarigoldForeground1, #c47e00);
+}
+
+.tmdb-details {
+    display: grid;
+    grid-template-columns: 160px minmax(0, 1fr);
+    gap: 1rem;
+    align-items: start;
+}
+
+.tmdb-details-poster {
+    width: 160px;
+    height: 240px;
+    object-fit: cover;
+    border-radius: var(--xf-radius-md);
+    background: var(--colorNeutralBackground3);
+}
+
+.tmdb-details-body {
+    display: grid;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.tmdb-details-overview {
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* Settings changed from the details dialogs (manual exclusion, custom category): one line per setting. */
+.details-controls {
+    display: grid;
+    padding: 0.25rem 0.75rem;
+    border: 1px solid var(--xf-border);
+    border-radius: var(--xf-radius-md);
+}
+
+.details-control {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 1rem;
+    min-height: 3rem;
+    padding: 0.375rem 0;
+}
+
+.details-control + .details-control {
+    border-top: 1px solid var(--xf-border);
+}
+
+.details-control .xf-select {
+    width: 220px;
+}
+
+@media (max-width: 640px) {
+    .tmdb-details {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* Same spacing as the TMDB details body. */
+.decision-details {
+    display: grid;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.decision-details-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.decision-details-reason {
+    line-height: 1.45;
+}
+
+/* explanation of a deciding rule: sentence, rule, priority, and link, one per line */
+div.decision-details-reason {
+    display: grid;
+    justify-items: start;
+    gap: 0.375rem;
+}
+
+.rule-facts {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.25rem 1rem;
+    margin: 0;
+    padding: 0.5rem 0.625rem;
+    border-radius: var(--xf-radius-md);
+    background: var(--xf-surface-subtle);
+}
+
+.rule-facts dt {
+    color: var(--xf-text-muted);
+}
+
+.rule-facts dd {
+    margin: 0;
+    font-weight: 600;
+}
+
+.text-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--colorBrandForegroundLink, #115ea3);
+    text-decoration: none;
+}
+
+.text-link:hover {
+    text-decoration: underline;
+}
+
+.text-link:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2, #000000);
+    outline-offset: 2px;
+}
+
+.item-list {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--xf-border);
+    border-radius: var(--xf-radius-md);
+}
+
+.item-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 3rem;
+    padding: 0.375rem 0.5rem 0.375rem 0.875rem;
+    border-top: 1px solid var(--xf-border);
+}
+
+.item-row:first-child {
+    border-top: 0;
+}
+
+.item-row:hover {
+    background: var(--colorNeutralBackground1Hover, #f5f5f5);
+}
+
+.item-row.is-editing {
+    background: var(--xf-accent-background);
+}
+
+.item-row-main {
+    flex: 1;
+}
+
+/* ─── Sources screen ─────────────────────────────────────────────────────── */
+
+.source-overview {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: 0.75rem;
+}
+
+.source-overview-item {
+    display: grid;
+    gap: 0.125rem;
+    padding: 0.625rem 0.875rem;
+    border: 1px solid var(--xf-border);
+    border-radius: var(--xf-radius-lg);
+    background: var(--xf-surface);
+    color: var(--xf-text-muted);
+    font-size: 0.8125rem;
+}
+
+.source-overview-item strong {
+    color: var(--xf-text);
+    font-size: 1.375rem;
+    line-height: 1.2;
+}
+
+.source-list {
+    display: grid;
+    gap: 1rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.source-card {
+    display: grid;
+    gap: 1rem;
+}
+
+.source-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-width: 0;
+}
+
+.source-card-icon {
+    display: inline-flex;
+    padding: 0.375rem;
+    border-radius: var(--xf-radius-md);
+    background: var(--xf-accent-background);
+    color: var(--xf-accent);
+}
+
+.source-card-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.source-blocks {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+    gap: 1rem;
+}
+
+.source-block {
+    display: grid;
+    gap: 0.75rem;
+    align-content: start;
+    padding: 0.875rem;
+    border: 1px solid var(--xf-border);
+    border-radius: var(--xf-radius-lg);
+    background: var(--xf-surface-muted);
+}
+
+.source-block-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.25rem 1rem;
+}
+
+.content-frame .source-block-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.9375rem;
+}
+
+.source-block-headline {
+    font-size: 0.8125rem;
+}
+
+.source-block-headline strong {
+    font-size: 1rem;
+}
+
+.source-bar {
+    display: flex;
+    height: 0.625rem;
+    overflow: hidden;
+    border-radius: var(--xf-radius-pill);
+    background: var(--xf-surface-subtle);
+    border: 1px solid var(--xf-border);
+}
+
+.source-bar-segment {
+    flex-basis: 0;
+    flex-shrink: 0;
+    min-width: 0;
+}
+
+.source-bar-sent {
+    background: var(--colorStatusSuccessForeground1, #0e700e);
+}
+
+.source-bar-manual {
+    background: var(--colorBrandForeground1, #0f6cbd);
+}
+
+.source-bar-provider {
+    background: var(--colorStatusWarningForeground1, #bc4b09);
+}
+
+.source-bar-rule {
+    background: var(--colorStatusDangerForeground1, #b10e1c);
+}
+
+.source-legend {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: 0.25rem 0.75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.source-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.125rem 0.25rem;
+    border-radius: var(--xf-radius-md);
+    color: var(--xf-text-muted);
+    font-size: 0.8125rem;
+    text-decoration: none;
+}
+
+.source-legend-item strong {
+    margin-left: auto;
+    color: var(--xf-text);
+    font-variant-numeric: tabular-nums;
+}
+
+.source-legend-item:hover,
+.source-tile:is(a):hover {
+    background: var(--colorNeutralBackground1Hover, #f5f5f5);
+}
+
+.source-legend-item:focus-visible,
+.source-tile:is(a):focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2, #000000);
+    outline-offset: 1px;
+}
+
+.source-dot {
+    flex: none;
+    width: 0.625rem;
+    height: 0.625rem;
+    border-radius: 50%;
+}
+
+.source-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+    gap: 0.5rem;
+}
+
+.source-tile {
+    display: grid;
+    gap: 0.0625rem;
+    padding: 0.5rem 0.625rem;
+    border: 1px solid var(--xf-border);
+    border-radius: var(--xf-radius-md);
+    background: var(--xf-surface);
+    color: var(--xf-text-muted);
+    font-size: 0.75rem;
+    line-height: 1.3;
+    text-decoration: none;
+}
+
+.source-tile strong {
+    color: var(--xf-text);
+    font-size: 1.125rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.item-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* Form rendered in the body of a FluentDialog (create/edit), its buttons are in the dialog footer. */
+.dialog-form {
+    display: grid;
+    gap: 0.875rem;
+}
+
+/* Mapped Xtream categories of a custom category, listed in a dialog. */
+.mapping-list {
+    max-height: 60dvh;
+    overflow: auto;
+}
+
+.dialog-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem 1.25rem;
+}
+
+.dialog-form-grow {
+    flex: 1 1 220px;
+}
+
+/* ─── Category rules ─────────────────────────────────────────────────────── */
+
+.rules-help {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.625rem 0.875rem;
+    border: 1px solid var(--colorBrandStroke2, #b4d6fa);
+    border-radius: var(--xf-radius-lg);
+    background: var(--xf-accent-background);
+    font-size: 0.8125rem;
+    line-height: 1.45;
+}
+
+.rules-help > :first-child {
+    flex: none;
+    color: var(--xf-accent);
+}
+
+.rules-help p + p {
+    margin-top: 0.25rem;
+    color: var(--xf-text-muted);
+}
+
+.editor-switches {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    min-height: 2rem;
+}
+
+.editor-preview {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--xf-radius-md);
+    background: var(--xf-surface-subtle);
+}
+
+.rule-order-hint {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0 0.25rem;
+    color: var(--xf-text-muted);
+    font-size: 0.75rem;
+}
+
+.rule-list.fluent-sortable-list {
+    --fluent-sortable-list-border-width: 0;
+    --fluent-sortable-list-padding: 0;
+    --fluent-sortable-list-item-height: auto;
+    --fluent-sortable-list-item-padding: 0;
+    --fluent-sortable-list-item-spacing: 0.375rem;
+    --fluent-sortable-list-item-background-color: var(--xf-surface);
+    --fluent-sortable-list-item-border-color: var(--xf-border);
+}
+
+.rule-item {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    min-height: 3.25rem;
+}
+
+.rule-item.is-disabled .rule-preview {
+    opacity: 0.6;
+}
+
+.rule-item.is-highlighted {
+    box-shadow: inset 3px 0 0 var(--xf-accent);
+    background: var(--xf-accent-background);
+}
+
+.rule-item.is-editing {
+    box-shadow: inset 3px 0 0 var(--xf-accent);
+}
+
+/* Overrides the fixed height the sortable list gives to its drag handles. */
+.rule-list .rule-handle {
+    display: grid;
+    place-items: center;
+    flex: none;
+    align-self: stretch;
+    width: 2rem;
+    height: auto;
+    border: 0;
+    color: var(--xf-text-muted);
+    cursor: grab;
+}
+
+.rule-handle:hover {
+    color: var(--xf-text);
+    background: var(--colorSubtleBackgroundHover, rgb(0 0 0 / 4%));
+}
+
+.rule-content {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    min-width: 0;
+    padding: 0.375rem 0.5rem 0.375rem 0.25rem;
+}
+
+.rule-priority {
+    display: grid;
+    place-items: center;
+    flex: none;
+    min-width: 1.75rem;
+    height: 1.75rem;
+    border-radius: var(--xf-radius-md);
+    background: var(--xf-surface-subtle);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.rule-preview {
+    display: grid;
+    flex: 1 1 280px;
+    gap: 0.125rem;
+    min-width: 0;
+}
+
+.rule-sentence {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.375rem;
+    font-size: 0.875rem;
+}
+
+.rule-pattern {
+    padding: 0 0.3125rem;
+    border-radius: var(--xf-radius-md);
+    background: var(--xf-surface-subtle);
+    border: 1px solid var(--xf-border);
+    font-size: 0.8125rem;
+    white-space: pre;
+}
+
+.rule-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.125rem;
+    margin-left: auto;
+}
+
+/* ─── Dashboard ──────────────────────────────────────────────────────────── */
+
+.dashboard-overview {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.dashboard-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.75rem;
+}
+
+.metric-link {
+    display: block;
+    border-radius: var(--xf-radius-lg);
+    color: inherit;
+    text-decoration: none;
+}
+
+.metric-link:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2, #000000);
+    outline-offset: 2px;
+}
+
+.metric-link .dashboard-metric-card {
+    transition: transform 120ms ease, border-color 120ms ease;
+}
+
+.metric-link:hover .dashboard-metric-card {
+    border-color: var(--xf-accent);
+    transform: translateY(-1px);
+}
+
+.dashboard-metric-card {
+    display: grid;
+    gap: 0.5rem;
+    height: 100%;
+    padding: 1rem 1.125rem;
+}
+
+.dashboard-metric-label,
+.dashboard-section-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.dashboard-metric-label {
+    color: var(--xf-text-muted);
+    font-size: 0.8125rem;
+    line-height: 1.35;
+}
+
+.metric-icon {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--xf-radius-md);
+    background: var(--xf-accent-background);
+    color: var(--xf-accent);
+}
+
+.dashboard-metric-value {
+    font-size: 2rem;
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+.dashboard-section-heading {
+    justify-content: space-between;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+}
+
+.dashboard-health-card {
+    padding: 1rem 1.125rem;
+}
+
+/* ─── Monitoring ─────────────────────────────────────────────────────────── */
+
+/* Every queue row shares the same column template and the same header and plot heights:
+   titles, plots and axes are aligned horizontally and vertically across rows and charts. */
+.monitor-section {
+    --monitor-summary-width: 15rem;
+    --line-chart-header-height: 1.5rem;
+    --line-chart-plot-height: 7.5rem;
+
+    display: grid;
+    gap: 0.75rem;
+    container-type: inline-size;
+}
+
+.monitor-section + .monitor-section {
+    margin-top: 1.5rem;
+}
+
+.live-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.live-indicator {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--colorStatusSuccessForeground1, #0e700e);
+    animation: live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+    50% {
+        opacity: 0.3;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .live-indicator {
+        animation: none;
+    }
+}
+
+.queue-stale {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--colorStatusWarningBorder1, #fdcfb4);
+    border-radius: var(--xf-radius-md);
+    background: var(--colorStatusWarningBackground1, #fff9f5);
+    color: var(--colorStatusWarningForeground1, #bc4b09);
+    font-size: 0.8125rem;
+}
+
+.queue-row {
+    display: grid;
+    grid-template-columns: var(--monitor-summary-width) minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 1rem 2rem;
+}
+
+.queue-summary {
+    display: grid;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+/* same height as the chart headers: the queue name is on the line of the chart titles */
+.content-frame .queue-summary-title {
+    overflow: hidden;
+    height: var(--line-chart-header-height);
+    font-size: 0.875rem;
+    line-height: var(--line-chart-header-height);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* same height as the plots: the first and last values are on the lines of the top and bottom of the plots */
+.queue-summary-stats {
+    display: grid;
+    grid-template-rows: repeat(5, minmax(0, 1fr));
+    height: var(--line-chart-plot-height);
+    margin: 0;
+}
+
+.queue-summary-stat {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border-top: 1px solid var(--xf-border);
+    font-size: 0.8125rem;
+}
+
+.queue-summary-stat:first-child {
+    border-top: 0;
+}
+
+.queue-summary-stat dt {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    color: var(--xf-text-muted);
+    font-weight: 400;
+}
+
+.queue-summary-stat dd {
+    margin: 0;
+    color: var(--xf-text);
+    font-weight: 600;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.queue-summary-stat-main dd {
+    color: var(--xf-accent);
+    font-size: 1.125rem;
+}
+
+/* summary above the two charts */
+@container (max-width: 60rem) {
+    .queue-row {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .queue-summary {
+        grid-column: 1 / -1;
+    }
+
+    .queue-summary-stats {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-rows: none;
+        height: auto;
+        gap: 0.75rem;
+    }
+
+    .queue-summary-stat {
+        display: grid;
+        justify-content: start;
+        gap: 0.125rem;
+        border-top: 0;
+    }
+
+    /* one size for every value: the values of the five columns share their baseline */
+    .queue-summary-stat dd,
+    .queue-summary-stat-main dd {
+        font-size: 0.9375rem;
+        text-align: left;
+    }
+}
+
+/* everything stacked, before a chart title and its legend no longer fit on one line */
+@container (max-width: 46rem) {
+    .queue-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .queue-summary-stats {
+        grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+    }
+}
+
+.monitor-empty {
+    font-size: 0.8125rem;
+}
+
+/* first and last cells without outer padding: the table content is aligned with the card content */
+.monitor-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 0.8125rem;
+}
+
+.monitor-table th,
+.monitor-table td {
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.monitor-table th:first-child,
+.monitor-table td:first-child {
+    padding-left: 0;
+}
+
+.monitor-table th:last-child,
+.monitor-table td:last-child {
+    padding-right: 0;
+}
+
+.monitor-table th {
+    padding-top: 0;
+    border-bottom: 1px solid var(--xf-border-strong);
+    color: var(--xf-text-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.monitor-table td {
+    border-top: 1px solid var(--xf-border);
+}
+
+.monitor-table tbody tr:first-child td {
+    border-top: 0;
+}
+
+.monitor-table tbody tr:last-child td {
+    padding-bottom: 0;
+}
+
+.monitor-table .cell-truncate {
+    display: block;
+}
+
+.monitor-table .monitor-table-number {
+    width: 7rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.monitor-table .monitor-table-pace {
+    width: 17rem;
+}
+
+/* ─── Line chart (Components/Shared/LineChart) ───────────────────────────── */
+
+.chart-series-brand {
+    --chart-series-color: var(--colorBrandForeground1, #0f6cbd);
+}
+
+.chart-series-success {
+    --chart-series-color: var(--colorStatusSuccessForeground1, #0e700e);
+}
+
+.chart-series-neutral {
+    --chart-series-color: var(--colorNeutralForeground4, #707070);
+}
+
+.chart-series-danger {
+    --chart-series-color: var(--colorStatusDangerForeground1, #b10e1c);
+}
+
+/* Fixed grid: header on the whole width, then a fixed-width Y axis next to the plot, then the X axis under the plot only,
+   so that the time labels start and end exactly at the edges of the plot. */
+.line-chart {
+    display: grid;
+    grid-template-areas:
+        "header header"
+        "y-axis plot"
+        ". x-axis";
+    grid-template-columns: var(--line-chart-axis-width, 2.75rem) minmax(0, 1fr);
+    column-gap: 0.5rem;
+    min-width: 0;
+    margin: 0;
+}
+
+.line-chart-header {
+    display: flex;
+    grid-area: header;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    height: var(--line-chart-header-height, 1.5rem);
+    margin-bottom: 0.5rem;
+    white-space: nowrap;
+}
+
+.line-chart-title {
+    overflow: hidden;
+    color: var(--xf-text-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-overflow: ellipsis;
+}
+
+.line-chart-legend {
+    display: flex;
+    gap: 0.75rem;
+    color: var(--xf-text-muted);
+    font-size: 0.75rem;
+}
+
+.line-chart-legend > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.line-chart-legend-dot {
+    flex: none;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--chart-series-color, currentColor);
+}
+
+/* each label is centered on its grid line (top, middle and bottom of the plot) */
+.line-chart-y-axis {
+    position: relative;
+    grid-area: y-axis;
+    color: var(--xf-text-muted);
+    font-size: 0.6875rem;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.line-chart-y-axis > span {
+    position: absolute;
+    right: 0;
+    transform: translateY(-50%);
+}
+
+.line-chart-y-top {
+    top: 0;
+}
+
+.line-chart-y-middle {
+    top: 50%;
+}
+
+.line-chart-y-bottom {
+    top: 100%;
+}
+
+.line-chart-plot {
+    display: block;
+    grid-area: plot;
+    width: 100%;
+    height: var(--line-chart-plot-height, 8rem);
+    overflow: visible;
+}
+
+.line-chart-grid {
+    stroke: var(--xf-border);
+    stroke-width: 1;
+    stroke-dasharray: 4 4;
+    vector-effect: non-scaling-stroke;
+}
+
+.line-chart-baseline {
+    stroke: var(--xf-border-strong);
+    stroke-dasharray: none;
+}
+
+.line-chart-line {
+    fill: none;
+    stroke: var(--chart-series-color, currentColor);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+}
+
+.line-chart-area {
+    fill: var(--chart-series-color, currentColor);
+    fill-opacity: 0.12;
+    stroke: none;
+}
+
+.line-chart-hover {
+    fill: transparent;
+}
+
+.line-chart-hover:hover {
+    fill: var(--xf-text);
+    fill-opacity: 0.06;
+}
+
+.line-chart-x-axis {
+    display: flex;
+    grid-area: x-axis;
+    justify-content: space-between;
+    margin-top: 0.375rem;
+    color: var(--xf-text-muted);
+    font-size: 0.6875rem;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.dashboard-health-grid {
+    display: grid;
+}
+
+.dashboard-health-row {
+    display: grid;
+    grid-template-columns: minmax(120px, 160px) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.875rem;
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--xf-border);
+}
+
+.dashboard-health-row:first-child {
+    border-top: 0;
+}
+
+.dashboard-health-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.dashboard-health-label,
+.dashboard-health-meta {
+    color: var(--xf-text-muted);
+}
+
+.dashboard-health-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+}
+
+/* ─── Responsive ─────────────────────────────────────────────────────────── */
+
+@media (max-width: 960px) {
+    .layout-shell {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .sidebar {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        padding: 0.5rem 0.75rem;
+        border-right: 0;
+        border-bottom: 1px solid var(--xf-border);
+    }
+
+    .brand-block {
+        padding: 0;
+    }
+
+    .sidebar-nav {
+        flex-basis: 100%;
+        order: 3;
+        max-height: 40dvh;
+    }
+
+    .sidebar-footer {
+        margin-left: auto;
+        padding: 0;
+        border-top: 0;
+    }
+
+    .sidebar-footer [slot='label'] {
+        display: none;
+    }
+
+    .content-frame {
+        padding: 1rem;
+    }
+
+    .dashboard-health-row {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0.375rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .segmented-item {
+        padding: 0 0.5rem;
+    }
+
+    .filter-search {
+        flex-basis: 100%;
+        max-width: none;
+    }
+
+    .rule-actions {
+        margin-left: 2.25rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .metric-link .dashboard-metric-card {
+        transition: none;
+    }
+
+    .metric-link:hover .dashboard-metric-card {
+        transform: none;
+    }
+}

@@ -1,0 +1,77 @@
+@using XtreamForge.Web.Features.Categories
+
+<section class="source-block" aria-label="@Title">
+    <header class="source-block-header">
+        <h3 class="source-block-title">
+            <FluentIcon Value="@Icon" aria-hidden="true" />
+            @Title
+        </h3>
+        <a class="text-link source-block-headline" href="@CategoriesHref("decision=Included")">
+            <strong>@Format(Summary.EffectiveCategories)</strong>&nbsp;of&nbsp;@Format(Summary.Categories) categories sent to clients
+        </a>
+    </header>
+
+    <div class="source-bar" role="img" aria-label="@BarDescription">
+        @if (Summary.Categories > 0)
+        {
+            <span class="source-bar-segment source-bar-sent" style="flex-grow: @Summary.EffectiveCategories"></span>
+            <span class="source-bar-segment source-bar-manual" style="flex-grow: @Summary.ManuallyExcludedCategories"></span>
+            <span class="source-bar-segment source-bar-provider" style="flex-grow: @Summary.ProviderDisabledCategories"></span>
+            <span class="source-bar-segment source-bar-rule" style="flex-grow: @Summary.RuleExcludedCategories"></span>
+        }
+    </div>
+
+    <ul class="source-legend" aria-label="Categories by outcome">
+        <li><a class="source-legend-item" href="@CategoriesHref("decision=Included")"><span class="source-dot source-bar-sent"></span>Sent to clients<strong>@Format(Summary.EffectiveCategories)</strong></a></li>
+        <li><a class="source-legend-item" href="@CategoriesHref("manual=Excluded")"><span class="source-dot source-bar-manual"></span>Excluded manually<strong>@Format(Summary.ManuallyExcludedCategories)</strong></a></li>
+        <li><a class="source-legend-item" href="@CategoriesHref("provider=Disabled")"><span class="source-dot source-bar-provider"></span>Disabled by the provider<strong>@Format(Summary.ProviderDisabledCategories)</strong></a></li>
+        <li><a class="source-legend-item" href="@CategoriesHref("decision=Excluded", "manual=NotExcluded", "provider=Enabled")"><span class="source-dot source-bar-rule"></span>Excluded by a rule<strong>@Format(Summary.RuleExcludedCategories)</strong></a></li>
+    </ul>
+
+    <div class="source-tiles">
+        <a class="source-tile" href="@CategoriesHref("mapping=Mapped")">
+            <strong>@Format(Summary.MappedCategories)</strong>
+            <span>Mapped to a custom category</span>
+        </a>
+        <a class="source-tile" href="@($"/categories/rules?{Scope}")">
+            <strong>@Format(Summary.CategoryRules)</strong>
+            <span>Category rules</span>
+        </a>
+        <a class="source-tile" href="@($"/items/rules?{Scope}")">
+            <strong>@Format(Summary.ItemRules)</strong>
+            <span>Item rules</span>
+        </a>
+        <div class="source-tile" title="Streams whose TMDB ID is known (StreamId → TmdbId), resolved in the background">
+            <strong>@Format(Summary.TmdbMappings)</strong>
+            <span>TMDB IDs resolved</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public int SourceId { get; set; }
+
+    [Parameter, EditorRequired]
+    public ContentType ContentType { get; set; }
+
+    [Parameter, EditorRequired]
+    public SourceContentSummaryDto Summary { get; set; } = default!;
+
+    private bool IsVod => ContentType == ContentType.Vod;
+
+    private string Title => IsVod ? "Movies (VOD)" : "Series";
+
+    private Icon Icon => IsVod ? new Icons.Regular.Size20.Video() : new Icons.Regular.Size20.Tv();
+
+    private string Scope => $"source={SourceId}&type={ContentType}";
+
+    private string BarDescription =>
+        $"{Format(Summary.EffectiveCategories)} sent to clients, {Format(Summary.ManuallyExcludedCategories)} excluded manually, "
+        + $"{Format(Summary.ProviderDisabledCategories)} disabled by the provider, {Format(Summary.RuleExcludedCategories)} excluded by a rule";
+
+    private string CategoriesHref(params string[] filters) =>
+        $"/categories/xtream?{Scope}{string.Concat(filters.Select(filter => "&" + filter))}";
+
+    private static string Format(int value) => value.ToString("N0", CultureInfo.CurrentCulture);
+}

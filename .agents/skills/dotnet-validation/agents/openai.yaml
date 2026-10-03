@@ -1,0 +1,4 @@
+interface:
+  display_name: "XtreamForge – .NET Validation"
+  short_description: "Validate .NET builds, analyzers and tests"
+  default_prompt: "Use $dotnet-validation to verify my recent changes to XtreamForge.ApiService compile cleanly with no analyzer warnings."

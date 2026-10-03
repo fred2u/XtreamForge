@@ -1,0 +1,31 @@
+<span class="rule-sentence">
+    <span class="status-pill @(Action == RuleAction.Exclude ? "status-pill-danger" : "status-pill-success")">
+        <FluentIcon Value="@(Action == RuleAction.Exclude ? (Icon)new Icons.Regular.Size16.EyeOff() : new Icons.Regular.Size16.Eye())" aria-hidden="true" />
+        @CategoryLabels.ActionName(Action)
+    </span>
+    <span>@Subject whose @FieldName @CategoryLabels.OperatorName(Operator).ToLowerInvariant()</span>
+    <code class="rule-pattern">@(string.IsNullOrEmpty(Pattern) ? "…" : Pattern)</code>
+    <span class="cell-secondary">@(CaseSensitive ? "case sensitive" : "ignoring case")</span>
+</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public RuleAction Action { get; set; }
+
+    [Parameter, EditorRequired]
+    public RuleOperator Operator { get; set; }
+
+    [Parameter, EditorRequired]
+    public string? Pattern { get; set; }
+
+    [Parameter]
+    public bool CaseSensitive { get; set; }
+
+    /// <summary>What the rule filters, in the plural ("categories" or "items").</summary>
+    [Parameter]
+    public string Subject { get; set; } = "categories";
+
+    /// <summary>What the rule matches ("name", "TMDB title", "TMDB genre").</summary>
+    [Parameter]
+    public string FieldName { get; set; } = "name";
+}

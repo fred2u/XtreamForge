@@ -1,0 +1,308 @@
+@*
+    Modal editor to create or edit a category, item, or TMDB rule, shared by the rules screens, the Xtream categories screen,
+    and the TMDB infos screen. The parent opens it with ShowAsync and reloads its data when Saved is raised.
+*@
+@using XtreamForge.Web.Features.Categories
+@implements IDisposable
+@inject CategoriesClient CategoriesClient
+@inject INotificationService NotificationService
+
+<FluentDialog @ref="_dialog" OnStateChange="@OnDialogStateChange" PreventDismissOnEscape="@_isSaving">
+    <FluentDialogBody>
+        <TitleTemplate>
+            @(_editor?.RuleId is { } editedRuleId ? $"Edit rule #{editedRuleId}" : "New rule")
+        </TitleTemplate>
+        <ChildContent>
+            @if (_editor is not null && ContentType is { } editorContentType)
+            {
+                <form class="dialog-form" @onsubmit="@SaveAsync">
+                    <span class="cell-secondary">
+                        @Texts.Title · @CategoryLabels.ContentTypeName(editorContentType)
+                        @if (!IsGlobal)
+                        {
+                            <text> · @SourceName</text>
+                        }
+                        @if (_editor.RuleId is null)
+                        {
+                            <text> · added at the end of the list (lowest priority)</text>
+                        }
+                    </span>
+
+                    @if (IsGlobal)
+                    {
+                        <div class="dialog-form-row">
+                            <SegmentedControl TValue="TmdbRuleField" Label="Match on" Options="@FieldOptions" @bind-Value="_editor.Field" Disabled="@_isSaving" />
+                        </div>
+                    }
+
+                    <div class="dialog-form-row">
+                        <SegmentedControl TValue="RuleAction" Label="Action" Options="@ActionOptions" @bind-Value="_editor.Action" Disabled="@_isSaving" />
+                        <SegmentedControl TValue="RuleOperator" Label="@NameLabel" Options="@OperatorOptions" @bind-Value="_editor.Operator" Disabled="@_isSaving" />
+                    </div>
+
+                    <div class="dialog-form-row">
+                        <div class="dialog-form-grow">
+                            <FluentTextInput Label="Pattern"
+                                             @bind-Value="_editor.Pattern"
+                                             Immediate="true"
+                                             Required="true"
+                                             MaxLength="@PatternMaxLength"
+                                             Autofocus="true"
+                                             Disabled="@_isSaving"
+                                             Placeholder="@Texts.PatternPlaceholder"
+                                             Message="@_editorError"
+                                             MessageCondition="@(field => !string.IsNullOrEmpty(field.Message))"
+                                             MessageState="@(_editorError is null ? null : MessageState.Error)"
+                                             Width="100%" />
+                        </div>
+                        <div class="editor-switches">
+                            <FluentCheckbox Label="Case sensitive" @bind-Value="_editor.CaseSensitive" Disabled="@_isSaving" />
+                        </div>
+                    </div>
+
+                    <div class="editor-switches">
+                        <FluentSwitch Label="Enabled" @bind-Value="_editor.IsEnabled" Disabled="@_isSaving" />
+                    </div>
+
+                    <div class="editor-preview" aria-live="polite">
+                        <span class="toolbar-label">Preview</span>
+                        <RuleSentence Action="@_editor.Action" Operator="@_editor.Operator" Pattern="@_editor.Pattern" CaseSensitive="@_editor.CaseSensitive" Subject="@Texts.Plural"
+                                      FieldName="@RuleKindTexts.FieldName(Kind, _editor.Field)" />
+                        @if (!_editor.IsEnabled)
+                        {
+                            <span class="status-pill status-pill-neutral">Disabled: skipped during evaluation</span>
+                        }
+                    </div>
+                </form>
+            }
+        </ChildContent>
+        <ActionTemplate>
+            <FluentButton Appearance="ButtonAppearance.Primary" Loading="@_isSaving" Disabled="@string.IsNullOrWhiteSpace(_editor?.Pattern)" OnClick="@SaveAsync">
+                @(_editor?.RuleId is null ? "Create rule" : "Save changes")
+            </FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@_isSaving" OnClick="@CloseAsync">Cancel</FluentButton>
+        </ActionTemplate>
+    </FluentDialogBody>
+</FluentDialog>
+
+@code {
+    private const int PatternMaxLength = 255; // category_rules.pattern, item_rules.pattern and tmdb_rules.pattern column length
+
+    private static readonly IReadOnlyList<SegmentOption<RuleAction>> ActionOptions =
+    [
+        new(RuleAction.Include, CategoryLabels.ActionName(RuleAction.Include), new Icons.Regular.Size16.Eye()),
+        new(RuleAction.Exclude, CategoryLabels.ActionName(RuleAction.Exclude), new Icons.Regular.Size16.EyeOff())
+    ];
+
+    private static readonly IReadOnlyList<SegmentOption<RuleOperator>> OperatorOptions =
+    [
+        new(RuleOperator.StartsWith, CategoryLabels.OperatorName(RuleOperator.StartsWith)),
+        new(RuleOperator.NotStartsWith, CategoryLabels.OperatorName(RuleOperator.NotStartsWith)),
+        new(RuleOperator.Contains, CategoryLabels.OperatorName(RuleOperator.Contains)),
+        new(RuleOperator.NotContains, CategoryLabels.OperatorName(RuleOperator.NotContains))
+    ];
+
+    private static readonly IReadOnlyList<SegmentOption<TmdbRuleField>> FieldOptions =
+    [
+        new(TmdbRuleField.Title, "Title"),
+        new(TmdbRuleField.Genre, "Genre")
+    ];
+
+    /// <summary>Selects the endpoints and the texts: category, item, or TMDB rules.</summary>
+    [Parameter, EditorRequired]
+    public RuleKind Kind { get; set; }
+
+    /// <summary>Source of the category and item rules; ignored by the TMDB rules, which are global.</summary>
+    [Parameter, EditorRequired]
+    public int? SourceId { get; set; }
+
+    [Parameter, EditorRequired]
+    public ContentType? ContentType { get; set; }
+
+    [Parameter]
+    public string? SourceName { get; set; }
+
+    /// <summary>Rules of the same scope (source and content type, or content type for the TMDB rules): a new rule is added after the last one.</summary>
+    [Parameter]
+    public IReadOnlyList<RuleDto> Rules { get; set; } = [];
+
+    /// <summary>Raised after a rule was created or saved (or found deleted), so the parent can reload its data.</summary>
+    [Parameter]
+    public EventCallback Saved { get; set; }
+
+    /// <summary>Raised when the editor opens or closes (including Escape), so the parent can update its own state.</summary>
+    [Parameter]
+    public EventCallback<bool> OpenChanged { get; set; }
+
+    public bool IsOpen => _editor is not null;
+
+    /// <summary>Id of the rule being edited; null for a new rule or when the editor is closed.</summary>
+    public int? EditedRuleId => _editor?.RuleId;
+
+    private readonly CancellationTokenSource _disposal = new();
+    private FluentDialog? _dialog;
+    private RuleEditor? _editor;
+    private string? _editorError;
+    private bool _isSaving;
+
+    private RuleKindTexts Texts => RuleKindTexts.For(Kind);
+
+    // TMDB rules have no source
+    private bool IsGlobal => Kind == RuleKind.Tmdb;
+
+    private string NameLabel => Kind switch
+    {
+        RuleKind.Item => "Item name",
+        RuleKind.Tmdb => _editor?.Field == TmdbRuleField.Genre ? "TMDB genre" : "TMDB title",
+        _ => "Category name"
+    };
+
+    /// <summary>
+    /// Opens the editor for a new rule, or for <paramref name="rule"/> when given; a new rule can be prefilled with a pattern and,
+    /// for a TMDB rule, the field it matches.
+    /// </summary>
+    public async Task ShowAsync(RuleDto? rule = null, string? pattern = null, TmdbRuleField? field = null)
+    {
+        if (_dialog is null || IsOpen)
+        {
+            return;
+        }
+
+        _editor = rule is null ? NewEditor(pattern, field) : EditorFor(rule);
+        _editorError = null;
+        await _dialog.ShowAsync();
+        await OpenChanged.InvokeAsync(true);
+    }
+
+    private static RuleEditor NewEditor(string? pattern, TmdbRuleField? field)
+    {
+        var editor = new RuleEditor { Field = field ?? TmdbRuleField.Title };
+        if (pattern is not null)
+        {
+            editor.Pattern = pattern[..Math.Min(pattern.Length, PatternMaxLength)];
+        }
+
+        return editor;
+    }
+
+    private static RuleEditor EditorFor(RuleDto rule) => new()
+    {
+        RuleId = rule.Id,
+        Sequence = rule.Sequence,
+        Action = rule.Action,
+        Operator = rule.Operator,
+        Pattern = rule.Pattern,
+        CaseSensitive = rule.CaseSensitive,
+        IsEnabled = rule.IsEnabled,
+        Field = rule.Field ?? TmdbRuleField.Title
+    };
+
+    private async Task CloseAsync()
+    {
+        if (_dialog is not null)
+        {
+            await _dialog.HideAsync();
+        }
+
+        await ResetAsync();
+    }
+
+    // Also called when the dialog is dismissed with Escape.
+    private async Task OnDialogStateChange(DialogEventArgs args)
+    {
+        if (args.State == DialogState.Closed)
+        {
+            await ResetAsync();
+        }
+    }
+
+    private async Task ResetAsync()
+    {
+        if (_editor is null)
+        {
+            return;
+        }
+
+        _editor = null;
+        _editorError = null;
+        await OpenChanged.InvokeAsync(false);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_editor is not { } editor || (!IsGlobal && SourceId is null) || ContentType is not { } contentType || _isSaving)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(editor.Pattern))
+        {
+            _editorError = $"Enter the text to look for in the {Texts.Singular} {RuleKindTexts.FieldName(Kind, editor.Field)}.";
+            return;
+        }
+
+        _isSaving = true;
+        try
+        {
+            var isNew = editor.RuleId is null;
+            var sequence = editor.Sequence ?? RuleOrdering.NextSequence(Rules);
+            var request = new RuleRequest(contentType, sequence, editor.Action, editor.Operator, editor.Pattern, editor.CaseSensitive, editor.IsEnabled,
+                IsGlobal ? editor.Field : null);
+            var result = editor.RuleId is { } ruleId
+                ? await CategoriesClient.UpdateRuleAsync(Kind, ruleId, request, _disposal.Token)
+                : await CategoriesClient.CreateRuleAsync(Kind, SourceId, request, _disposal.Token);
+
+            switch (result)
+            {
+                case AdminOperationResult.Success:
+                    await CloseAsync();
+                    await NotificationService.ShowSuccessToastAsync(isNew ? "Rule created." : "Rule saved.");
+                    break;
+                case AdminOperationResult.Conflict:
+                    _editorError = "The rules were changed meanwhile. Refresh and try again.";
+                    return;
+                default:
+                    await CloseAsync();
+                    await NotificationService.ShowWarningToastAsync(isNew ? "The source no longer exists or the rule is not valid." : "The rule no longer exists or is not valid.");
+                    break;
+            }
+
+            await Saved.InvokeAsync();
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            _editorError = $"Unable to save the rule. {ApiErrorMessage.Describe(exception)}";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposal.Cancel();
+        _disposal.Dispose();
+    }
+
+    private sealed class RuleEditor
+    {
+        public int? RuleId { get; init; }
+
+        /// <summary>Kept when editing; a new rule gets the next sequence when saved.</summary>
+        public int? Sequence { get; init; }
+
+        public RuleAction Action { get; set; } = RuleAction.Exclude;
+
+        public RuleOperator Operator { get; set; } = RuleOperator.Contains;
+
+        public string Pattern { get; set; } = string.Empty;
+
+        public bool CaseSensitive { get; set; }
+
+        public bool IsEnabled { get; set; } = true;
+
+        /// <summary>What a TMDB rule matches; unused by the other rules.</summary>
+        public TmdbRuleField Field { get; set; } = TmdbRuleField.Title;
+    }
+}

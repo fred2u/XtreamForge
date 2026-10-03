@@ -1,0 +1,872 @@
+@page "/categories"
+@page "/categories/xtream"
+@using XtreamForge.Web.Features.Rules
+@implements IDisposable
+@inject CategoriesClient CategoriesClient
+@inject INotificationService NotificationService
+@inject NavigationManager NavigationManager
+@inject CategoryScreenState ScreenState
+
+<PageTitle>Xtream categories - XtreamForge</PageTitle>
+
+<PageHeader Title="Xtream categories" Subtitle="Categories returned by a provider. See which ones clients receive and why, exclude categories manually and map them to custom categories.">
+    <Actions>
+        <FluentButton Appearance="ButtonAppearance.Outline"
+                      IconStart="@(new Icons.Regular.Size16.ArrowClockwise())"
+                      Loading="@_isRefreshing"
+                      Disabled="@(_isLoadingSources || _isLoadingCategories)"
+                      OnClick="@RefreshAsync">
+            Refresh
+        </FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary"
+                      IconStart="@(new Icons.Regular.Size16.Filter())"
+                      Disabled="@(!IsScopeSelected || _isLoadingCategories || _categoriesError is not null)"
+                      Tooltip="Add a rule for this source and content type; the current search is proposed as its pattern"
+                      OnClick="@NewCategoryRuleAsync">
+            New category rule
+        </FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary"
+                      IconStart="@(new Icons.Regular.Size16.Add())"
+                      Disabled="@(!IsScopeSelected || _isLoadingCategories || _categoriesError is not null)"
+                      OnClick="@(() => OpenNewCustomCategoryAsync(null))">
+            New custom category
+        </FluentButton>
+    </Actions>
+</PageHeader>
+
+@if (_isLoadingSources)
+{
+    <FluentCard Class="surface">
+        <div class="skeleton-list">
+            <FluentSkeleton Width="40%" Height="2rem" Shimmer="true" />
+            <FluentSkeleton Width="100%" Height="2.5rem" Shimmer="true" />
+        </div>
+    </FluentCard>
+}
+else if (_sourcesError is not null)
+{
+    <LoadErrorState Title="Unable to load the sources" Error="@_sourcesError" IsRetrying="@_isRefreshing" OnRetry="@RefreshAsync" />
+}
+else if (_sources.Count == 0)
+{
+    <FluentCard Class="surface">
+        <NoSourceMessage />
+    </FluentCard>
+}
+else
+{
+    <FluentCard Class="surface filter-bar">
+        <CategoryScopeBar Sources="@_sources"
+                          SourceId="@_sourceId"
+                          SourceIdChanged="@SetSourceAsync"
+                          ContentType="@_contentType"
+                          ContentTypeChanged="@SetContentTypeAsync">
+            <div class="filter-search">
+                <FluentTextInput Label="Search"
+                                 Value="@_filter.Search"
+                                 ValueChanged="@((string? value) => SetFilter(_filter with { Search = value }))"
+                                 Immediate="true"
+                                 ImmediateDelay="200"
+                                 Disabled="@(!IsScopeSelected)"
+                                 Placeholder="@(IsScopeSelected ? "Name, Xtream ID or custom category" : "Select a source and a content type first")"
+                                 Width="100%">
+                    <StartTemplate>
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Search())" aria-hidden="true" />
+                    </StartTemplate>
+                </FluentTextInput>
+            </div>
+        </CategoryScopeBar>
+
+        <div class="filter-row">
+            <SegmentedControl TValue="DecisionFilter" Label="Effective state" Options="@DecisionOptions" Disabled="@(!IsScopeSelected)"
+                              Value="@_filter.Decision" ValueChanged="@(value => SetFilter(_filter with { Decision = value }))" />
+            <SegmentedControl TValue="ManualExclusionFilter" Label="Manual exclusion" Options="@ManualExclusionOptions" Disabled="@(!IsScopeSelected)"
+                              Value="@_filter.ManualExclusion" ValueChanged="@(value => SetFilter(_filter with { ManualExclusion = value }))" />
+            <SegmentedControl TValue="ProviderStateFilter" Label="Provider" Options="@ProviderStateOptions" Disabled="@(!IsScopeSelected)"
+                              Value="@_filter.ProviderState" ValueChanged="@(value => SetFilter(_filter with { ProviderState = value }))" />
+            <SegmentedControl TValue="MappingFilter" Label="Mapping" Options="@MappingOptions" Disabled="@(!IsScopeSelected)"
+                              Value="@_filter.Mapping" ValueChanged="@(value => SetFilter(_filter with { Mapping = value }))" />
+        </div>
+    </FluentCard>
+
+    <FluentCard Class="surface grid-surface">
+        @if (!IsScopeSelected)
+        {
+            <EmptyState Title="@(_sourceId is null ? "Select a source" : "Select a content type")"
+                        Description="Xtream categories are listed per source and content type. Choose both above to see the categories and their state."
+                        Icon="@(new Icons.Regular.Size24.Filter())" />
+        }
+        else if (_isLoadingCategories)
+        {
+            <div class="skeleton-list" aria-busy="true">
+                @for (var index = 0; index < 8; index++)
+                {
+                    <FluentSkeleton Width="100%" Height="2.5rem" Shimmer="true" />
+                }
+            </div>
+        }
+        else if (_categoriesError is not null)
+        {
+            <LoadErrorState Title="Unable to load the categories" Error="@_categoriesError" IsRetrying="@_isRefreshing" OnRetry="@RefreshAsync" />
+        }
+        else if (_categories.Count == 0)
+        {
+            <EmptyState Title="No category for this source and content type"
+                        Description="Categories appear here once a client has requested the category list of this source through the proxy."
+                        Icon="@(new Icons.Regular.Size24.Grid())" />
+        }
+        else
+        {
+            <div class="grid-caption" aria-live="polite">
+                <span>
+                    Showing <strong>@_filtered.Count.ToString("N0", CultureInfo.CurrentCulture)</strong>
+                    of @_categories.Count.ToString("N0", CultureInfo.CurrentCulture)
+                    <ContentTypePill ContentType="@_contentType!.Value" />
+                    categories from <strong>@SelectedSource?.DisplayName</strong>
+                </span>
+                <span class="grid-caption-stats">
+                    <span>@_excludedCount.ToString("N0", CultureInfo.CurrentCulture) excluded</span>
+                    <span>@_mappedCount.ToString("N0", CultureInfo.CurrentCulture) mapped</span>
+                    <span>@_providerDisabledCount.ToString("N0", CultureInfo.CurrentCulture) disabled by the provider</span>
+                </span>
+                @if (!_filter.IsEmpty)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Subtle"
+                                  Size="ButtonSize.Small"
+                                  IconStart="@(new Icons.Regular.Size16.Dismiss())"
+                                  OnClick="@(() => SetFilter(new XtreamCategoryFilter()))">
+                        Clear filters
+                    </FluentButton>
+                }
+            </div>
+
+            @if (_filtered.Count == 0)
+            {
+                <EmptyState Compact="true"
+                            Title="No matching category"
+                            Description="Change the filters or the search text."
+                            Icon="@(new Icons.Regular.Size24.Search())">
+                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => SetFilter(new XtreamCategoryFilter()))">Clear filters</FluentButton>
+                </EmptyState>
+            }
+            else
+            {
+                <div class="grid-viewport">
+                    <FluentDataGrid TGridItem="XtreamCategoryDto"
+                                    Items="@_filtered.AsQueryable()"
+                                    ItemKey="@(category => category.Id)"
+                                    Virtualize="true"
+                                    ItemSize="48"
+                                    ShowHover="true"
+                                    RowClass="@GetRowClass"
+                                    OnRowClick="@OnRowClickAsync"
+                                    GridTemplateColumns="minmax(160px, 2fr) minmax(210px, 1.3fr) 128px 100px minmax(170px, 1.5fr)">
+                        <TemplateColumn Title="Category" SortBy="@NameSort" IsDefaultSortColumn="true">
+                            <div class="cell-stack">
+                                <span class="cell-primary cell-truncate" title="@context.Name">@context.Name</span>
+                                <span class="cell-secondary">ID @context.XtreamId</span>
+                            </div>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Effective state" SortBy="@DecisionSort" HeaderTooltip="What clients receive, decided by the backend">
+                            <div class="decision-cell">
+                                <CategoryDecisionBadge Category="@context" />
+                                <span class="reason-chip @ReasonCssClass(context)">
+                                    @ReasonText(context)
+                                    <FluentIcon Value="@(new Icons.Regular.Size12.Info())" aria-hidden="true" />
+                                </span>
+                            </div>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Provider" SortBy="@ProviderSort" HeaderTooltip="Controlled by the provider (read-only)">
+                            <span class="status-pill @(context.IsEnabled ? "status-pill-neutral" : "status-pill-warning")"
+                                  title="@(context.IsEnabled ? "Currently returned by the provider" : "No longer returned by the provider")">
+                                <FluentIcon Value="@(context.IsEnabled ? (Icon)new Icons.Regular.Size16.PlugConnected() : new Icons.Regular.Size16.PlugDisconnected())" aria-hidden="true" />
+                                @(context.IsEnabled ? "Enabled" : "Disabled")
+                            </span>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Excluded" SortBy="@ManualExclusionSort" HeaderTooltip="Manual exclusion by an administrator">
+                            @* the row controls change the category without opening its details *@
+                            <div class="switch-cell" @onclick:stopPropagation="true">
+                                <FluentSwitch Value="@context.IsExcluded"
+                                              ValueChanged="@((bool value) => SetExcludedAsync(context, value))"
+                                              Disabled="@_busyIds.Contains(context.Id)"
+                                              AriaLabel="@($"Exclude {context.Name} manually")" />
+                            </div>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Custom category" SortBy="@MappingSort">
+                            <div class="mapping-cell" @onclick:stopPropagation="true">
+                                @if (_busyIds.Contains(context.Id))
+                                {
+                                    <FluentSpinner Size="SpinnerSize.Tiny" />
+                                }
+                                else
+                                {
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.ArrowRight())" aria-hidden="true" />
+                                }
+                                <select class="xf-select @(context.CustomCategoryId is null ? "is-empty" : null)"
+                                        @key="@((context.Id, _renderEpoch))"
+                                        aria-label="@($"Custom category for {context.Name}")"
+                                        disabled="@_busyIds.Contains(context.Id)"
+                                        value="@((context.CustomCategoryId ?? NotMappedValue).ToString(CultureInfo.InvariantCulture))"
+                                        @onchange="@(args => ChangeMappingAsync(context, args.Value as string))">
+                                    <option value="@NotMappedValue.ToString(CultureInfo.InvariantCulture)">Not mapped</option>
+                                    @foreach (var option in GetMappingOptions(context))
+                                    {
+                                        <option value="@option.Id.ToString(CultureInfo.InvariantCulture)">@option.Name</option>
+                                    }
+                                    <option value="@NewCustomCategoryValue.ToString(CultureInfo.InvariantCulture)">+ New custom category…</option>
+                                </select>
+                            </div>
+                        </TemplateColumn>
+                    </FluentDataGrid>
+                </div>
+            }
+        }
+    </FluentCard>
+}
+
+@* Modal="false" renders a "modal" dialog (with backdrop) that a click outside closes; Modal="true" renders an "alert" dialog. *@
+<FluentDialog @ref="_detailsDialog" Modal="false" OnStateChange="@OnDetailsDialogStateChange">
+    <FluentDialogBody>
+        <TitleTemplate>
+            @(_inspected?.Name ?? "Xtream category")
+        </TitleTemplate>
+        <ChildContent>
+            @if (_inspected is { } inspected && SelectedSource is { } source)
+            {
+                <CategoryDecisionDetails Category="@inspected" Source="@source" Rules="@_rules">
+                    <Controls>
+                        <div class="details-controls">
+                            <div class="details-control">
+                                <div class="cell-stack">
+                                    <span class="cell-primary">Excluded manually</span>
+                                    <span class="cell-secondary">Never returned to clients, whatever the category rules.</span>
+                                </div>
+                                <div class="switch-cell">
+                                    <FluentSwitch Value="@inspected.IsExcluded"
+                                                  ValueChanged="@((bool value) => SetExcludedAsync(inspected, value))"
+                                                  Disabled="@_busyIds.Contains(inspected.Id)"
+                                                  AriaLabel="@($"Exclude {inspected.Name} manually")" />
+                                </div>
+                            </div>
+                            <div class="details-control">
+                                <div class="cell-stack">
+                                    <label class="cell-primary" for="details-custom-category">Custom category</label>
+                                    <span class="cell-secondary">New custom categories are created from the page header or the Custom categories screen.</span>
+                                </div>
+                                @* no "New custom category" option here: its dialog would open over this one *@
+                                <select id="details-custom-category"
+                                        class="xf-select @(inspected.CustomCategoryId is null ? "is-empty" : null)"
+                                        @key="@((inspected.Id, _renderEpoch))"
+                                        disabled="@_busyIds.Contains(inspected.Id)"
+                                        value="@((inspected.CustomCategoryId ?? NotMappedValue).ToString(CultureInfo.InvariantCulture))"
+                                        @onchange="@(args => ChangeMappingAsync(inspected, args.Value as string))">
+                                    <option value="@NotMappedValue.ToString(CultureInfo.InvariantCulture)">Not mapped</option>
+                                    @foreach (var option in GetMappingOptions(inspected))
+                                    {
+                                        <option value="@option.Id.ToString(CultureInfo.InvariantCulture)">@option.Name</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    </Controls>
+                </CategoryDecisionDetails>
+            }
+        </ChildContent>
+        <ActionTemplate>
+            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="@CloseDetailsAsync">Close</FluentButton>
+        </ActionTemplate>
+    </FluentDialogBody>
+</FluentDialog>
+
+<RuleEditorDialog @ref="_ruleEditor"
+                  Kind="@RuleKind.Category"
+                  SourceId="@_sourceId"
+                  ContentType="@_contentType"
+                  SourceName="@SelectedSource?.DisplayName"
+                  Rules="@_rules"
+                  Saved="@(() => LoadCategoriesAsync(showLoading: false))" />
+
+<FluentDialog @ref="_newCustomCategoryDialog" OnStateChange="@OnNewCustomCategoryDialogStateChange" PreventDismissOnEscape="@_isCreatingCustomCategory">
+    <FluentDialogBody>
+        <TitleTemplate>
+            @(_contentType is { } dialogContentType ? $"New {CategoryLabels.ContentTypeName(dialogContentType)} custom category" : "New custom category")
+        </TitleTemplate>
+        <ChildContent>
+            @if (_isNewCustomCategoryOpen)
+            {
+                <form class="dialog-form" @onsubmit="@CreateCustomCategoryAsync">
+                    @if (_newCustomCategoryTarget is not null)
+                    {
+                        <span class="cell-secondary">"@_newCustomCategoryTarget.Name" will be mapped to the new custom category.</span>
+                    }
+                    <FluentTextInput Label="Name"
+                                     @bind-Value="_newCustomCategoryName"
+                                     Immediate="true"
+                                     MaxLength="@CustomCategoryNameMaxLength"
+                                     Autofocus="true"
+                                     Disabled="@_isCreatingCustomCategory"
+                                     Placeholder="For example: Movies for kids"
+                                     Message="@_newCustomCategoryError"
+                                     MessageCondition="@(field => !string.IsNullOrEmpty(field.Message))"
+                                     MessageState="@(_newCustomCategoryError is null ? null : MessageState.Error)"
+                                     Width="100%" />
+                </form>
+            }
+        </ChildContent>
+        <ActionTemplate>
+            <FluentButton Appearance="ButtonAppearance.Primary" Loading="@_isCreatingCustomCategory" Disabled="@string.IsNullOrWhiteSpace(_newCustomCategoryName)" OnClick="@CreateCustomCategoryAsync">
+                @(_newCustomCategoryTarget is null ? "Create" : "Create and map")
+            </FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@_isCreatingCustomCategory" OnClick="@CloseNewCustomCategoryAsync">Cancel</FluentButton>
+        </ActionTemplate>
+    </FluentDialogBody>
+</FluentDialog>
+
+@code {
+    private const int NotMappedValue = 0; // value of the "Not mapped" option; never sent to the API
+    private const int NewCustomCategoryValue = -1; // value of the "New custom category…" option; never sent to the API
+    private const int CustomCategoryNameMaxLength = 255; // custom_categories.name column length
+
+    private static readonly IReadOnlyList<SegmentOption<DecisionFilter>> DecisionOptions =
+        [new(DecisionFilter.All, "All"), new(DecisionFilter.Included, "Included"), new(DecisionFilter.Excluded, "Excluded")];
+
+    private static readonly IReadOnlyList<SegmentOption<ManualExclusionFilter>> ManualExclusionOptions =
+        [new(ManualExclusionFilter.All, "All"), new(ManualExclusionFilter.Excluded, "Excluded"), new(ManualExclusionFilter.NotExcluded, "Not excluded")];
+
+    private static readonly IReadOnlyList<SegmentOption<ProviderStateFilter>> ProviderStateOptions =
+        [new(ProviderStateFilter.All, "All"), new(ProviderStateFilter.Enabled, "Enabled"), new(ProviderStateFilter.Disabled, "Disabled")];
+
+    private static readonly IReadOnlyList<SegmentOption<MappingFilter>> MappingOptions =
+        [new(MappingFilter.All, "All"), new(MappingFilter.Mapped, "Mapped"), new(MappingFilter.Unmapped, "Unmapped")];
+
+    private static readonly GridSort<XtreamCategoryDto> NameSort = GridSort<XtreamCategoryDto>.ByAscending(category => category.Name);
+    private static readonly GridSort<XtreamCategoryDto> DecisionSort = GridSort<XtreamCategoryDto>.ByAscending(category => category.Decision).ThenAscending(category => category.ExclusionReason).ThenAscending(category => category.Name);
+    private static readonly GridSort<XtreamCategoryDto> ProviderSort = GridSort<XtreamCategoryDto>.ByAscending(category => category.IsEnabled).ThenAscending(category => category.Name);
+    private static readonly GridSort<XtreamCategoryDto> ManualExclusionSort = GridSort<XtreamCategoryDto>.ByDescending(category => category.IsExcluded).ThenAscending(category => category.Name);
+    private static readonly GridSort<XtreamCategoryDto> MappingSort = GridSort<XtreamCategoryDto>.ByAscending(category => category.CustomCategoryName).ThenAscending(category => category.Name);
+
+    // The scope is kept in the query string so that it survives a reload and can be linked from other screens.
+    [SupplyParameterFromQuery(Name = "source")]
+    public int? SourceIdQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "type")]
+    public string? ContentTypeQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "search")]
+    public string? SearchQuery { get; set; }
+
+    // Filters that can be set by a link (for example from the sources screen); values are the filter enum names.
+    [SupplyParameterFromQuery(Name = "decision")]
+    public string? DecisionQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "manual")]
+    public string? ManualExclusionQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "provider")]
+    public string? ProviderStateQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "mapping")]
+    public string? MappingQuery { get; set; }
+
+    private readonly CancellationTokenSource _disposal = new();
+    private readonly HashSet<int> _busyIds = [];
+    private IReadOnlyList<XtreamSourceDto> _sources = [];
+    private int? _sourceId;
+    private ContentType? _contentType;
+    private IReadOnlyList<XtreamCategoryDto> _categories = [];
+    private IReadOnlyList<CustomCategoryDto> _customCategories = [];
+    private IReadOnlyList<RuleDto> _rules = [];
+    private RuleEditorDialog? _ruleEditor;
+    private List<XtreamCategoryDto> _filtered = [];
+    private XtreamCategoryFilter _filter = new();
+    private int _excludedCount;
+    private int _mappedCount;
+    private int _providerDisabledCount;
+    private int _renderEpoch;
+    private FluentDialog? _newCustomCategoryDialog;
+    private bool _isNewCustomCategoryOpen;
+    private XtreamCategoryDto? _newCustomCategoryTarget; // Xtream category to map once created, if any
+    private string? _newCustomCategoryName;
+    private string? _newCustomCategoryError;
+    private bool _isCreatingCustomCategory;
+    private int _loadVersion;
+    private bool _isLoadingSources = true;
+    private bool _isLoadingCategories;
+    private bool _isRefreshing;
+    private Exception? _sourcesError;
+    private Exception? _categoriesError;
+    private FluentDialog? _detailsDialog;
+    private XtreamCategoryDto? _inspected; // category shown in the details dialog
+
+    private bool IsScopeSelected => _sourceId is not null && _contentType is not null;
+
+    private XtreamSourceDto? SelectedSource => _sources.FirstOrDefault(source => source.Id == _sourceId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSourcesAsync();
+        _isLoadingSources = false;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Runs after OnInitializedAsync and whenever the query string changes (for example a link from another screen).
+        if (_isLoadingSources || _sourcesError is not null)
+        {
+            return;
+        }
+
+        // Without a scope in the query string, the last scope of the circuit (or the first values) is shown.
+        var scope = ScreenState.XtreamCategories;
+        var (sourceId, contentType) = scope.Resolve([.. _sources.Select(source => source.Id)], SourceIdQuery, ParseContentType(ContentTypeQuery));
+        var linkedFilter = GetLinkedFilter();
+        if (sourceId == _sourceId && contentType == _contentType && linkedFilter is null)
+        {
+            return;
+        }
+
+        _sourceId = sourceId;
+        _contentType = contentType;
+
+        // The filters are kept across scopes; filters passed in the query string (link) replace the remembered ones.
+        _filter = linkedFilter
+            ?? (SearchQuery is null ? ScreenState.XtreamCategoriesFilter : ScreenState.XtreamCategoriesFilter with { Search = SearchQuery });
+        RememberState();
+        if (SourceIdQuery != sourceId || ParseContentType(ContentTypeQuery) != contentType || linkedFilter is not null)
+        {
+            UpdateQueryString();
+        }
+
+        await LoadCategoriesAsync();
+    }
+
+    private async Task LoadSourcesAsync()
+    {
+        try
+        {
+            _sourcesError = null;
+            _sources = [.. (await CategoriesClient.GetSourcesAsync(_disposal.Token)).OrderBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase)];
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            _sourcesError = exception;
+        }
+    }
+
+    private async Task LoadCategoriesAsync(bool showLoading = true)
+    {
+        if (_sourceId is not { } sourceId || _contentType is not { } contentType)
+        {
+            _inspected = null;
+            _categories = [];
+            ApplyFilter();
+            return;
+        }
+
+        // A newer scope selection may complete first: only the latest load updates the page.
+        var version = ++_loadVersion;
+        _isLoadingCategories = showLoading;
+        try
+        {
+            var cancellationToken = _disposal.Token;
+            var categoriesTask = CategoriesClient.GetXtreamCategoriesAsync(sourceId, contentType, cancellationToken);
+            var customCategoriesTask = CategoriesClient.GetCustomCategoriesAsync(contentType, cancellationToken);
+            var rulesTask = CategoriesClient.GetRulesAsync(RuleKind.Category, sourceId, contentType, cancellationToken);
+            await Task.WhenAll(categoriesTask, customCategoriesTask, rulesTask);
+
+            if (version != _loadVersion)
+            {
+                return;
+            }
+
+            _categories = await categoriesTask;
+            // the details show the reloaded category (its decision may have changed)
+            _inspected = _inspected is { } inspected ? _categories.FirstOrDefault(category => category.Id == inspected.Id) : null;
+            SetCustomCategories(await customCategoriesTask);
+            _rules = await rulesTask;
+            _categoriesError = null;
+            ApplyFilter();
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested && version == _loadVersion)
+        {
+            _categoriesError = exception;
+        }
+        finally
+        {
+            if (version == _loadVersion)
+            {
+                _isLoadingCategories = false;
+            }
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        _isRefreshing = true;
+        try
+        {
+            if (_sourcesError is not null || _sources.Count == 0)
+            {
+                // Re-applies the scope of the query string once the sources are known.
+                await LoadSourcesAsync();
+                _sourceId = null;
+                _contentType = null;
+                await OnParametersSetAsync();
+            }
+            else
+            {
+                await LoadCategoriesAsync();
+                _renderEpoch++;
+            }
+        }
+        finally
+        {
+            _isRefreshing = false;
+        }
+    }
+
+    private async Task SetSourceAsync(int? sourceId)
+    {
+        _sourceId = sourceId;
+        _contentType = sourceId is null ? null : _contentType;
+        RememberState();
+        UpdateQueryString();
+        await LoadCategoriesAsync();
+    }
+
+    private async Task SetContentTypeAsync(ContentType? contentType)
+    {
+        _contentType = contentType;
+        RememberState();
+        UpdateQueryString();
+        await LoadCategoriesAsync();
+    }
+
+    private void RememberState()
+    {
+        ScreenState.XtreamCategories.SourceId = _sourceId;
+        ScreenState.XtreamCategories.ContentType = _contentType;
+        ScreenState.XtreamCategoriesFilter = _filter;
+    }
+
+    private void UpdateQueryString()
+    {
+        var uri = NavigationManager.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["source"] = _sourceId,
+            ["type"] = _contentType?.ToString(),
+            ["search"] = null,
+            ["decision"] = null,
+            ["manual"] = null,
+            ["provider"] = null,
+            ["mapping"] = null
+        });
+        NavigationManager.NavigateTo(uri, replace: true);
+    }
+
+    // The new rule is created for the current scope; the current search is proposed as its pattern.
+    private Task NewCategoryRuleAsync() =>
+        _ruleEditor is null ? Task.CompletedTask : _ruleEditor.ShowAsync(pattern: _filter.Search?.Trim());
+
+    // A link with at least one filter parameter sets every filter (absent ones are reset to "all").
+    private XtreamCategoryFilter? GetLinkedFilter()
+    {
+        if (DecisionQuery is null && ManualExclusionQuery is null && ProviderStateQuery is null && MappingQuery is null)
+        {
+            return null;
+        }
+
+        return new XtreamCategoryFilter(
+            SearchQuery,
+            ParseFilter<MappingFilter>(MappingQuery),
+            ParseFilter<ManualExclusionFilter>(ManualExclusionQuery),
+            ParseFilter<DecisionFilter>(DecisionQuery),
+            ParseFilter<ProviderStateFilter>(ProviderStateQuery));
+    }
+
+    private static TEnum ParseFilter<TEnum>(string? value) where TEnum : struct, Enum =>
+        Enum.TryParse<TEnum>(value, ignoreCase: true, out var filter) && Enum.IsDefined(filter) ? filter : default;
+
+    private static ContentType? ParseContentType(string? value) =>
+        Enum.TryParse<ContentType>(value, ignoreCase: true, out var contentType) && Enum.IsDefined(contentType) ? contentType : null;
+
+    private void SetFilter(XtreamCategoryFilter filter)
+    {
+        _filter = filter;
+        ScreenState.XtreamCategoriesFilter = filter;
+        ApplyFilter();
+    }
+
+    // Filtering runs once per change rather than on every render: the grid keeps the materialized result.
+    private void ApplyFilter()
+    {
+        _filtered = [.. _categories.Where(_filter.Matches)];
+        _excludedCount = _categories.Count(category => category.Decision == InclusionDecision.Exclude);
+        _mappedCount = _categories.Count(category => category.CustomCategoryId is not null);
+        _providerDisabledCount = _categories.Count(category => !category.IsEnabled);
+    }
+
+    private IEnumerable<CustomCategoryDto> GetMappingOptions(XtreamCategoryDto category)
+    {
+        IEnumerable<CustomCategoryDto> options = _customCategories;
+
+        // Keep the current mapping visible even if the custom category list is out of date.
+        if (category.CustomCategoryId is { } currentId && _customCategories.All(option => option.Id != currentId))
+        {
+            options = options.Prepend(new CustomCategoryDto(currentId, category.CustomCategoryName ?? $"#{currentId}", category.ContentType));
+        }
+
+        return options;
+    }
+
+    private static string? GetRowClass(XtreamCategoryDto category) =>
+        category.Decision == InclusionDecision.Exclude ? "row-dimmed" : null;
+
+    private static string ReasonText(XtreamCategoryDto category) => category switch
+    {
+        { ExclusionReason: CategoryExclusionReason.ManuallyExcluded } => "Manual",
+        { ExclusionReason: CategoryExclusionReason.ProviderDisabled } => "Provider",
+        { DecidingRule: { } rule } => $"Rule #{rule.Id}",
+        _ => "Default"
+    };
+
+    private static string ReasonCssClass(XtreamCategoryDto category) => category.ExclusionReason switch
+    {
+        CategoryExclusionReason.ManuallyExcluded => "reason-chip-manual",
+        CategoryExclusionReason.ProviderDisabled => "reason-chip-provider",
+        CategoryExclusionReason.Rule => "reason-chip-rule",
+        _ => "reason-chip-neutral"
+    };
+
+    // ─── Details ────────────────────────────────────────────────────────────
+
+    private async Task OnRowClickAsync(FluentDataGridRow<XtreamCategoryDto> row)
+    {
+        if (row.Item is not { } category || _detailsDialog is null)
+        {
+            return;
+        }
+
+        _inspected = category;
+        await _detailsDialog.ShowAsync();
+    }
+
+    private async Task CloseDetailsAsync()
+    {
+        if (_detailsDialog is not null)
+        {
+            await _detailsDialog.HideAsync();
+        }
+
+        _inspected = null;
+    }
+
+    // Also called when the dialog is dismissed with Escape or a click outside.
+    private void OnDetailsDialogStateChange(DialogEventArgs args)
+    {
+        if (args.State == DialogState.Closed)
+        {
+            _inspected = null;
+        }
+    }
+
+    private async Task SetExcludedAsync(XtreamCategoryDto category, bool isExcluded)
+    {
+        if (category.IsExcluded == isExcluded)
+        {
+            return;
+        }
+
+        if (await PatchAsync(category, new XtreamCategoryPatchRequest(IsExcluded: isExcluded)))
+        {
+            await NotificationService.ShowSuccessToastAsync($"\"{category.Name}\" {(isExcluded ? "manually excluded" : "no longer manually excluded")}.");
+        }
+    }
+
+    private async Task ChangeMappingAsync(XtreamCategoryDto category, string? value)
+    {
+        if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var customCategoryId)
+            || customCategoryId == (category.CustomCategoryId ?? NotMappedValue))
+        {
+            return;
+        }
+
+        if (customCategoryId == NewCustomCategoryValue)
+        {
+            // The select shows the stored mapping again; the mapping changes once the custom category is created.
+            _renderEpoch++;
+            await OpenNewCustomCategoryAsync(category);
+            return;
+        }
+
+        var request = customCategoryId == NotMappedValue
+            ? new XtreamCategoryPatchRequest(UnassignCustomCategory: true)
+            : new XtreamCategoryPatchRequest(CustomCategoryId: customCategoryId);
+
+        if (await PatchAsync(category, request))
+        {
+            var name = _customCategories.FirstOrDefault(option => option.Id == customCategoryId)?.Name;
+            await NotificationService.ShowSuccessToastAsync(customCategoryId == NotMappedValue
+                ? $"\"{category.Name}\" is no longer mapped."
+                : $"\"{category.Name}\" mapped to \"{name}\".");
+        }
+    }
+
+    // ─── New custom category ────────────────────────────────────────────────
+
+    // When the options of the native selects change, a browser keeps the selected *index* of an existing select, so an
+    // option inserted before the selected one would show another custom category (Blazor does not re-apply an unchanged
+    // value). Changing _renderEpoch re-creates the selects, which then select their value again.
+    private void SetCustomCategories(IEnumerable<CustomCategoryDto> customCategories)
+    {
+        List<CustomCategoryDto> sorted = [.. customCategories.OrderBy(category => category.Name, StringComparer.CurrentCultureIgnoreCase)];
+        if (!sorted.SequenceEqual(_customCategories))
+        {
+            _renderEpoch++;
+        }
+
+        _customCategories = sorted;
+    }
+
+    private async Task OpenNewCustomCategoryAsync(XtreamCategoryDto? target)
+    {
+        if (_newCustomCategoryDialog is null || !IsScopeSelected)
+        {
+            return;
+        }
+
+        _newCustomCategoryTarget = target;
+        _newCustomCategoryName = null;
+        _newCustomCategoryError = null;
+        _isNewCustomCategoryOpen = true;
+        await _newCustomCategoryDialog.ShowAsync();
+    }
+
+    private async Task CloseNewCustomCategoryAsync()
+    {
+        if (_newCustomCategoryDialog is not null)
+        {
+            await _newCustomCategoryDialog.HideAsync();
+        }
+
+        ResetNewCustomCategory();
+    }
+
+    // Also called when the dialog is dismissed with Escape.
+    private void OnNewCustomCategoryDialogStateChange(DialogEventArgs args)
+    {
+        if (args.State == DialogState.Closed)
+        {
+            ResetNewCustomCategory();
+        }
+    }
+
+    private void ResetNewCustomCategory()
+    {
+        _isNewCustomCategoryOpen = false;
+        _newCustomCategoryTarget = null;
+        _newCustomCategoryName = null;
+        _newCustomCategoryError = null;
+    }
+
+    private async Task CreateCustomCategoryAsync()
+    {
+        if (!_isNewCustomCategoryOpen || _isCreatingCustomCategory || _contentType is not { } contentType)
+        {
+            return;
+        }
+
+        var name = _newCustomCategoryName?.Trim();
+        if (string.IsNullOrEmpty(name))
+        {
+            _newCustomCategoryError = "Enter a name.";
+            return;
+        }
+
+        var target = _newCustomCategoryTarget;
+        CustomCategoryDto? created = null;
+        _isCreatingCustomCategory = true;
+        try
+        {
+            var result = await CategoriesClient.CreateCustomCategoryAsync(new CustomCategoryRequest(name, contentType), _disposal.Token);
+            if (result == AdminOperationResult.Conflict)
+            {
+                _newCustomCategoryError = $"A {CategoryLabels.ContentTypeName(contentType)} custom category named \"{name}\" already exists.";
+                return;
+            }
+
+            // The API does not return the new id to this client: it is found in the reloaded list (names are unique per content type).
+            SetCustomCategories(await CategoriesClient.GetCustomCategoriesAsync(contentType, _disposal.Token));
+            created = _customCategories.FirstOrDefault(category => category.Name == name)
+                ?? _customCategories.FirstOrDefault(category => string.Equals(category.Name, name, StringComparison.OrdinalIgnoreCase));
+
+            await CloseNewCustomCategoryAsync();
+            await NotificationService.ShowSuccessToastAsync($"Custom category \"{name}\" created.");
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            _newCustomCategoryError = $"Unable to create the custom category. {ApiErrorMessage.Describe(exception)}";
+            return;
+        }
+        finally
+        {
+            _isCreatingCustomCategory = false;
+        }
+
+        if (target is not null && created is not null
+            && await PatchAsync(target, new XtreamCategoryPatchRequest(CustomCategoryId: created.Id)))
+        {
+            await NotificationService.ShowSuccessToastAsync($"\"{target.Name}\" mapped to \"{created.Name}\".");
+        }
+    }
+
+    // Returns true on success. The categories are then reloaded, because a change can alter the decision computed
+    // by the backend. On failure the row controls are re-created so that they show the stored value again.
+    private async Task<bool> PatchAsync(XtreamCategoryDto category, XtreamCategoryPatchRequest request)
+    {
+        if (!_busyIds.Add(category.Id))
+        {
+            return false;
+        }
+
+        var succeeded = false;
+        try
+        {
+            var result = await CategoriesClient.PatchXtreamCategoryAsync(category.Id, request, _disposal.Token);
+            switch (result)
+            {
+                case AdminOperationResult.Success:
+                    succeeded = true;
+                    await LoadCategoriesAsync(showLoading: false);
+                    break;
+                case AdminOperationResult.Invalid:
+                    await NotificationService.ShowWarningToastAsync("The selected custom category no longer exists.", "Refresh to see the latest custom categories.");
+                    break;
+                default:
+                    await NotificationService.ShowWarningToastAsync($"\"{category.Name}\" no longer exists.", "Refresh to see the latest categories.");
+                    break;
+            }
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            await NotificationService.ShowErrorToastAsync($"Unable to update \"{category.Name}\".", ApiErrorMessage.Describe(exception));
+        }
+        finally
+        {
+            _busyIds.Remove(category.Id);
+        }
+
+        if (!succeeded)
+        {
+            _renderEpoch++;
+        }
+
+        return succeeded;
+    }
+
+    public void Dispose()
+    {
+        _disposal.Cancel();
+        _disposal.Dispose();
+    }
+}

@@ -1,0 +1,31 @@
+<div class="empty-state @(Compact ? "empty-state-compact" : null)">
+    <div class="empty-state-icon">
+        <FluentIcon Value="@(Icon ?? new Icons.Regular.Size24.DocumentSearch())" aria-hidden="true" />
+    </div>
+    <h3>@Title</h3>
+    @if (!string.IsNullOrWhiteSpace(Description))
+    {
+        <p>@Description</p>
+    }
+    @if (ChildContent is not null)
+    {
+        <div class="empty-state-actions">@ChildContent</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Description { get; set; }
+
+    [Parameter]
+    public Icon? Icon { get; set; }
+
+    [Parameter]
+    public bool Compact { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

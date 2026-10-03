@@ -94,6 +94,20 @@ public class TmdbClient(IHttpClientFactory httpClientFactory, IOptions<TmdbOptio
             .ToList();
     }
 
+    /// <summary>
+    /// Returns the first page of the movies recommended by TMDB for a movie, in TMDB order, or an empty list when TMDB does not know the movie.
+    /// </summary>
+    public async Task<IReadOnlyList<TmdbRecommendation>> GetMovieRecommendationsAsync(long movieId, CancellationToken cancellationToken)
+    {
+        var response = await GetAsync<TmdbRecommendationsResponse>(
+            $"movie/{movieId.ToString(CultureInfo.InvariantCulture)}/recommendations?language={Language}",
+            cancellationToken);
+
+        return [.. (response?.Results ?? [])
+            .Where(result => result.Id > 0)
+            .Select(result => result.ToRecommendation())];
+    }
+
     private async Task<List<long>> SearchAsync(string url, CancellationToken cancellationToken)
     {
         var response = await GetAsync<TmdbSearchResponse>(url, cancellationToken);
@@ -117,6 +131,34 @@ public class TmdbClient(IHttpClientFactory httpClientFactory, IOptions<TmdbOptio
     private sealed record TmdbSearchResponse(List<TmdbSearchResult>? Results);
 
     private sealed record TmdbSearchResult(long Id);
+
+    private sealed record TmdbRecommendationsResponse(List<TmdbRecommendationResult>? Results);
+
+    private sealed record TmdbRecommendationResult(
+        long Id,
+        string? Title,
+        string? OriginalTitle,
+        string? ReleaseDate,
+        string? PosterPath,
+        double? VoteAverage,
+        int? VoteCount,
+        List<int>? GenreIds)
+    {
+        public TmdbRecommendation ToRecommendation()
+        {
+            var releaseDate = TmdbText.ParseDate(ReleaseDate);
+
+            return new TmdbRecommendation(
+                Id,
+                Title,
+                OriginalTitle,
+                releaseDate is null ? null : DateOnly.FromDateTime(releaseDate.Value),
+                PosterPath,
+                VoteAverage,
+                VoteCount,
+                [.. (GenreIds ?? []).Select(TmdbGenres.GetEnglishName).OfType<string>()]);
+        }
+    }
 
     // movies use Title/OriginalTitle/ReleaseDate/Runtime, TV shows Name/OriginalName/FirstAirDate/EpisodeRunTime/CreatedBy;
     // the credits come from append_to_response=credits

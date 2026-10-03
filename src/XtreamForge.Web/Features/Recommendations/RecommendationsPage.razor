@@ -1,0 +1,165 @@
+@page "/recommendations"
+@implements IDisposable
+@inject RecommendationsClient RecommendationsClient
+
+<PageTitle>Recommendations - XtreamForge</PageTitle>
+
+<PageHeader Title="Recommendations" Subtitle="Movies recommended by TMDB for the recently watched movies. A watched movie is never recommended.">
+    <Actions>
+        <FluentButton Appearance="ButtonAppearance.Outline"
+                      IconStart="@(new Icons.Regular.Size16.ArrowClockwise())"
+                      Loading="@_isLoading"
+                      OnClick="@LoadAsync">
+            Refresh
+        </FluentButton>
+    </Actions>
+</PageHeader>
+
+<FluentCard Class="surface grid-surface">
+    @if (_loadError is not null)
+    {
+        <LoadErrorState Title="Unable to load the recommendations" Error="@_loadError" IsRetrying="@_isLoading" OnRetry="@LoadAsync" />
+    }
+    else if (_recommendations is null)
+    {
+        <FluentSpinner />
+    }
+    else if (_recommendations.Count == 0)
+    {
+        <EmptyState Title="No recommendation yet"
+                    Description="Recommendations appear once movies are in the watch history and the TMDB API key is configured."
+                    Icon="@(new Icons.Regular.Size24.Sparkle())" />
+    }
+    else
+    {
+        <div class="grid-caption" aria-live="polite">
+            <span><strong>@_recommendations.Count.ToString("N0", CultureInfo.CurrentCulture)</strong> recommended movies</span>
+            <span class="grid-caption-stats">
+                <span>@_recommendations.Count(recommendation => recommendation.IsInCatalogue).ToString("N0", CultureInfo.CurrentCulture) available in the catalogue</span>
+            </span>
+        </div>
+
+        <div class="grid-viewport grid-viewport-full">
+            <FluentDataGrid TGridItem="RecommendationDto"
+                            Items="@_recommendations.AsQueryable()"
+                            ItemKey="@(recommendation => recommendation.TmdbId)"
+                            Virtualize="true"
+                            ItemSize="64"
+                            ShowHover="true"
+                            GridTemplateColumns="minmax(200px, 2.2fr) minmax(120px, 1.4fr) 88px 130px 140px">
+                <TemplateColumn Title="Title">
+                    <div class="media-cell">
+                        @if (context.PosterThumbnailUrl is { } posterUrl)
+                        {
+                            <img class="poster-thumb" src="@posterUrl" alt="" loading="lazy" />
+                        }
+                        else
+                        {
+                            <span class="poster-thumb poster-thumb-empty" aria-hidden="true">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Image())" />
+                            </span>
+                        }
+                        <div class="cell-stack">
+                            <a class="text-link cell-primary cell-truncate" href="@context.TmdbUrl" target="_blank" rel="noopener noreferrer" title="@context.DisplayTitle">@context.DisplayTitle</a>
+                            @if (context.Subtitle is { Length: > 0 } subtitle)
+                            {
+                                <span class="cell-secondary cell-truncate" title="@subtitle">@subtitle</span>
+                            }
+                        </div>
+                    </div>
+                </TemplateColumn>
+                <TemplateColumn Title="Genres">
+                    @if (context.Genres.Count == 0)
+                    {
+                        <span class="cell-secondary">No genre</span>
+                    }
+                    else
+                    {
+                        <div class="genre-chips" title="@string.Join(", ", context.Genres)">
+                            @foreach (var genre in context.Genres.Take(MaxGenreChips))
+                            {
+                                <span class="genre-chip">@genre</span>
+                            }
+                            @if (context.Genres.Count > MaxGenreChips)
+                            {
+                                <span class="genre-more">+@((context.Genres.Count - MaxGenreChips).ToString(CultureInfo.CurrentCulture))</span>
+                            }
+                        </div>
+                    }
+                </TemplateColumn>
+                <TemplateColumn Title="Rating" HeaderTooltip="TMDB average vote">
+                    @if (context.VoteAverage is { } voteAverage && context.VoteCount is int voteCount and > 0)
+                    {
+                        <div class="cell-stack">
+                            <span class="rating-value">
+                                <FluentIcon Value="@(new Icons.Filled.Size12.Star())" aria-hidden="true" />
+                                @voteAverage.ToString("0.0", CultureInfo.CurrentCulture)
+                            </span>
+                            <span class="cell-secondary">@voteCount.ToString("N0", CultureInfo.CurrentCulture) votes</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <span class="cell-secondary">No votes</span>
+                    }
+                </TemplateColumn>
+                <TemplateColumn Title="Recommended by" HeaderTooltip="Number of recently watched movies recommending it">
+                    <span class="cell-secondary">@context.RecommendedByCount.ToString(CultureInfo.CurrentCulture) @(context.RecommendedByCount == 1 ? "movie" : "movies")</span>
+                </TemplateColumn>
+                <TemplateColumn Title="Catalogue" HeaderTooltip="Known TMDB metadata: a source exposes the movie">
+                    @if (context.IsInCatalogue)
+                    {
+                        <span class="status-pill status-pill-success">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.CheckmarkCircle())" aria-hidden="true" />
+                            Available
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="status-pill status-pill-neutral">Not available</span>
+                    }
+                </TemplateColumn>
+            </FluentDataGrid>
+        </div>
+    }
+</FluentCard>
+
+@code {
+    // the genre chips stay on one line; the other genres are counted and listed in the tooltip
+    private const int MaxGenreChips = 3;
+
+    private readonly CancellationTokenSource _disposal = new();
+    private IReadOnlyList<RecommendationDto>? _recommendations;
+    private bool _isLoading;
+    private Exception? _loadError;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _loadError = null;
+        try
+        {
+            _recommendations = await RecommendationsClient.GetAsync(_disposal.Token);
+        }
+        catch (OperationCanceledException) when (_disposal.IsCancellationRequested)
+        {
+            // the page is closed
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            _loadError = exception;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposal.Cancel();
+        _disposal.Dispose();
+    }
+}

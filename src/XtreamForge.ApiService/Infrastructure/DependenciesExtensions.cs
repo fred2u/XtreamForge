@@ -3,6 +3,7 @@ using XtreamForge.ApiService.Endpoints.Admin.CustomCategories;
 using XtreamForge.ApiService.Endpoints.Admin.Dashboard;
 using XtreamForge.ApiService.Endpoints.Admin.ItemRules;
 using XtreamForge.ApiService.Endpoints.Admin.Monitoring;
+using XtreamForge.ApiService.Endpoints.Admin.Recommendations;
 using XtreamForge.ApiService.Endpoints.Admin.Sources;
 using XtreamForge.ApiService.Endpoints.Admin.StreamTmdbMappings;
 using XtreamForge.ApiService.Endpoints.Admin.TmdbInfos;
@@ -89,6 +90,7 @@ public static class DependenciesExtensions
         services.AddScoped<TmdbInfoAdminService>();
         services.AddScoped<StreamTmdbMappingAdminService>();
         services.AddScoped<WatchHistoryAdminService>();
+        services.AddScoped<RecommendationAdminService>();
 
         // endpoints
         services.AddScoped<DashboardStatusGetEndpoint>();
@@ -123,6 +125,10 @@ public static class DependenciesExtensions
         services.AddScoped<TmdbRulesOrderPutEndpoint>();
         services.AddScoped<TmdbRuleDeleteEndpoint>();
         services.AddScoped<WatchHistoryGetEndpoint>();
+        services.AddScoped<WatchHistoryPostEndpoint>();
+        services.AddScoped<WatchHistoryDeleteEndpoint>();
+        services.AddScoped<WatchHistoryActivityGetEndpoint>();
+        services.AddScoped<RecommendationsGetEndpoint>();
     }
 
     private static void AddHostedServices(IServiceCollection services)

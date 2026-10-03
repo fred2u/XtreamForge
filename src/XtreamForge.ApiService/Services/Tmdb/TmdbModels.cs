@@ -44,6 +44,17 @@ public sealed class TmdbCandidate
 
 public sealed record TmdbEpisode(int EpisodeNumber, DateTime? AirDate);
 
+/// <summary>Movie recommended by TMDB for another movie; any value may be missing. <see cref="Genres"/> are the known English genre names.</summary>
+public sealed record TmdbRecommendation(
+    long Id,
+    string? Title,
+    string? OriginalTitle,
+    DateOnly? ReleaseDate,
+    string? PosterPath,
+    double? VoteAverage,
+    int? VoteCount,
+    IReadOnlyList<string> Genres);
+
 /// <summary>
 /// TMDB metadata of a movie or TV show as returned by a details request; any value may be missing.
 /// <see cref="GenreIds"/> are the stable TMDB genre identifiers; <see cref="Directors"/> are the creators for a TV show,

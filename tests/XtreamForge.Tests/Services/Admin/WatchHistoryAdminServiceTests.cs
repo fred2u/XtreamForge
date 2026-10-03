@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using XtreamForge.ApiService.Services.Admin;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;
@@ -12,12 +13,78 @@ public class WatchHistoryAdminServiceTests : IAsyncDisposable
     private static readonly DateTimeOffset Day = new(2026, 10, 1, 20, 0, 0, TimeSpan.Zero);
 
     private readonly XtreamForgeDbContext _dbContext;
+    private readonly SteppingTimeProvider _time = new() { Now = Day.AddDays(1) };
     private readonly WatchHistoryAdminService _service;
 
     public WatchHistoryAdminServiceTests()
     {
         _dbContext = SqliteDbContextFactory.Create();
-        _service = new WatchHistoryAdminService(_dbContext);
+        _service = new WatchHistoryAdminService(_dbContext, _time);
+    }
+
+    [Fact]
+    public async Task GetActivityAsync_CountsTheMoviePlaybacksPerDayOfTheTimeZone()
+    {
+        // now: 2026-10-02 22:00 in Brussels (UTC+2)
+        var brussels = TimeZoneInfo.FindSystemTimeZoneById("Europe/Brussels");
+        _dbContext.WatchHistory.AddRange(
+            new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 1, StartedAtUtc = new DateTimeOffset(2026, 10, 1, 21, 0, 0, TimeSpan.Zero) },
+            new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 2, StartedAtUtc = new DateTimeOffset(2026, 10, 1, 23, 30, 0, TimeSpan.Zero) },
+            new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 3, StartedAtUtc = new DateTimeOffset(2026, 10, 2, 8, 0, 0, TimeSpan.Zero) },
+            new WatchHistoryEntry { ContentType = ContentType.Series, TmdbId = 4, StartedAtUtc = new DateTimeOffset(2026, 10, 2, 9, 0, 0, TimeSpan.Zero) },
+            new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 5, StartedAtUtc = new DateTimeOffset(2025, 9, 1, 12, 0, 0, TimeSpan.Zero) });
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var activity = await _service.GetActivityAsync(brussels, TestContext.Current.CancellationToken);
+
+        Assert.Equal((new DateOnly(2025, 9, 27), new DateOnly(2026, 10, 2)), (activity.From, activity.To));
+        Assert.Equal(
+            [new WatchHistoryDayActivity(new DateOnly(2026, 10, 1), 1), new WatchHistoryDayActivity(new DateOnly(2026, 10, 2), 2)],
+            activity.Days);
+    }
+
+    [Fact]
+    public async Task AddAsync_RecordsAPlaybackOfTheTmdbInfoStartedNow()
+    {
+        var info = new TmdbInfo { ContentType = ContentType.Vod, TmdbId = 603, Title = "The Matrix", PosterPath = "/matrix.jpg" };
+        _dbContext.TmdbInfos.Add(info);
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var item = await _service.AddAsync(info.Id, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(item);
+        Assert.Equal((ContentType.Vod, 603L, _time.Now, "The Matrix", "/matrix.jpg"), (item.ContentType, item.TmdbId, item.StartedAtUtc, item.Title, item.PosterPath));
+        var entry = Assert.Single(_dbContext.WatchHistory);
+        Assert.Equal((item.Id, ContentType.Vod, 603L, _time.Now), (entry.Id, entry.ContentType, entry.TmdbId, entry.StartedAtUtc));
+    }
+
+    [Fact]
+    public async Task AddAsync_WithUnknownTmdbInfo_ReturnsNullAndRecordsNothing()
+    {
+        var item = await _service.AddAsync(42, TestContext.Current.CancellationToken);
+
+        Assert.Null(item);
+        Assert.Empty(_dbContext.WatchHistory);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_DeletesOnlyThePlayback()
+    {
+        var deleted = new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 603, StartedAtUtc = Day };
+        var kept = new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 603, StartedAtUtc = Day.AddHours(1) };
+        _dbContext.WatchHistory.AddRange(deleted, kept);
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await _service.DeleteAsync(deleted.Id, TestContext.Current.CancellationToken);
+
+        Assert.True(result);
+        Assert.Equal([kept.Id], _dbContext.WatchHistory.AsNoTracking().Select(entry => entry.Id));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_WithUnknownPlayback_ReturnsFalse()
+    {
+        Assert.False(await _service.DeleteAsync(42, TestContext.Current.CancellationToken));
     }
 
     [Fact]

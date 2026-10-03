@@ -3,6 +3,7 @@ using XtreamForge.Web.Features.Categories;
 using XtreamForge.Web.Features.Dashboard;
 using XtreamForge.Web.Features.History;
 using XtreamForge.Web.Features.Monitoring;
+using XtreamForge.Web.Features.Recommendations;
 using XtreamForge.Web.Features.Sources;
 using XtreamForge.Web.Features.Tmdb;
 
@@ -24,6 +25,7 @@ public static class BackendApiServiceCollectionExtensions
         services.AddHttpClient<TmdbInfosClient>(ConfigureBackendClient);
         services.AddHttpClient<TmdbMappingsClient>(ConfigureBackendClient);
         services.AddHttpClient<WatchHistoryClient>(ConfigureBackendClient);
+        services.AddHttpClient<RecommendationsClient>(ConfigureBackendClient);
 
         return services;
     }

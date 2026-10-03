@@ -1,11 +1,14 @@
 @page "/history"
+@using System.Net
 @using XtreamForge.Web.Features.Categories
 @implements IDisposable
 @inject WatchHistoryClient WatchHistoryClient
+@inject INotificationService NotificationService
+@inject IDialogService DialogService
 
 <PageTitle>Watch history - XtreamForge</PageTitle>
 
-<PageHeader Title="Watch history" Subtitle="Movies played through the proxy, the most recent first. A movie played several times appears once per playback.">
+<PageHeader Title="Watch history" Subtitle="Movies played through the proxy or added from the TMDB infos, the most recent first. A movie played several times appears once per playback.">
     <Actions>
         <FluentButton Appearance="ButtonAppearance.Outline"
                       IconStart="@(new Icons.Regular.Size16.ArrowClockwise())"
@@ -36,14 +39,14 @@
             }
         </div>
 
-        <div class="grid-viewport">
+        <div class="grid-viewport grid-viewport-full">
             <FluentDataGrid @ref="_grid"
                             TGridItem="WatchHistoryEntryDto"
                             ItemsProvider="@_itemsProvider"
                             ItemKey="@(entry => entry.Id)"
                             Virtualize="true"
                             ItemSize="64"
-                            GridTemplateColumns="minmax(150px, 0.8fr) minmax(260px, 2.5fr) 120px">
+                            GridTemplateColumns="minmax(150px, 0.8fr) minmax(260px, 2.5fr) 120px 64px">
                 <TemplateColumn Title="Started" HeaderTooltip="Start of the playback, in local time">
                     <span class="cell-secondary">@context.StartedAtUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)</span>
                 </TemplateColumn>
@@ -68,6 +71,17 @@
                 <TemplateColumn Title="Type">
                     <ContentTypePill ContentType="@context.ContentType" />
                 </TemplateColumn>
+                <TemplateColumn Title="" Align="DataGridCellAlignment.End">
+                    @{
+                        var isBusy = _busyIds.Contains(context.Id);
+                    }
+                    <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" IconOnly="true"
+                                  IconStart="@(new Icons.Regular.Size16.Delete())"
+                                  aria-label="@($"Delete the playback of {context.DisplayTitle}")" Tooltip="Delete"
+                                  Loading="@isBusy"
+                                  Disabled="@isBusy"
+                                  OnClick="@(() => DeleteAsync(context))" />
+                </TemplateColumn>
             </FluentDataGrid>
         </div>
     }
@@ -78,6 +92,7 @@
     private const int PageSize = 100;
 
     private readonly CancellationTokenSource _disposal = new();
+    private readonly HashSet<int> _busyIds = [];
     private GridItemsProvider<WatchHistoryEntryDto>? _itemsProvider;
     private FluentDataGrid<WatchHistoryEntryDto>? _grid;
     private WatchHistoryPageDto? _page;
@@ -140,6 +155,42 @@
         {
             _isRefreshing = false;
         }
+    }
+
+    private async Task DeleteAsync(WatchHistoryEntryDto entry)
+    {
+        var confirmation = await DialogService.ShowConfirmationAsync(
+            $"Delete the playback of <strong>{WebUtility.HtmlEncode(entry.DisplayTitle)}</strong> started on {WebUtility.HtmlEncode(entry.StartedAtUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture))}? The movie can then be recommended again if it has no other playback. This cannot be undone.",
+            "Delete playback",
+            "Delete",
+            "Cancel");
+        if (confirmation.Cancelled || !_busyIds.Add(entry.Id))
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await WatchHistoryClient.DeleteAsync(entry.Id, _disposal.Token);
+            if (result == AdminOperationResult.Success)
+            {
+                await NotificationService.ShowSuccessToastAsync($"Playback of \"{entry.DisplayTitle}\" deleted.");
+            }
+            else
+            {
+                await NotificationService.ShowWarningToastAsync($"The playback of \"{entry.DisplayTitle}\" no longer exists.", "The list is reloaded.");
+            }
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            await NotificationService.ShowErrorToastAsync($"Unable to delete the playback of \"{entry.DisplayTitle}\".", ApiErrorMessage.Describe(exception));
+        }
+        finally
+        {
+            _busyIds.Remove(entry.Id);
+        }
+
+        await RefreshAsync();
     }
 
     public void Dispose()

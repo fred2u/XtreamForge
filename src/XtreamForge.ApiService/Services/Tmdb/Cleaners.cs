@@ -11,8 +11,12 @@ public static partial class Cleaners
     [GeneratedRegex(@"^\s*[A-Z]{2,3}\s*[★☆•●|\-–]\s*")]
     private static partial Regex LeadingLanguageTag();
 
-    [GeneratedRegex(@"\b(4k|uhd|fhd|hd|sd|hdr|hevc|dv|dolby|vision|multi|mult|multilingue|vf|vostfr|vff|truefrench|vfq|webrip|web-dl|bluray|x264|x265|h.265)\b", RegexOptions.IgnoreCase, "en-BE")]
+    [GeneratedRegex(@"\b(4k|uhd|fhd|hd|sd|hdr|hevc|dv|dolby|vision|multi|mult|multilingue|webrip|web-dl|bluray|x264|x265|h.265)\b", RegexOptions.IgnoreCase, "en-BE")]
     private static partial Regex TechnicalTags();
+
+    // audio or subtitle language markers, e.g. "VOSTFR" or "[TRUEFRENCH]"
+    [GeneratedRegex(@"\b(vf|vostfr|vff|truefrench|vfq)\b", RegexOptions.IgnoreCase, "en-BE")]
+    private static partial Regex LanguageTags();
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex MultiSpace();
@@ -53,6 +57,7 @@ public static partial class Cleaners
         }
 
         value = TechnicalTags().Replace(value, string.Empty);
+        value = LanguageTags().Replace(value, string.Empty);
 
         value = EmptyBrackets().Replace(value, string.Empty);
         value = MultiSpace().Replace(value, " ");

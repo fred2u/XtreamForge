@@ -278,6 +278,9 @@ Movie playbacks are recorded in `WatchHistory` (`Domain/History/WatchHistoryEntr
 - the queue groups the requests of one playback in memory (same source, account, and stream; running request or last one ended less than `PlaybackIdleTimeout` ago) and enqueues only new playbacks;
 - `WatchHistoryBackgroundService` resolves the TMDB ID through `WatchHistoryService`: the persisted `StreamTmdbMapping` first, then the provider `get_vod_info` payload; the credentials of the stream URL stay in memory only;
 - series episodes are not recorded: their stream URL only carries the episode ID, unknown to the `StreamTmdbMapping` keyed by series ID.
+- the admin can delete a playback and add one, started now, from a `TmdbInfo` entry (`WatchHistoryAdminService`).
+
+Recommendations (`Services/Admin/RecommendationAdminService`, admin page `/recommendations`) are computed on demand from the TMDB `movie/{id}/recommendations` of the most recently watched movies; a movie of the watch history or manually excluded must never be recommended. Nothing is stored.
 
 The authentication (`player_api.php` without action, `RequestAction.Authenticate`) is handled by `AuthenticateEndpoint`: when `user_info.auth` is 1, `server_info` is rewritten to the host, port, and scheme of the incoming request, and the account upstream is remembered in the singleton `XtreamAccountDirectory` (memory only, keyed by credentials). The `/movie|series|live/{username}/{password}/{file}` routes (no upstream prefix) resolve the upstream from it and reuse `XtreamContextBuilder` (destination validation) and `XtreamRequestForwardEndpoint`; like the prefixed stream route, they must not resolve a `DbContext`.
 

@@ -1,0 +1,176 @@
+@* Calendar heatmap of the movie playbacks: one column per week (Monday first), one cell per day, darker with more playbacks. *@
+@inject DashboardClient DashboardClient
+@implements IDisposable
+
+<FluentCard Class="dashboard-heatmap-card">
+    <div class="dashboard-section-heading">
+        <h2>Watch activity</h2>
+        <span class="heatmap-heading-meta">
+            <span class="section-count">
+                @if (_activity is not null)
+                {
+                    @($"{TotalCount.ToString("N0", CultureInfo.CurrentCulture)} movie playbacks on {ActiveDayCount.ToString("N0", CultureInfo.CurrentCulture)} days over the last year")
+                }
+                else
+                {
+                    @("Movie playbacks per day over the last year")
+                }
+            </span>
+            <a class="text-link" href="/history">
+                <FluentIcon Value="@(new Icons.Regular.Size16.History())" aria-hidden="true" />
+                Watch history
+            </a>
+        </span>
+    </div>
+
+    @if (_error is not null)
+    {
+        <LoadErrorState Title="Unable to load the watch activity" Error="@_error" IsRetrying="@_isLoading" OnRetry="@LoadAsync" />
+    }
+    else if (_activity is null)
+    {
+        <FluentSkeleton Width="100%" Height="8rem" Shimmer="true" />
+    }
+    else
+    {
+        <div class="heatmap-scroll">
+            <div class="heatmap" style="@($"--heatmap-weeks: {_weeks.Count.ToString(CultureInfo.InvariantCulture)}")" role="img" aria-label="@AriaLabel">
+                <div class="heatmap-months" aria-hidden="true">
+                    @for (var week = 0; week < _weeks.Count; week++)
+                    {
+                        <span>@MonthLabel(week)</span>
+                    }
+                </div>
+                <div class="heatmap-weekdays" aria-hidden="true">
+                    @for (var day = 0; day < 7; day++)
+                    {
+                        <span>@(day % 2 == 0 ? CultureInfo.CurrentCulture.DateTimeFormat.GetAbbreviatedDayName(WeekDay(day)) : string.Empty)</span>
+                    }
+                </div>
+                <div class="heatmap-grid">
+                    @foreach (var week in _weeks)
+                    {
+                        @foreach (var day in week)
+                        {
+                            @if (day >= _activity.From && day <= _activity.To)
+                            {
+                                var count = _counts.GetValueOrDefault(day);
+                                <span class="@($"heatmap-cell heatmap-level-{Level(count).ToString(CultureInfo.InvariantCulture)}")" title="@CellTitle(day, count)"></span>
+                            }
+                            else
+                            {
+                                <span class="heatmap-cell heatmap-cell-outside"></span>
+                            }
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="heatmap-legend" aria-hidden="true">
+            <span>Less</span>
+            @for (var level = 0; level <= 4; level++)
+            {
+                <span class="@($"heatmap-cell heatmap-level-{level.ToString(CultureInfo.InvariantCulture)}")"></span>
+            }
+            <span>More</span>
+        </div>
+    }
+</FluentCard>
+
+@code {
+    private readonly CancellationTokenSource _disposal = new();
+    private WatchActivityDto? _activity;
+    private Dictionary<DateOnly, int> _counts = [];
+
+    // every week holds 7 days from Monday; the days outside the activity range are drawn empty
+    private List<DateOnly[]> _weeks = [];
+    private int _maxCount;
+    private bool _isLoading;
+    private Exception? _error;
+
+    private int TotalCount => _counts.Values.Sum();
+
+    private int ActiveDayCount => _counts.Count;
+
+    private string AriaLabel => $"Watch activity: {TotalCount.ToString(CultureInfo.CurrentCulture)} movie playbacks over the last year";
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    /// <summary>Reloads the activity, for example when the dashboard is refreshed.</summary>
+    public async Task LoadAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        try
+        {
+            var activity = await DashboardClient.GetWatchActivityAsync(_disposal.Token);
+            _counts = activity.Days.ToDictionary(day => day.Date, day => day.Count);
+            _maxCount = _counts.Count == 0 ? 0 : _counts.Values.Max();
+            _weeks = BuildWeeks(activity.From, activity.To);
+            _activity = activity;
+        }
+        catch (OperationCanceledException) when (_disposal.IsCancellationRequested)
+        {
+            // the page is closed
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            _error = exception;
+        }
+        finally
+        {
+            _isLoading = false;
+
+            // also called by the dashboard refresh, which does not render this component again by itself
+            StateHasChanged();
+        }
+    }
+
+    private static List<DateOnly[]> BuildWeeks(DateOnly from, DateOnly to)
+    {
+        // Monday of the week of the first day
+        var start = from.AddDays(-(((int)from.DayOfWeek + 6) % 7));
+        List<DateOnly[]> weeks = [];
+        for (var monday = start; monday <= to; monday = monday.AddDays(7))
+        {
+            weeks.Add([.. Enumerable.Range(0, 7).Select(monday.AddDays)]);
+        }
+
+        return weeks;
+    }
+
+    // 0 without playback, otherwise 1 to 4 relative to the busiest day
+    private int Level(int count) =>
+        count == 0 || _maxCount == 0 ? 0 : Math.Clamp((int)Math.Ceiling(count * 4.0 / _maxCount), 1, 4);
+
+    private static DayOfWeek WeekDay(int index) => (DayOfWeek)((index + 1) % 7);
+
+    // the month is shown above the first week starting in it
+    private string MonthLabel(int week)
+    {
+        var monday = _weeks[week][0];
+        var isFirstWeekOfMonth = monday.Day <= 7;
+
+        return isFirstWeekOfMonth && week > 0
+            ? CultureInfo.CurrentCulture.DateTimeFormat.GetAbbreviatedMonthName(monday.Month)
+            : string.Empty;
+    }
+
+    private static string CellTitle(DateOnly date, int count)
+    {
+        var day = date.ToString("D", CultureInfo.CurrentCulture);
+        return count switch
+        {
+            0 => $"No playback on {day}",
+            1 => $"1 playback on {day}",
+            _ => $"{count.ToString(CultureInfo.CurrentCulture)} playbacks on {day}"
+        };
+    }
+
+    public void Dispose()
+    {
+        _disposal.Cancel();
+        _disposal.Dispose();
+    }
+}

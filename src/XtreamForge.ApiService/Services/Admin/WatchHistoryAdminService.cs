@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;
+using XtreamForge.Domain.History;
 
 namespace XtreamForge.ApiService.Services.Admin;
 
@@ -24,10 +25,69 @@ public sealed record WatchHistoryEntryItem(
 /// <summary>A page of the watch history; <see cref="MatchingCount"/> counts the entries matching the filters.</summary>
 public sealed record WatchHistoryPage(IReadOnlyList<WatchHistoryEntryItem> Items, int MatchingCount);
 
-public class WatchHistoryAdminService(XtreamForgeDbContext dbContext)
+/// <summary>Number of movie playbacks started on a day of the requested time zone.</summary>
+public sealed record WatchHistoryDayActivity(DateOnly Date, int Count);
+
+/// <summary>Movie playbacks per day from <see cref="From"/> to <see cref="To"/> (included); the days without playback are omitted.</summary>
+public sealed record WatchHistoryActivity(DateOnly From, DateOnly To, IReadOnlyList<WatchHistoryDayActivity> Days);
+
+public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TimeProvider timeProvider)
 {
     public const int DefaultPageSize = 50;
     public const int MaximumPageSize = 200;
+
+    /// <summary>Number of days of the activity, today included: 53 full weeks.</summary>
+    public const int ActivityDayCount = 371;
+
+    /// <summary>
+    /// Counts the movie playbacks per day of <paramref name="timeZone"/> over the last <see cref="ActivityDayCount"/> days, today included.
+    /// </summary>
+    public async Task<WatchHistoryActivity> GetActivityAsync(TimeZoneInfo timeZone, CancellationToken cancellationToken = default)
+    {
+        var to = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(timeProvider.GetUtcNow(), timeZone).DateTime);
+        var from = to.AddDays(1 - ActivityDayCount);
+
+        // the movie history is small (one entry per playback): the start dates are converted to the time zone in memory,
+        // which keeps the day boundaries exact for every offset and daylight saving time
+        var startDates = await dbContext.WatchHistory
+            .AsNoTracking()
+            .Where(entry => entry.ContentType == ContentType.Vod)
+            .Select(entry => entry.StartedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        var days = startDates
+            .Select(startedAtUtc => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(startedAtUtc, timeZone).DateTime))
+            .Where(date => date >= from && date <= to)
+            .GroupBy(date => date)
+            .Select(group => new WatchHistoryDayActivity(group.Key, group.Count()))
+            .OrderBy(day => day.Date)
+            .ToList();
+
+        return new WatchHistoryActivity(from, to, days);
+    }
+
+    /// <summary>
+    /// Records a playback of a TMDB metadata entry started now, as if it had been played through the proxy;
+    /// returns null when the entry does not exist.
+    /// </summary>
+    public async Task<WatchHistoryEntryItem?> AddAsync(int tmdbInfoId, CancellationToken cancellationToken = default)
+    {
+        var info = await dbContext.TmdbInfos.AsNoTracking().FirstOrDefaultAsync(info => info.Id == tmdbInfoId, cancellationToken);
+        if (info is null)
+        {
+            return null;
+        }
+
+        var entry = new WatchHistoryEntry { ContentType = info.ContentType, TmdbId = info.TmdbId, StartedAtUtc = timeProvider.GetUtcNow() };
+        dbContext.WatchHistory.Add(entry);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return new WatchHistoryEntryItem(entry.Id, entry.ContentType, entry.TmdbId, entry.StartedAtUtc, info.Title, info.OriginalTitle, info.ReleaseDate, info.PosterPath);
+    }
+
+    /// <summary>Deletes one playback of the watch history; returns false when it does not exist.</summary>
+    public async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)
+        => await dbContext.WatchHistory.Where(entry => entry.Id == id).ExecuteDeleteAsync(cancellationToken) > 0;
 
     /// <summary>
     /// Returns a page of the watch history, the most recent playback first: the playbacks are recorded in their start order,

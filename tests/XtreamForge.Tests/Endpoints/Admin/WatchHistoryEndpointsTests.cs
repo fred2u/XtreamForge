@@ -18,11 +18,69 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
 
     private readonly XtreamForgeDbContext _dbContext;
     private readonly WatchHistoryGetEndpoint _endpoint;
+    private readonly WatchHistoryPostEndpoint _postEndpoint;
+    private readonly WatchHistoryDeleteEndpoint _deleteEndpoint;
 
     public WatchHistoryEndpointsTests()
     {
         _dbContext = SqliteDbContextFactory.Create();
-        _endpoint = new WatchHistoryGetEndpoint(new WatchHistoryAdminService(_dbContext), TmdbOptions);
+        var service = new WatchHistoryAdminService(_dbContext, TimeProvider.System);
+        _endpoint = new WatchHistoryGetEndpoint(service, TmdbOptions);
+        _postEndpoint = new WatchHistoryPostEndpoint(service, TmdbOptions);
+        _deleteEndpoint = new WatchHistoryDeleteEndpoint(service);
+    }
+
+    [Fact]
+    public async Task GetActivity_WithUnknownTimeZone_ReturnsValidationProblem()
+    {
+        var result = await new WatchHistoryActivityGetEndpoint(new WatchHistoryAdminService(_dbContext, TimeProvider.System))
+            .GetAsync("Mars/Olympus_Mons", TestContext.Current.CancellationToken);
+
+        Assert.Contains("timeZone", Assert.IsType<ValidationProblem>(result).ProblemDetails.Errors.Keys);
+    }
+
+    [Fact]
+    public async Task GetActivity_WithoutTimeZone_UsesUtc()
+    {
+        var before = DateOnly.FromDateTime(DateTime.UtcNow);
+        var result = await new WatchHistoryActivityGetEndpoint(new WatchHistoryAdminService(_dbContext, TimeProvider.System))
+            .GetAsync(null, TestContext.Current.CancellationToken);
+        var after = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var activity = Assert.IsType<Ok<WatchHistoryActivity>>(result).Value;
+        Assert.NotNull(activity);
+        Assert.InRange(activity.To, before, after);
+    }
+
+    [Fact]
+    public async Task Post_ReturnsTheRecordedPlaybackWithThePosterThumbnailUrl()
+    {
+        var info = new TmdbInfo { ContentType = ContentType.Vod, TmdbId = 603, Title = "The Matrix", PosterPath = "/matrix.jpg" };
+        _dbContext.TmdbInfos.Add(info);
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await _postEndpoint.PostAsync(info.Id, TestContext.Current.CancellationToken);
+
+        var entry = Assert.IsType<Ok<AdminWatchHistoryEntryDto>>(result).Value;
+        Assert.NotNull(entry);
+        Assert.Equal((603L, "https://image.tmdb.org/t/p/w92/matrix.jpg"), (entry.TmdbId, entry.PosterThumbnailUrl));
+    }
+
+    [Fact]
+    public async Task Post_WithUnknownTmdbInfo_ReturnsNotFound()
+    {
+        Assert.IsType<NotFound>(await _postEndpoint.PostAsync(42, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Delete_ReturnsNoContentThenNotFound()
+    {
+        var entry = new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 603, StartedAtUtc = DateTimeOffset.UtcNow };
+        _dbContext.WatchHistory.Add(entry);
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.IsType<NoContent>(await _deleteEndpoint.DeleteAsync(entry.Id, TestContext.Current.CancellationToken));
+        Assert.IsType<NotFound>(await _deleteEndpoint.DeleteAsync(entry.Id, TestContext.Current.CancellationToken));
     }
 
     [Fact]

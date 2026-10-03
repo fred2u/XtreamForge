@@ -145,6 +145,19 @@ Every movie played through the proxy is recorded with its TMDB ID, its content t
 - a player sends several requests for one playback (range requests, seeks, reconnections): a request starts a new playback only when no request of the same movie and account is running and the last one ended more than 30 minutes ago; this state is kept in memory by the singleton `WatchHistoryQueue`, so the stream route does not access the database
 - the playbacks are recorded in the background by `WatchHistoryBackgroundService`: the TMDB ID is the persisted mapping of the stream when it exists, otherwise the `tmdb_id` of the provider `get_vod_info` payload (called with the credentials of the stream URL, kept in memory only); a playback of an unknown source or of a movie without TMDB ID is not recorded
 - `GET /api/admin/watch-history?contentType=&skip=&take=` - page (most recent first, at most 200 entries) of the history, with the title, original title, release date, and `w92` poster of the loaded TMDB metadata, and the number of matching entries; an invalid content type returns `400`
+- `GET /api/admin/watch-history/activity?timeZone=` - number of movie playbacks per day (days without playback omitted) over the last 53 weeks, today included, the days being those of the given time zone (IANA or Windows ID, UTC when empty; an unknown time zone returns `400`)
+- `DELETE /api/admin/watch-history/{id}` - deletes one playback (`204`, or `404` when unknown); from the `Watch history` screen
+- `POST /api/admin/tmdb-infos/{id}/watch-history` - records a playback of a TMDB metadata entry started now and returns it (`404` for an unknown entry); from the details of an entry on the `TMDB infos` screen
+
+### Recommendations
+
+Movies are recommended from the watch history, computed on each request (nothing is stored):
+
+- the TMDB recommendations (`movie/{id}/recommendations`, first page, in `Tmdb:PreferredLanguage`) of the 20 most recently watched distinct movies are requested; without `Tmdb:ApiKey`, the list is empty
+- a movie of the watch history is never recommended, nor a movie whose TMDB metadata is excluded manually
+- each watched movie gives its recommendations a weight (20 for the most recent, down to 1); the 50 best summed weights are returned, then by vote average
+- a recommendation is flagged as available in the catalogue when TMDB metadata is known for it (TMDB rules are not applied)
+- `GET /api/admin/recommendations` - the recommendations with title, original title, release date, `w92` poster, vote average and count, English genre names, score, number of watched movies recommending it, and the catalogue flag
 
 ## Sources
 
@@ -318,13 +331,14 @@ Boundaries:
 
 Features (`src/XtreamForge.Web/Features`):
 
-- `Dashboard` - application and database status; configuration counters (sources, Xtream and custom categories, category, item, and TMDB rules) and TMDB counters (known mappings, unresolved lookups, TMDB infos, failed TMDB loads, i.e. entries whose first load failed and that wait for a retry, and manually excluded entries; the last two link to the filtered TMDB infos screen)
+- `Dashboard` - application and database status; configuration counters (sources, Xtream and custom categories, category, item, and TMDB rules) and TMDB counters (known mappings, unresolved lookups, TMDB infos, failed TMDB loads, i.e. entries whose first load failed and that wait for a retry, and manually excluded entries; the last two link to the filtered TMDB infos screen), and a heatmap of the movie playbacks per day over the last year (in the time zone of the Web server, like the dates of the watch history)
 - `Monitoring` - live background queues (size, one hour charts) and upstream rate limits
-- `History` - watch history (`/history`): the playbacks, most recent first, with their start date, TMDB title and poster (paged by the API)
+- `History` - watch history (`/history`): the playbacks, most recent first, with their start date, TMDB title and poster (paged by the API), and a button to delete a playback
+- `Recommendations` - movies recommended from the watch history (`/recommendations`), in the TMDB section with poster, genres, rating, number of watched movies recommending it, and availability in the catalogue
 - `Sources` - list, create (with provider discovery), delete
 - `Categories` - Xtream categories, custom categories, category rules; a click on an Xtream category opens its details (decision and deciding rule) where the manual exclusion and the custom category can also be changed
 - `Items` - item rules, and TMDB mappings: the mappings of a source and content type (stream ID, TMDB title and poster, or the state of the background lookup when not found; filtered by search and mapped state, and paged by the API), whose edit button opens an editor to set the TMDB ID
-- `Tmdb` - TMDB infos (poster, genres, rating, effective state and reason, manual exclusion; filtered by search, genre, state, and load state, and paged by the API) and TMDB rules; a click on an entry opens its details (decision and deciding rule, overview, directors, cast, and duration) where the manual exclusion can also be changed; the `New TMDB rule` button opens the rule editor prefilled with the search
+- `Tmdb` - TMDB infos (poster, genres, rating, effective state and reason, manual exclusion; filtered by search, genre, state, and load state, and paged by the API) and TMDB rules; a click on an entry opens its details (decision and deciding rule, overview, directors, cast, and duration) where the manual exclusion can also be changed and a playback added to the watch history; the `New TMDB rule` button opens the rule editor prefilled with the search
 - `Rules` - shared rules screen and rule editor (category, item, and TMDB rules)
 
 ## Useful endpoints

@@ -6,6 +6,7 @@ using XtreamForge.ApiService.Endpoints.Admin.Dashboard;
 using XtreamForge.ApiService.Endpoints.Admin.ItemRules;
 using XtreamForge.ApiService.Endpoints.Admin.ItemRules.Dto;
 using XtreamForge.ApiService.Endpoints.Admin.Monitoring;
+using XtreamForge.ApiService.Endpoints.Admin.Recommendations;
 using XtreamForge.ApiService.Endpoints.Admin.Sources;
 using XtreamForge.ApiService.Endpoints.Admin.Sources.Dto;
 using XtreamForge.ApiService.Endpoints.Admin.StreamTmdbMappings;
@@ -81,6 +82,16 @@ public static class RouteExtensions
 
             // api/admin/watch-history?contentType=&skip=&take= (the most recent playback first)
             endpoints.MapGet("/api/admin/watch-history", async ([AsParameters] WatchHistoryListQuery query, WatchHistoryGetEndpoint endpoint, CancellationToken cancellationToken) => await endpoint.GetAsync(query, cancellationToken));
+            endpoints.MapDelete("/api/admin/watch-history/{id:int}", async (int id, WatchHistoryDeleteEndpoint endpoint, CancellationToken cancellationToken) => await endpoint.DeleteAsync(id, cancellationToken));
+
+            // api/admin/watch-history/activity?timeZone=: movie playbacks per day over the last 53 weeks
+            endpoints.MapGet("/api/admin/watch-history/activity", async (string? timeZone, WatchHistoryActivityGetEndpoint endpoint, CancellationToken cancellationToken) => await endpoint.GetAsync(timeZone, cancellationToken));
+
+            // api/admin/tmdb-infos/{id}/watch-history: adds a playback of the entry, started now
+            endpoints.MapPost("/api/admin/tmdb-infos/{id:int}/watch-history", async (int id, WatchHistoryPostEndpoint endpoint, CancellationToken cancellationToken) => await endpoint.PostAsync(id, cancellationToken));
+
+            // api/admin/recommendations: movies recommended by TMDB for the recently watched movies, never a watched one
+            endpoints.MapGet("/api/admin/recommendations", async (RecommendationsGetEndpoint endpoint, CancellationToken cancellationToken) => await endpoint.GetAsync(cancellationToken));
 
             return endpoints;
         }

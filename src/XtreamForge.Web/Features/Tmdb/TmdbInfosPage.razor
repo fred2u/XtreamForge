@@ -1,9 +1,11 @@
 @page "/tmdb"
 @page "/tmdb/infos"
 @using XtreamForge.Web.Features.Categories
+@using XtreamForge.Web.Features.History
 @using XtreamForge.Web.Features.Rules
 @implements IDisposable
 @inject TmdbInfosClient TmdbInfosClient
+@inject WatchHistoryClient WatchHistoryClient
 @inject CategoriesClient CategoriesClient
 @inject INotificationService NotificationService
 @inject NavigationManager NavigationManager
@@ -245,6 +247,19 @@
                                                       AriaLabel="@($"Exclude {details.Info.DisplayTitle} manually")" />
                                     </div>
                                 </div>
+                                <div class="details-control">
+                                    <div class="cell-stack">
+                                        <span class="cell-primary">Watch history</span>
+                                        <span class="cell-secondary">Record a playback started now, as if it had been played through the proxy.</span>
+                                    </div>
+                                    <FluentButton Appearance="ButtonAppearance.Outline"
+                                                  IconStart="@(new Icons.Regular.Size16.History())"
+                                                  Loading="@_isAddingToHistory"
+                                                  Disabled="@_isAddingToHistory"
+                                                  OnClick="@(() => AddToWatchHistoryAsync(details.Info))">
+                                        Add to watch history
+                                    </FluentButton>
+                                </div>
                             </div>
                         </Controls>
                     </TmdbInfoDetails>
@@ -328,6 +343,7 @@
     private TmdbInfoDto? _detailsTarget;
     private TmdbInfoDetailsDto? _details;
     private string? _detailsError;
+    private bool _isAddingToHistory;
 
     // The selected genre stays listed even when no entry has it anymore.
     private IReadOnlyList<string> GenreOptions =>
@@ -592,6 +608,37 @@
     }
 
     // ─── Details ────────────────────────────────────────────────────────────
+
+    private async Task AddToWatchHistoryAsync(TmdbInfoDto info)
+    {
+        if (_isAddingToHistory)
+        {
+            return;
+        }
+
+        _isAddingToHistory = true;
+        try
+        {
+            var result = await WatchHistoryClient.AddAsync(info.Id, _disposal.Token);
+            if (result == AdminOperationResult.Success)
+            {
+                await NotificationService.ShowSuccessToastAsync($"\"{info.DisplayTitle}\" added to the watch history.");
+            }
+            else
+            {
+                await NotificationService.ShowWarningToastAsync($"\"{info.DisplayTitle}\" no longer exists.", "The list is reloaded.");
+                await ReloadAsync();
+            }
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            await NotificationService.ShowErrorToastAsync($"Unable to add \"{info.DisplayTitle}\" to the watch history.", ApiErrorMessage.Describe(exception));
+        }
+        finally
+        {
+            _isAddingToHistory = false;
+        }
+    }
 
     private Task OnRowClickAsync(FluentDataGridRow<TmdbInfoDto> row) =>
         row.Item is { } info ? ShowDetailsAsync(info) : Task.CompletedTask;

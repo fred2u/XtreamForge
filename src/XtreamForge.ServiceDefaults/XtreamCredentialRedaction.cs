@@ -10,12 +10,19 @@ public static partial class XtreamCredentialRedaction
 {
     private const string RedactedValue = "***";
 
+    // the username and password segments of a stream path
+    private const string RedactedPathCredentials = $"{RedactedValue}/{RedactedValue}";
+
     private static readonly HashSet<string> SensitiveQueryKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "username",
         "password"
     };
 
+    /// <summary>
+    /// Redacts the Xtream credentials of a text: the <c>username</c> / <c>password</c> query parameters (plain or URL-encoded)
+    /// and the credentials of the stream paths (see <see cref="RedactPath"/>).
+    /// </summary>
     public static string SanitizeText(string? value)
     {
         if (string.IsNullOrEmpty(value))
@@ -24,7 +31,22 @@ public static partial class XtreamCredentialRedaction
         }
 
         var sanitized = SensitiveQueryParameterPattern().Replace(value, $"${{1}}{RedactedValue}");
-        return EncodedSensitiveQueryParameterPattern().Replace(sanitized, $"${{1}}{RedactedValue}");
+        sanitized = EncodedSensitiveQueryParameterPattern().Replace(sanitized, $"${{1}}{RedactedValue}");
+        return RedactPath(sanitized);
+    }
+
+    /// <summary>
+    /// Redacts the credentials of the Xtream stream paths, <c>{kind}/{username}/{password}/...</c> for the <c>movie</c>, <c>series</c>,
+    /// <c>live</c>, and <c>timeshift</c> kinds, with or without upstream prefix.
+    /// </summary>
+    public static string RedactPath(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return path ?? string.Empty;
+        }
+
+        return StreamPathCredentialsPattern().Replace(path, RedactedPathCredentials);
     }
 
     public static Uri RedactUri(Uri uri)
@@ -39,6 +61,7 @@ public static partial class XtreamCredentialRedaction
         var redactedQuery = RedactQueryString(uri.Query);
         var uriBuilder = new UriBuilder(uri)
         {
+            Path = RedactPath(uri.AbsolutePath),
             Query = redactedQuery
         };
 
@@ -52,10 +75,12 @@ public static partial class XtreamCredentialRedaction
 
         var redactedUrl = SanitizeText(request.GetDisplayUrl());
         var redactedQuery = RedactQueryString(request.QueryString.Value);
-        var redactedTarget = BuildRequestTarget(request.PathBase, request.Path, redactedQuery);
+        var redactedPath = RedactPath($"{request.PathBase}{request.Path}");
+        var redactedTarget = BuildRequestTarget(redactedPath, redactedQuery);
 
         activity.SetTag("url.full", redactedUrl);
         activity.SetTag("http.url", redactedUrl);
+        activity.SetTag("url.path", redactedPath);
         activity.SetTag("url.query", redactedQuery);
         activity.SetTag("http.target", redactedTarget);
     }
@@ -116,9 +141,6 @@ public static partial class XtreamCredentialRedaction
             : string.Empty;
     }
 
-    private static string BuildRequestTarget(PathString pathBase, PathString path, string redactedQuery) =>
-        BuildRequestTarget($"{pathBase}{path}", redactedQuery);
-
     private static string BuildRequestTarget(string path, string redactedQuery) =>
         string.IsNullOrEmpty(redactedQuery)
             ? path
@@ -129,4 +151,8 @@ public static partial class XtreamCredentialRedaction
 
     [GeneratedRegex(@"((?:%3[fF]|%26)(?:username|password)(?:=|%3[dD]))(.*?)(?=(?:%26|%23|&|#|\s|$))", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex EncodedSensitiveQueryParameterPattern();
+
+    // {kind}/{username}/{password}/ at the start of a path or after a slash; the stream file must follow
+    [GeneratedRegex(@"(?<=(?:^|[/\s])(?:movie|series|live|timeshift)/)[^/?#\s]+/[^/?#\s]+(?=/)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex StreamPathCredentialsPattern();
 }

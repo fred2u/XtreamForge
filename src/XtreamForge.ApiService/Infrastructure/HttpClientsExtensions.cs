@@ -18,6 +18,7 @@ public static class HttpClientsExtensions
             services.TryAddSingleton(TimeProvider.System);
             services.AddSingleton<UpstreamRateLimiter>();
             services.AddTransient<RateLimitHandler>();
+            services.AddSingleton<XtreamHttpClientLogger>();
 
             // HTTP 429 is handled by RateLimitHandler (per-host adaptive spacing, Retry-After): the standard resilience
             // pipeline of the service defaults must neither retry it immediately nor count it for its circuit breaker.
@@ -35,6 +36,9 @@ public static class HttpClientsExtensions
                     UseCookies = false,
                     AutomaticDecompression = DecompressionMethods.All
                 })
+                // the default logging writes the request URL, which carries the Xtream credentials
+                .RemoveAllLoggers()
+                .AddLogger<XtreamHttpClientLogger>()
                 .AddOutermostRateLimitHandler();
 
             services

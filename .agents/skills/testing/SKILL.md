@@ -11,7 +11,7 @@ Tests live in:
 
 `tests/XtreamForge.Tests`
 
-The repository uses xUnit.
+The repository uses xUnit v3 (`xunit.v3`) on Microsoft Testing Platform.
 
 Aspire.Hosting.Testing is available for distributed application testing.
 
@@ -22,17 +22,20 @@ Aspire.Hosting.Testing is available for distributed application testing.
 - `XtreamForge.AppHost` (Aspire integration tests)
 - `XtreamForge.ApiService` (endpoint/service unit tests)
 - `XtreamForge.Domain` (domain logic)
+- `XtreamForge.Web` (UI helpers and HTTP clients)
 - `Microsoft.EntityFrameworkCore.Sqlite` (in-memory SQLite for non-relational unit tests)
 - `Aspire.Hosting.Testing`
-- `xUnit`
+- `xunit.v3`, `Microsoft.AspNetCore.Mvc.Testing` (in-process routing tests on `TestServer`)
 
 Test folders mirror the `XtreamForge.ApiService` structure, and namespaces match folders (`XtreamForge.Tests.<Folder>`):
 
 - `Endpoints/Admin/` — admin endpoint classes: HTTP result mapping (`Ok`, `Created` + location, `NotFound`, `Conflict`, `NoContent`). One file per admin resource (for example `ItemRuleEndpointsTests.cs` covers the Get/Post/Put/Delete endpoints of item rules).
 - `Services/` — core services (`CategoryRuleService`, `ItemRuleService`, `ItemService`, `CategoryService`).
 - `Services/Admin/` — admin services (`*AdminServiceTests.cs`).
-- `Xtream/` — Xtream request pipeline (`XtreamProviderValidator`, `XtreamContextBuilder`, `XtreamContext`).
-- `Infrastructure/` — shared test helpers only (`SqliteDbContextFactory`).
+- `Xtream/` — Xtream request pipeline (`XtreamProviderValidator`, `XtreamContextBuilder`, `XtreamContext`, `XtreamHttpRequestMessageFactory`, `XtreamStreamPath`).
+- `Infrastructure/` — shared test helpers (`SqliteDbContextFactory`, `StubXtreamHttpClientFactory`, `StubTmdbHttpClientFactory`, `SteppingTimeProvider`, `TestMeterFactory`), and the tests of the ApiService `Infrastructure` code (`RateLimiting/`).
+- `ServiceDefaults/` — shared hosting code (`XtreamCredentialRedaction`).
+- `Web/` — `XtreamForge.Web` helpers and clients, by feature (`Web/Categories/`, `Web/Tmdb/`).
 
 Tests needing a DbContext use SQLite in-memory + `EnsureCreated()` through `Infrastructure/SqliteDbContextFactory`.
 
@@ -137,7 +140,7 @@ When using Aspire integration tests:
 # Adding a new test to XtreamForge.Tests
 
 1. Add the `*.cs` file in the folder mirroring the code under test (see "Test project setup"); never at the project root. Use the matching namespace, for example `XtreamForge.Tests.Services.Admin`.
-2. Use `public class MyTests` (not sealed — xUnit reflects on it).
+2. Use a `public` test class (`public class MyTests` or `public sealed class MyTests`, both are used in the project).
 3. For tests requiring a DbContext, use the shared factory:
    ```csharp
    _dbContext = SqliteDbContextFactory.Create();
@@ -179,7 +182,7 @@ Then run closely related tests.
 For broad changes, run:
 
 ```
-dotnet test XtreamForge.slnx
+dotnet test --solution XtreamForge.slnx
 ```
 
 Never state that tests pass unless they were actually executed.

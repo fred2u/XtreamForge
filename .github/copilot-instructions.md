@@ -346,7 +346,11 @@ Sensitive information must not appear in:
 - health check output;
 - diagnostic URLs.
 
-Use existing redaction mechanisms.
+Use existing redaction mechanisms:
+
+- `XtreamCredentialRedaction` (ServiceDefaults) redacts the `username` / `password` query parameters and the credentials of the stream paths (`movie|series|live|timeshift/{username}/{password}/...`); it is applied to the server and client spans, and `SanitizeText` must wrap any logged text that may contain an upstream URL;
+- the Xtream HTTP client does not use the default `IHttpClientFactory` logging, which writes the request URL: `XtreamHttpClientLogger` logs the redacted URL instead. Do not add loggers that write raw upstream URLs;
+- log caught exceptions with the exception object (SonarAnalyzer rule S6667) and `SanitizeText(exception.Message)`; never put a request URL in an exception message.
 
 Never commit credentials.
 
@@ -358,6 +362,7 @@ Current domain areas include:
 
 - Categories;
 - Items;
+- History;
 - Sources;
 - Tmdb;
 - shared domain enums.
@@ -769,7 +774,7 @@ For broad changes, use:
 
 `dotnet build XtreamForge.slnx`
 
-`dotnet test XtreamForge.slnx`
+`dotnet test --solution XtreamForge.slnx`
 
 A task is not complete merely because code was generated.
 

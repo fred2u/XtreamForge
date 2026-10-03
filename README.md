@@ -14,7 +14,7 @@ This repository currently provides:
 - .NET Aspire orchestration
 - xUnit v3 test coverage for backend behavior, admin API endpoints, and UI helpers
 
-Metadata rewriting beyond categories, `tmdb_id`, and the TMDB fields listed in [TMDB metadata](#tmdb-metadata), and authentication, are out of scope for the current implementation.
+Metadata rewriting beyond categories, `tmdb_id`, the TMDB fields listed in [TMDB metadata](#tmdb-metadata), and the `server_info` of the [authentication response](#authentication-and-stream-urls) is out of scope for the current implementation, as is the authentication of the administration UI and API.
 
 ## Architecture
 
@@ -130,7 +130,7 @@ Behavior by `player_api.php` action:
 Security notes:
 
 - XtreamForge validates `protocol`, `host`, and `port`, and enforces the `XtreamProxy` host allowlist (SSRF protection)
-- Xtream credentials in the query string are forwarded upstream but are not persisted, and they are redacted from logs and telemetry
+- Xtream credentials are forwarded upstream but are not persisted; they are redacted (`***`) from the request spans and from the request logs of the Xtream HTTP client, in the query string and in the stream paths (`movie|series|live|timeshift/{username}/{password}/...`), except for the short live form (see [Known limitations](#known-limitations))
 - the Xtream proxy routes are excluded from generated OpenAPI documentation
 
 ## Authentication and stream URLs
@@ -203,8 +203,7 @@ Category model:
 - upstream categories are source-specific and scoped by content type (`Vod` / `Series`)
 - custom categories are global across sources and scoped by content type only
 - categories no longer returned by the provider are disabled, not deleted
-- an upstream category loses its custom category mapping when the provider renames it (a change of case only is ignored) or stops returning it; it is then exposed with its original name until it is mapped again
-- when the provider renames a category (case-insensitive comparison) or returns a previously disabled one, its custom category mapping is reset and must be set again
+- an upstream category loses its custom category mapping when the provider renames it (a change of case only is ignored), stops returning it, or returns it again after having stopped; it is then exposed with its original name until it is mapped again
 - rules are scoped by source and content type
 
 For each upstream category, the admin UI allows to:
@@ -399,5 +398,9 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) restores, builds in Rel
 - items are hidden until their TMDB metadata is loaded, so the first catalogue requests return few items; without `Tmdb:ApiKey`, no metadata is loaded and no item is returned
 - changing `Tmdb:PreferredLanguage` only affects metadata loaded or refreshed afterwards
 - while a provider rate limits (HTTP 429), proxied client requests to it wait for their slot (up to one minute per attempt, three attempts), which can exceed the timeout of some IPTV clients
-- stream URLs without upstream prefix only work once the account has authenticated through XtreamForge since its last start, and use the host and port of the request received by XtreamForge (a reverse proxy must forward the original `Host`); the short live form `/{username}/{password}/{id}` and `/timeshift/...` are not supported
-- no admin authentication yet
+- stream URLs without upstream prefix only work once the account has authenticated through XtreamForge since its last start, and use the host, port, and scheme of the request received by XtreamForge (a reverse proxy must forward the original `Host`; forwarded headers such as `X-Forwarded-Proto` are not processed); the short live form `/{username}/{password}/{id}` and `/timeshift/...` are not supported
+- the credentials of the short live stream form (`/{protocol}/{host}/{port}/{username}/{password}/{id}`) are not redacted from telemetry nor from the Xtream HTTP client logs, and ASP.NET Core writes the request paths unredacted if its log level is lowered to `Information`
+- no admin authentication yet: the admin API is served by the same host and port as the Xtream proxy, so it must not be exposed to untrusted networks
+- only local development through Aspire is supported: the ApiService is not declared as an external endpoint, and the Dockerfiles under `src/` do not build
+
+Known bugs and design issues are tracked in [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md).

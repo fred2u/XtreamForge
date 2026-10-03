@@ -136,7 +136,7 @@ They must not be exposed through:
 - metrics;
 - diagnostic URLs.
 
-Use the existing credential-redaction mechanisms.
+Use the existing credential-redaction mechanisms: `XtreamCredentialRedaction` (query parameters and stream path credentials, see `RedactPath`) and the `XtreamHttpClientLogger` of the Xtream HTTP client, which replaces the default `IHttpClientFactory` logging. A new stream path kind carrying credentials must be added to the stream path pattern of `XtreamCredentialRedaction`.
 
 Never persist upstream credentials as source identity unless explicitly designed and security-reviewed.
 

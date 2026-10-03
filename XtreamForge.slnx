@@ -1,18 +1,22 @@
 <Solution>
   <Folder Name="/.solution/">
+    <File Path=".dockerignore" />
     <File Path=".editorconfig" />
+    <File Path=".gitignore" />
     <File Path="Directory.Build.props" />
     <File Path="Directory.Packages.props" />
-    <File Path="docker-compose.yml" />
     <File Path="global.json" />
     <File Path="LICENSE" />
     <File Path="README.md" />
+    <File Path="TECHNICAL_DEBT.md" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/XtreamForge.ApiService/XtreamForge.ApiService.csproj" />
     <Project Path="src/XtreamForge.AppHost/XtreamForge.AppHost.csproj" />
-    <Project Path="src/XtreamForge.Blazor/XtreamForge.Blazor.csproj" />
+    <Project Path="src/XtreamForge.Database/XtreamForge.Database.csproj" />
+    <Project Path="src/XtreamForge.Domain/XtreamForge.Domain.csproj" />
     <Project Path="src/XtreamForge.ServiceDefaults/XtreamForge.ServiceDefaults.csproj" />
-    <Project Path="src/XtreamForge/XtreamForge.csproj" />
+    <Project Path="src/XtreamForge.Web/XtreamForge.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/XtreamForge.Tests/XtreamForge.Tests.csproj" />

@@ -1,0 +1,10 @@
+@if (Count is not null)
+{
+    <span class="count-badge">@Count.Value.ToString("N0", CultureInfo.CurrentCulture)</span>
+}
+
+@code {
+    /// <summary>Nothing is rendered while the count is unknown.</summary>
+    [Parameter]
+    public int? Count { get; set; }
+}

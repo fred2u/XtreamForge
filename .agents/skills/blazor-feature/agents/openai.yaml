@@ -1,0 +1,4 @@
+interface:
+  display_name: "XtreamForge – Blazor Feature"
+  short_description: "Build Blazor features with Fluent UI"
+  default_prompt: "Use $blazor-feature to create a new channel list page in XtreamForge.Web."

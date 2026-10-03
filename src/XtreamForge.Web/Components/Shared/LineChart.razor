@@ -1,0 +1,115 @@
+@*
+    Minimal line chart drawn in SVG (no chart library): one line per series over evenly spaced points, a hover tooltip
+    per point and theme-aware colors (each series has a CSS class setting --chart-series-color).
+    The layout is a fixed grid (header, fixed-width Y axis, plot, X axis): charts displayed side by side or stacked have their
+    titles, plots and axes aligned whatever their values, and the axis labels are centered on the grid lines.
+*@
+
+<figure class="line-chart" aria-label="@Label">
+    <figcaption class="line-chart-header">
+        <span class="line-chart-title">@Title</span>
+        @if (Series.Count > 1)
+        {
+            <span class="line-chart-legend">
+                @foreach (var series in Series)
+                {
+                    <span class="@series.CssClass"><span class="line-chart-legend-dot"></span>@series.Name</span>
+                }
+            </span>
+        }
+    </figcaption>
+
+    <div class="line-chart-y-axis" aria-hidden="true">
+        <span class="line-chart-y-top">@FormatAxisValue(_maximum)</span>
+        <span class="line-chart-y-middle">@FormatAxisValue(_maximum / 2)</span>
+        <span class="line-chart-y-bottom">0</span>
+    </div>
+
+    <svg class="line-chart-plot" viewBox="0 0 @Width @Height" preserveAspectRatio="none" role="img" aria-label="@Summary">
+        <line class="line-chart-grid" x1="0" y1="0.5" x2="@Width" y2="0.5" />
+        <line class="line-chart-grid" x1="0" y1="@(Height / 2)" x2="@Width" y2="@(Height / 2)" />
+        <line class="line-chart-grid line-chart-baseline" x1="0" y1="@(Height - 0.5)" x2="@Width" y2="@(Height - 0.5)" />
+
+        @if (Times.Count > 1)
+        {
+            @foreach (var series in Series)
+            {
+                <g class="@series.CssClass">
+                    @if (Series.Count == 1)
+                    {
+                        <polygon class="line-chart-area" points="@($"0,{Height} {ChartGeometry.ToPoints(series.Values, _maximum, Width, Height)} {Width},{Height}")" />
+                    }
+                    <polyline class="line-chart-line" points="@ChartGeometry.ToPoints(series.Values, _maximum, Width, Height)" />
+                </g>
+            }
+
+            @for (var index = 0; index < Times.Count; index++)
+            {
+                var pointIndex = index;
+                var slotWidth = (double)Width / (Times.Count - 1);
+                <rect class="line-chart-hover"
+                      x="@(ChartGeometry.X(pointIndex, Times.Count, Width) - (slotWidth / 2))"
+                      y="0"
+                      width="@slotWidth"
+                      height="@Height">
+                    <title>@Tooltip(pointIndex)</title>
+                </rect>
+            }
+        }
+    </svg>
+
+    <div class="line-chart-x-axis" aria-hidden="true">
+        @if (Times.Count > 1)
+        {
+            <span>@FormatTime(Times[0])</span>
+            <span>@FormatTime(Times[^1])</span>
+        }
+        else
+        {
+            <span>Collecting data…</span>
+        }
+    </div>
+</figure>
+
+@code {
+    private const int Width = 600;
+    private const int Height = 160;
+
+    private double _maximum = 1;
+
+    /// <summary>Accessible name of the chart.</summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>Visible title, displayed on the left of the legend; the header keeps its height without title.</summary>
+    [Parameter]
+    public string? Title { get; set; }
+
+    /// <summary>Time of each point, oldest first; every series has one value per time.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<DateTimeOffset> Times { get; set; } = [];
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<ChartSeries> Series { get; set; } = [];
+
+    private string Summary => Times.Count == 0
+        ? $"{Label}: no data yet"
+        : $"{Label} from {FormatTime(Times[0])} to {FormatTime(Times[^1])}: "
+          + string.Join(", ", Series.Select(series => $"{series.Name} now {FormatValue(series.Values[^1])}, maximum {FormatValue(series.Values.Max())}"));
+
+    protected override void OnParametersSet()
+    {
+        var maximum = Series.Count == 0 || Times.Count == 0 ? 0 : Series.Max(series => series.Values.Max());
+        _maximum = ChartGeometry.NiceMaximum(maximum);
+    }
+
+    private string Tooltip(int index) =>
+        $"{FormatTime(Times[index])} · " + string.Join(" · ", Series.Select(series => $"{series.Name}: {FormatValue(series.Values[index])}"));
+
+    private static string FormatTime(DateTimeOffset time) => time.ToLocalTime().ToString("HH:mm:ss", CultureInfo.CurrentCulture);
+
+    private static string FormatValue(double value) => value.ToString("N0", CultureInfo.CurrentCulture);
+
+    // The middle of the scale can be fractional (for example 0.5 or 12.5).
+    private static string FormatAxisValue(double value) => value.ToString("#,0.#", CultureInfo.CurrentCulture);
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "XtreamForge – EF Core / PostgreSQL"
+  short_description: "EF Core entities, mappings and migrations"
+  default_prompt: "Use $ef-core-postgres to add a new entity and migration for XtreamForge."

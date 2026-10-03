@@ -1,0 +1,20 @@
+@* Effective state of an Xtream category, as decided by the API. *@
+@if (Category.Decision == InclusionDecision.Exclude)
+{
+    <span class="status-pill status-pill-danger">
+        <FluentIcon Value="@(new Icons.Regular.Size16.EyeOff())" aria-hidden="true" />
+        Excluded
+    </span>
+}
+else
+{
+    <span class="status-pill status-pill-success">
+        <FluentIcon Value="@(new Icons.Regular.Size16.Eye())" aria-hidden="true" />
+        Included
+    </span>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public XtreamCategoryDto Category { get; set; } = default!;
+}

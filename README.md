@@ -6,88 +6,80 @@ XtreamForge is an early-stage, self-hosted .NET application that sits in front o
 
 ## Current status
 
-This repository currently provides the first backend and administration foundation:
+This repository currently provides:
 
-- `XtreamForge` backend for Minimal APIs, Xtream proxying, category processing, and EF Core persistence
-- `XtreamForge.Blazor` administration UI built as a Blazor Web App with Interactive Server rendering
+- `XtreamForge.ApiService` backend with Minimal APIs, Xtream proxying, category and item processing, and TMDB ID and metadata enrichment
+- `XtreamForge.Web` administration UI built as a Blazor Web App with Interactive Server rendering and Fluent UI
 - PostgreSQL persistence with EF Core and Npgsql
 - .NET Aspire orchestration
-- Docker Compose development setup
-- xUnit test coverage for backend behavior and admin API endpoints
+- xUnit v3 test coverage for backend behavior, admin API endpoints, and UI helpers
 
-TMDB lookup, metadata rewriting beyond category translation, and authentication are intentionally out of scope for the current implementation.
+Metadata rewriting beyond categories, `tmdb_id`, and the TMDB fields listed in [TMDB metadata](#tmdb-metadata), and authentication, are out of scope for the current implementation.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    Client[Xtream Client] --> Backend[XtreamForge Backend]
-    Backend --> Db[(PostgreSQL)]
-    Backend --> Upstream[Xtream Provider]
+    Client[Xtream Client] --> Api[XtreamForge.ApiService]
+    Api --> Db[(PostgreSQL)]
+    Api --> Upstream[Xtream Provider]
+    Api --> Tmdb[TMDB API]
 
-    Admin[Administrator] --> Blazor[XtreamForge.Blazor]
-    Blazor --> Backend
+    Admin[Administrator] --> Web[XtreamForge.Web]
+    Web --> Api
 ```
 
 ### Design principles
 
 - **Blazor Interactive Server** for the administration UI
-- **Backend-owned business logic** for category discovery, rules, mappings, and Xtream transformations
-- **Vertical Slice organization** inside `XtreamForge.Blazor` so each feature keeps its UI and HTTP client code together
+- **Backend-owned business logic** for category discovery, rules, mappings, Xtream transformations, and TMDB matching
+- **Feature-oriented organization** inside `XtreamForge.Web` so each feature keeps its UI and HTTP client code together
 - **KISS** over ceremony
 - **Pragmatic SOLID** without repository layers, MediatR, CQRS infrastructure, AutoMapper, or interface-plus-implementation pairs that add no value
 
 ### Projects
 
-- `src/XtreamForge` - backend ASP.NET Core application containing Minimal APIs, Xtream proxy behavior, EF Core models, migrations, and category/rule logic
-- `src/XtreamForge.Blazor` - dedicated Blazor Web App for the administration UI using Interactive Server
-- `src/XtreamForge.ServiceDefaults` - Aspire service defaults (OpenTelemetry, health checks, service discovery, resilience)
+- `src/XtreamForge.ApiService` - ASP.NET Core backend: Minimal APIs, Xtream proxy, application services, TMDB client and background retrieval
+- `src/XtreamForge.Domain` - domain entities and enums, free of infrastructure dependencies
+- `src/XtreamForge.Database` - EF Core `XtreamForgeDbContext`, entity mappings, and PostgreSQL migrations
+- `src/XtreamForge.Web` - Blazor Web App for the administration UI (Interactive Server, Fluent UI)
+- `src/XtreamForge.ServiceDefaults` - Aspire service defaults (OpenTelemetry, health checks, service discovery, resilience, credential redaction)
 - `src/XtreamForge.AppHost` - Aspire orchestration for local development
-- `tests/XtreamForge.Tests` - backend integration and unit tests, including admin API coverage and UI state helpers
+- `tests/XtreamForge.Tests` - unit and endpoint tests (SQLite in-memory for database-backed tests)
 
 ## Prerequisites
 
-- .NET SDK 10.0.x
-- Docker (for PostgreSQL via Aspire or Docker Compose)
+- .NET SDK 10.0.x (see `global.json`)
+- Docker (for PostgreSQL via Aspire)
 
 ## Configuration
 
 XtreamForge uses standard .NET configuration.
 
-Backend placeholders are present for future integrations:
+Backend (`XtreamForge.ApiService`):
 
-- `Xtream:BaseUrl`
-- `Xtream:Username`
-- `Xtream:Password`
-- `Tmdb:ApiKey`
-- `XtreamProxy:AllowAnyDestination`
-- `XtreamProxy:AllowedHosts`
+- `XtreamProxy:AllowAnyDestination` - development convenience switch; leave `false` outside trusted local development
+- `XtreamProxy:AllowedHosts` - explicit upstream DNS/IP allowlist used when `AllowAnyDestination` is `false`
+- `Tmdb:ApiKey` - TMDB API read access token (Bearer); when empty, the TMDB search is skipped
+- `Tmdb:BaseUrl` - TMDB API base URL (`https://api.themoviedb.org/3/` in `appsettings.json`); required and validated at startup
+- `Tmdb:ImageBaseUrl` - TMDB image base URL used for the posters (default `https://image.tmdb.org/t/p/`); must be an absolute HTTP(S) URL, validated at startup
+- `Tmdb:PreferredLanguage` - language used for TMDB searches and details (default `fr-FR`)
+- `Tmdb:MinimumConfidenceScore` - minimum score for a TMDB match to be accepted (default `85`)
+- `ConnectionStrings:database` - PostgreSQL connection string (supplied by Aspire)
 
-Blazor uses:
+Web (`XtreamForge.Web`):
 
-- `Backend:BaseUrl`
+- `Backend:BaseUrl` - backend base URL (default `https://xtreamforge-apiservice`, resolved through Aspire service discovery)
 
-Do not commit credentials.
+Do not commit credentials. Upstream Xtream credentials are neither configured nor stored: they travel in the client requests.
 
 For local secrets, prefer user-secrets or environment variables:
 
 ```bash
-dotnet user-secrets --project src/XtreamForge set "Xtream:BaseUrl" "https://example.test"
-dotnet user-secrets --project src/XtreamForge set "Xtream:Username" "your-user"
-dotnet user-secrets --project src/XtreamForge set "Xtream:Password" "your-password"
-dotnet user-secrets --project src/XtreamForge set "Tmdb:ApiKey" "your-tmdb-key"
+dotnet user-secrets --project src/XtreamForge.ApiService set "Tmdb:ApiKey" "your-tmdb-read-access-token"
 ```
 
-Database connections are supplied through `ConnectionStrings__database`.
-
-Proxy destination control is configured through `XtreamProxy`:
-
-- `AllowAnyDestination`: development convenience switch; leave `false` outside trusted local development
-- `AllowedHosts`: explicit upstream DNS/IP allowlist used when `AllowAnyDestination` is `false`
-
 ## Run with .NET Aspire
-
-From a clean clone:
 
 ```bash
 dotnet restore
@@ -96,261 +88,278 @@ dotnet run --project src/XtreamForge.AppHost
 
 The AppHost starts:
 
-- PostgreSQL with persistent storage
-- `XtreamForge` backend
-- `XtreamForge.Blazor` admin UI
+- PostgreSQL with a persistent data volume (`xtreamforge-postserv-data`) and pgAdmin
+- `XtreamForge.ApiService` (waits for the database)
+- `XtreamForge.Web` (waits for the backend and reaches it through service discovery)
 - the Aspire dashboard
-
-Within Aspire, the Blazor app reaches the backend through service discovery rather than a hard-coded localhost dependency.
-
-## Run with Docker Compose
-
-```bash
-docker compose up --build
-```
-
-This starts:
-
-- PostgreSQL
-- `XtreamForge` backend on `http://localhost:8080`
-- `XtreamForge.Blazor` admin UI on `http://localhost:8081`
-
-Development-only defaults are used in `docker-compose.yml`:
-
-- PostgreSQL database: `xtreamforge`
-- PostgreSQL username: `postgres`
-- PostgreSQL password: `postgres`
-
-Override them for any non-local usage.
 
 ## PostgreSQL notes
 
-- Aspire injects the database connection into the backend application.
-- Docker Compose supplies the same connection via environment variables.
-- The backend applies EF Core migrations during startup by default.
-- The Blazor project does **not** access PostgreSQL directly.
+- Aspire injects the `database` connection into the backend.
+- The backend applies EF Core migrations at startup.
+- The Web project does **not** access PostgreSQL directly.
 
 ## Xtream proxy
 
-Xtream clients should call XtreamForge using a URL that embeds the original upstream destination:
+Xtream clients call XtreamForge using a URL that embeds the original upstream destination:
 
 ```text
-http://localhost:8080/{protocol}/{host}/{port}/{rest}?username=USER&******
+{xtreamforge-base-url}/{protocol}/{host}/{port}/{rest}?username=USER&password=PASSWORD
 ```
 
-Examples:
+Example:
 
 ```text
-http://localhost:8080/http/example.com/8080/player_api.php?username=user&******
-http://localhost:8080/https/example.com/443/player_api.php?username=user&******
+{xtreamforge-base-url}/http/example.com/8080/player_api.php?username=user&password=pass&action=get_vod_streams
 ```
 
-Current behavior:
+Only `GET` and `HEAD` requests are accepted. Two routes share this URL shape: `/{protocol}/{host}/{port}/player_api.php` (case-insensitive) is handled by XtreamForge as described below, and every other path (streams, other files) is forwarded upstream by a separate route that does not load any XtreamForge data (movie streams are only reported in memory to the [watch history](#watch-history)).
 
-- XtreamForge validates `protocol`, `host`, and `port`
-- `get_vod_categories` and `get_series_categories` are fetched from upstream and rewritten from PostgreSQL-backed rules
-- `get_vod_streams` and `get_series` use effective XtreamForge category mappings, item rules, and TMDB-aware filtering before returning XtreamForge category IDs
-- `get_vod_info` and `get_series_info` rewrite category references to XtreamForge category IDs and can persist discovered TMDB IDs
-- other recognized `player_api.php` actions are classified for future transformation
-- all non-category requests are currently forwarded upstream unchanged
-- request methods, bodies, headers, query strings, and streamed responses are preserved where appropriate
+Behavior by `player_api.php` action:
 
-Recognized `player_api.php` actions:
-
-- `get_vod_categories`
-- `get_series_categories`
-- `get_vod_streams`
-- `get_series`
-- `get_vod_info`
-- `get_series_info`
-
-Transparent fallback behavior:
-
-- known non-category action -> forwarded upstream unchanged
-- unknown `player_api.php` action -> forwarded upstream unchanged
-- `player_api.php` without `action` -> forwarded upstream unchanged
-- non-`player_api.php` request -> forwarded upstream unchanged
+- `get_vod_categories` / `get_series_categories` - fetched from upstream, synchronized in PostgreSQL, filtered by category rules, and returned with XtreamForge category IDs
+- `get_vod_streams` / `get_series` - see [Catalogue processing](#catalogue-processing)
+- `get_vod_info` / `get_series_info` - see [Item details](#item-details)
+- no action (authentication) - see [Authentication and stream URLs](#authentication-and-stream-urls)
+- any other action, or a non-`player_api.php` request - forwarded upstream unchanged (status, headers, and streamed body preserved)
 
 Security notes:
 
-- Xtream credentials in the query string are preserved for upstream forwarding but are not intentionally logged or persisted by this proxy layer
-- the proxy route has SSRF implications, so XtreamForge enforces protocol, host, port, and configured host authorization checks
-- IPv4 addresses, IPv6 literals, and DNS hostnames are supported in the route format today
-- the generic Xtream proxy route is excluded from generated OpenAPI documentation
+- XtreamForge validates `protocol`, `host`, and `port`, and enforces the `XtreamProxy` host allowlist (SSRF protection)
+- Xtream credentials in the query string are forwarded upstream but are not persisted, and they are redacted from logs and telemetry
+- the Xtream proxy routes are excluded from generated OpenAPI documentation
 
-## Administration UI
+## Authentication and stream URLs
 
-`XtreamForge.Blazor` is a dedicated Blazor Web App using Interactive Server rendering.
+Some clients build the stream URLs from the `server_info` of the authentication response (`{server_protocol}://{url}:{port}/movie/{username}/{password}/{id}.{extension}`), which would bypass XtreamForge. For `player_api.php` without `action` (`GET` only):
 
-Important boundaries:
+- the upstream response is fetched; an error status is forwarded unchanged
+- when `user_info.auth` is `1`, `server_info.url`, `port`, `https_port`, and `server_protocol` are replaced with the host, port, and scheme of the request received by XtreamForge, and the upstream (`protocol` + `host` + `port`) of the account is remembered in memory (`XtreamAccountDirectory`, keyed by username and password, never persisted); the rest of the payload is unchanged
+- `/movie/{username}/{password}/{file}`, `/series/...`, and `/live/...` (without upstream prefix) are forwarded to the upstream of the account like the prefixed stream route (same destination validation, [watch history](#watch-history) included); an account that has not authenticated since XtreamForge started returns `404 Not Found`
 
-- the Blazor project owns UI state and event handling
-- the backend owns persistence and category business rules
-- Blazor reaches the backend through small Minimal Admin APIs
-- normal administration operations do not require browser document reloads
+## Watch history
 
-The Blazor project is organized by feature slices, for example:
+Every movie played through the proxy is recorded with its TMDB ID, its content type, and the start date of the playback; a movie played several times appears once per playback. The history is global: neither the Xtream account nor the source is stored.
 
-- `Features/Dashboard`
-- `Features/Categories`
-- `Features/Settings`
+- a playback starts with a `GET` of a movie stream, `movie/{username}/{password}/{streamId}.{extension}` with or without the upstream prefix, that the provider serves or redirects (redirects are forwarded to the client, which then calls the redirect target directly) (`HEAD` requests, series episodes, and live streams are not recorded)
+- a player sends several requests for one playback (range requests, seeks, reconnections): a request starts a new playback only when no request of the same movie and account is running and the last one ended more than 30 minutes ago; this state is kept in memory by the singleton `WatchHistoryQueue`, so the stream route does not access the database
+- the playbacks are recorded in the background by `WatchHistoryBackgroundService`: the TMDB ID is the persisted mapping of the stream when it exists, otherwise the `tmdb_id` of the provider `get_vod_info` payload (called with the credentials of the stream URL, kept in memory only); a playback of an unknown source or of a movie without TMDB ID is not recorded
+- `GET /api/admin/watch-history?contentType=&skip=&take=` - page (most recent first, at most 200 entries) of the history, with the title, original title, release date, and `w92` poster of the loaded TMDB metadata, and the number of matching entries; an invalid content type returns `400`
+
+## Sources
+
+A source is identified by its upstream destination (`protocol` + `host` + `port`); credentials are not part of the source key and are never stored.
+
+A source is created either:
+
+- from the admin UI (`Sources` screen / `POST /api/admin/sources`): the URL and credentials are used once to discover VOD and Series categories, then discarded; nothing is saved when the provider is unreachable
+- implicitly on the first `get_vod_categories` / `get_series_categories` request going through the proxy
+
+`get_vod_streams` / `get_series` require an already known source; otherwise XtreamForge returns `400 Bad Request` without calling the provider.
+
+Deleting a source removes its Xtream categories, rules, and TMDB mappings, but keeps the global custom categories.
 
 ## Category management
 
-XtreamForge persists category discovery, category mappings, category rules, item rules, and stream-to-TMDB mappings in PostgreSQL.
-
 Category model:
 
-- upstream categories are source-specific and scoped by upstream destination (`protocol` + `host` + `port`) plus content type (`Vod` / `Series`)
+- upstream categories are source-specific and scoped by content type (`Vod` / `Series`)
 - custom categories are global across sources and scoped by content type only
-- VOD and Series custom-category namespaces are separate
-- rule scope remains source + content type
+- categories no longer returned by the provider are disabled, not deleted
+- an upstream category loses its custom category mapping when the provider renames it (a change of case only is ignored) or stops returning it; it is then exposed with its original name until it is mapped again
+- when the provider renames a category (case-insensitive comparison) or returns a previously disabled one, its custom category mapping is reset and must be set again
+- rules are scoped by source and content type
 
-Mapping choices in the admin grid:
+For each upstream category, the admin UI allows to:
 
-- `Disabled` - manual disable override; the upstream category stays discovered but is not exposed
-- `Original` - expose the upstream category with its source-specific original name and stable XtreamForge ID
-- `New category` - create one new global custom category and map the row to it
-- `Existing custom category` - map the upstream category to an existing global custom category
+- exclude it manually without deleting discovery data
+- expose it with its original name and a stable XtreamForge ID
+- map it to a global custom category (several source categories can share one custom category)
+- see the effective decision and its reason (manual exclusion, provider disabled, or deciding rule)
 
 Effective precedence:
 
-1. Manual Disabled
-2. Rules (first enabled matching rule wins)
-3. If still enabled, apply the current mapping (`Original` or `Custom Category`)
+1. manual exclusion and categories disabled by the provider
+2. category rules (first enabled matching rule wins)
+3. if still included, the mapping (original or custom category)
 
-Current category capabilities:
+## Rules
 
-- discover upstream VOD and Series categories on the first matching `player_api.php` request
-- keep categories unchanged by default through `Original`
-- manually disable categories without deleting discovery data
-- map multiple source categories to one shared global custom category
-- show the first matched rule for each category
-- persist stable XtreamForge category IDs across refreshes and restarts
-- edit category mappings, rules, and custom categories interactively from Blazor without full page reloads
+Category, item, and TMDB rules share the same model:
 
-How it works today:
+- stored in PostgreSQL; category and item rules are scoped per source and content type, TMDB rules are global per content type
+- evaluated in ascending sequence; the first enabled matching rule wins
+- operators: `StartsWith`, `Contains`, `NotStartsWith`, `NotContains`
+- case-sensitive or case-insensitive matching
+- actions: `Include` / `Exclude`; no matching rule means `Include`
+- the admin UI can create, edit, reorder, enable/disable, and delete rules; a new order is saved atomically (`PUT .../category-rules/order`, `.../item-rules/order`, or `/api/admin/tmdb-rules/order`)
 
-1. Request `get_vod_categories` or `get_series_categories` through the Xtream proxy route.
-2. XtreamForge fetches the upstream categories and stores the discovered source/category records.
-3. Open `XtreamForge.Blazor` and go to `Categories`.
-4. Select the upstream source and content type.
-5. Search/filter rows while typing, then choose `Disabled`, `Original`, `New category`, or an existing custom category.
-6. Manage rules and global custom categories in the same screen with interactive save/delete feedback.
-7. Repeat the category request to receive the rewritten category list with stable XtreamForge IDs.
+Category rules match the category name. Item rules match the item `name` sent by the provider; items without a name are always excluded. TMDB rules match the TMDB title or genres of the item, see [TMDB rules](#tmdb-rules).
 
-Notes:
+## Catalogue processing
 
-- source identity is based on upstream destination only; credentials are not used as the source key and are not stored with category records
-- `get_vod_streams` and `get_series` translate XtreamForge output category IDs back to the currently effective upstream category IDs before querying/filtering results
-- for `get_vod_streams` and `get_series`, missing `category_id`, empty `category_id`, and `category_id=ALL` all mean all categories and still pass through XtreamForge filtering/remapping
-- in all-category mode, XtreamForge keeps the upstream query shape when possible: missing `category_id` stays absent upstream, while explicit `category_id=ALL` stays present
-- returned stream and detail payloads expose XtreamForge category IDs instead of upstream category IDs
-- effective reverse mappings exclude upstream categories removed by manual disable or category rules
+For `get_vod_streams` and `get_series`:
 
-## Category Rules
+1. Xtream clients send XtreamForge category IDs; they are resolved to the effective included upstream category IDs (manual exclusions and category rules are respected).
+2. A `category_id` that is not a number or matches no included category returns `400 Bad Request`. A missing, empty, or `ALL` `category_id` means all categories: XtreamForge sends one upstream request with `category_id=ALL`. Otherwise a single upstream request is also sent: with the upstream category ID when the requested category maps to one upstream category, or with `category_id=ALL` filtered through the mapping when it maps to several (custom category).
+3. Items are processed in a streaming way (parsed once, response flushed in chunks):
+   - items whose category is not effectively included are removed, and `category_id` / `category_ids` are rewritten to XtreamForge IDs
+   - item rules are applied
+   - a TMDB ID must be known (see below), otherwise the item is removed from the current response
+   - duplicated items are removed
+   - by batches of 500 items, the loaded TMDB metadata of the batch is read with one query and applied (see [TMDB metadata](#tmdb-metadata)); an item whose metadata is not loaded (or whose `tmdb_id` is not a positive number) is removed from the current response, as is an item whose TMDB metadata is excluded manually or by a TMDB rule (see [TMDB rules](#tmdb-rules)); the item rules are not applied again
 
-Category rules decide whether an upstream category participates in the effective XtreamForge catalogue before original/custom mapping is applied.
+Item rules, TMDB mappings, and deferred TMDB lookups are preloaded once per request (`Source + ContentType`) into in-memory dictionaries and sets to avoid per-item database lookups.
 
-Rule behavior:
+## Item details
 
-- rules are stored in PostgreSQL
-- rules are scoped independently per upstream source and content type
-- rules are evaluated sequentially in ascending order
-- the first enabled matching rule wins
-- matching supports `StartsWith` and `Contains`
-- each rule can be case-sensitive or case-insensitive
-- `Include` and `Exclude` actions are supported
-- no matching rule means `Include`
-- excluded categories remain discovered in PostgreSQL and are not deleted
-- the admin UI can create, edit, reorder, enable/disable, and delete rules interactively
+For `get_vod_info` and `get_series_info`, the item is returned only if it would appear in `get_vod_streams` / `get_series`:
 
-Manual category disable still takes precedence over rule evaluation.
+1. A missing or empty `vod_id` / `series_id` returns `400 Bad Request`, as does an unknown source (request the categories first).
+2. The upstream payload is fetched with the original query string and parsed as a whole (it describes a single item).
+3. The item fields are read from `movie_data` for VOD and from `info` for series: its `category_id` must belong to an effectively included category and is rewritten to the XtreamForge ID (`category_ids` too, and `info.category_id` for VOD), then the item rules are applied.
+4. A TMDB ID must be known: the persisted mapping of the stream wins (it may have been corrected manually) and is injected as `info.tmdb_id` (and replaces `movie_data.tmdb_id` for VOD when present); otherwise the provider `tmdb_id` (`info`, or `movie_data` for VOD) is kept. No TMDB ID lookup is enqueued from this action.
+5. The TMDB metadata must be loaded: it is applied to `info` and `movie_data` for VOD, and to `info` for series (see [TMDB metadata](#tmdb-metadata)); the item is not returned when its TMDB metadata is excluded manually or by a TMDB rule.
 
-## Item Rules
+When the item would not be listed, the empty payload of Xtream panels is returned with `200 OK`: `{"info":[],"movie_data":[]}` for VOD, `{"seasons":[],"info":[],"episodes":[]}` for series. Other fields (seasons, episodes, metadata) are returned unchanged; an upstream error status is forwarded.
 
-Item rules decide whether an individual VOD or Series item survives catalogue processing after category filtering/mapping.
+## TMDB enrichment
 
-Rule behavior:
+An item is returned only when a usable TMDB ID is known and its TMDB metadata is loaded (see [TMDB metadata](#tmdb-metadata)). The TMDB ID comes from either:
 
-- rules are stored in PostgreSQL
-- rules are scoped independently per upstream source and content type
-- rules are evaluated sequentially in ascending order
-- the first enabled matching rule wins
-- matching currently supports the `Name` field with `StartsWith` and `Contains`
-- each rule can be case-sensitive or case-insensitive
-- `Include` and `Exclude` actions are supported
-- no matching rule means `Include`
-- the admin UI can create, edit, reorder, enable/disable, delete, and test rules interactively
+- the upstream list item already exposing `tmdb_id`
+- a persisted `Source + ContentType + StreamId -> TmdbId` mapping (injected as `tmdb_id`)
 
-## TMDB enrichment (phase 1)
+When no TMDB ID is known and no lookup is deferred for the stream, XtreamForge enqueues a background lookup (`TmdbIdRetrieverBackgroundService`):
 
-For `get_vod_streams` and `get_series`, XtreamForge now returns an item only when a usable TMDB ID is known.
+- the queue is bounded and deduplicated per `Source + ContentType + StreamId`
+- the upstream credentials are kept in memory only while the lookup is pending
+- the worker calls `get_vod_info` / `get_series_info` on the same upstream source and uses `info.tmdb_id` (and `movie_data.tmdb_id` for VOD) when present
+- otherwise, when `Tmdb:ApiKey` is configured, it searches TMDB and scores the candidates
+- a found TMDB ID is persisted so the item appears on a later request
+- a lookup without result or failing (provider or TMDB error) is persisted as a mapping without TMDB ID (`stream_tmdb_mappings.tmdb_id` is null) with an attempt count and the date of the next lookup; the item is not enqueued again before that date. The delay is 1 day after the first attempt and doubles on each new attempt, up to 30 days
+- a found TMDB ID, from the provider or from the TMDB search, is enqueued for the background load of its TMDB metadata, see below
 
-Known TMDB IDs come from either:
+TMDB matching (`Services/Tmdb`):
 
-- the current upstream list item already exposing `tmdb_id`
-- a previously persisted `Source + ContentType + StreamId -> TmdbId` mapping
+1. The provider title is cleaned (language/technical tags, delimited year) and the item is ignored when it is not scorable (no title, or a title without date, poster, cast, or genres).
+2. `search/movie` or `search/tv` is called with the release year, then without it when nothing is found; the lookup stops with 0 or more than 5 candidates.
+3. The details (`movie/{id}` / `tv/{id}` with credits) of each candidate are scored by the registered `ITmdbScoringRule` implementations:
+   - basic stage: title (35), poster identical to the provider poster or `stream_icon` (40), release date (25), cast (10), genres (10, compared with localized and English TMDB genre names), single candidate (10)
+   - advanced stage, only when the basic score reaches 60: seasons and episodes for series (20, additional `tv/{id}/season/{n}` calls)
+4. The best candidate is kept when its score reaches `Tmdb:MinimumConfidenceScore`.
 
-If an item survives category and item-rule processing but still has no known TMDB ID:
+A new scoring rule is added by implementing `ITmdbScoringRule` and registering it in `DependenciesExtensions`.
 
-- it is excluded from the current response
-- XtreamForge enqueues a background `get_vod_info` or `get_series_info` lookup against the same upstream source
-- if the detail payload exposes a usable `tmdb_id`, XtreamForge persists the mapping so the item can appear on a later request
+Upstream rate limiting (TMDB and Xtream providers): every request of the TMDB and Xtream HTTP clients goes through `RateLimitHandler`, with one state per upstream host (scheme, host, port) in the singleton `UpstreamRateLimiter`. Requests to a host are not delayed until it answers HTTP 429; then its next requests are paused (`Retry-After` is honored, capped at one minute) and spaced by an interval that doubles on each 429 (1 s up to 30 s) and shrinks by 10% after each response that is not rate limited. A rate-limited GET/HEAD request is sent again up to three times in total; the last 429 response is then returned unchanged (the proxy forwards it to the client, background TMDB lookups fail and are logged as a warning). The standard resilience pipeline neither retries 429 nor counts it for its circuit breaker.
 
-Implementation notes:
+The dashboard shows the number of known TMDB mappings and of unresolved lookups (mappings without TMDB ID).
 
-- XtreamForge does not call the TMDB API in this phase
-- request-time processing preloads item rules and TMDB mappings once per `Source + ContentType` request into in-memory dictionaries to avoid per-item database lookups
-- list processing preserves provider-specific fields and injects `tmdb_id` when the database already knows the mapping
+The persisted mappings can be corrected, and the unresolved ones mapped manually, from the `TMDB mappings` screen of the Items section. A TMDB ID set manually is never looked up again and its TMDB metadata is enqueued for loading. Items whose upstream list entry already exposes `tmdb_id` have no mapping and cannot be corrected this way.
 
-## Stream and detail category translation
+Admin API:
 
-XtreamForge applies the effective category model when processing:
+- `GET /api/admin/sources/{sourceId}/tmdb-mappings?contentType=&search=&isMapped=&skip=&take=` - page (most recent first, at most 200 entries) of the mappings of a source and content type, with the title, original title, release date, and `w92` poster of the loaded TMDB metadata, and counters (total, mapped) over the source and content type; the search matches the exact stream ID, the exact TMDB ID, or the TMDB title or original title (ignoring case); an invalid content type returns `400`, an unknown source `404`
+- `PATCH /api/admin/tmdb-mappings/{id}` with `{ tmdbId }` - sets the TMDB ID of a mapping; a TMDB ID that is not positive returns `400`, an unknown mapping `404`
 
-- `get_vod_streams`
-- `get_series`
-- `get_vod_info`
-- `get_series_info`
+## TMDB metadata
 
-Behavior:
+The TMDB metadata of movies and TV shows is stored in `tmdb_infos`, one entry per `ContentType + TmdbId` (movie and TV IDs overlap): title, original title, release date, poster path, overview, vote average, vote count, genres, directors, cast, and duration, in the `Tmdb:PreferredLanguage` language. Genres are stored as TMDB genre IDs with their English names (`TmdbGenres`, unknown IDs have no name). Directors are the creators for a TV show, the cast is limited to the first 10 members in credit order, and the duration is in minutes (movie `runtime`, or TV `episode_run_time` falling back to the runtime of the last aired episode). Every value is optional; TMDB values are sanitized (blank texts dropped, long texts truncated, ratings outside 0-10 ignored).
 
-- Xtream clients send XtreamForge output category IDs
-- XtreamForge resolves those IDs to the effective included upstream category IDs for the selected source and content type
-- manual exclusions and category rules are respected before any reverse mapping is used
-- merged output categories are queried using only the currently included upstream category IDs
-- stream list results are filtered and rewritten so returned `category_id` values use XtreamForge IDs
-- stream list results then pass through ordered item rules and TMDB-only filtering/enrichment
-- detail results rewrite discovered `category_id` / `category_ids` values to XtreamForge IDs
+Entries are only filled from the TMDB details (`movie/{id}` / `tv/{id}` with `append_to_response=credits`), loaded in the background by `TmdbInfoBackgroundService` through the in-memory `TmdbInfoQueue`, deduplicated per `ContentType + TmdbId`. A load is enqueued when a TMDB ID lookup finds a TMDB ID (from the provider or from the TMDB search), and when a returned item needs it (see below). A request for an entry already loaded and not due for a refresh (or waiting for a retry) is ignored.
 
-If the client requests either:
+When an item with a TMDB ID is returned (lists and item details) and its metadata is missing, or due for a refresh or a retry, a background load is enqueued (only when `Tmdb:ApiKey` is configured). An item is returned only once its metadata is loaded: without it, the item is removed from the current response and appears on a later request; while a refresh is pending, the stored metadata is used. Loaded metadata is refreshed after 60 days. When TMDB does not know the ID or the load fails, the next load is deferred by 1 day, doubling on each new attempt up to 30 days; already loaded metadata is kept.
 
-```text
-player_api.php?action=get_vod_streams
-player_api.php?action=get_vod_streams&category_id=ALL
-```
+The provider values and the TMDB metadata are merged: the metadata replaces only the keys already present in the provider item, and only with available values, so a provider value is kept when TMDB has none; when both have a value, the TMDB value wins, except for `genre` (the JSON kind of numeric provider values is kept):
 
-XtreamForge treats both requests as all categories, performs one upstream catalogue request, rewrites `category_id` / `category_ids` to XtreamForge IDs, applies item rules, removes items without an effective included category or known TMDB ID, enriches `tmdb_id` from persisted mappings when needed, and deduplicates the result set. The same behavior applies to `get_series`.
+- `name`, `o_name`, `title` - `{Title} | {Year}` (or `{Title}` without release date)
+- `year`, `release_date` - release year; `releasedate`, `releaseDate` - release date (`yyyy-MM-dd`)
+- `stream_icon` - poster `w342`; `movie_image`, `cover_big`, `cover` - poster `w780`
+- `rating` - vote average (one decimal), `rating_5based` - vote average / 2; only when the vote count is positive
+- `plot`, `description` - overview
+- `director` - directors (creators for a TV show), separated by `, `; `cast`, `actors` - cast, separated by `, `
+- `duration_secs` - duration in seconds, `duration` - `HH:MM:SS`, `episode_run_time` - minutes
+- `genre` - only when the provider value is empty, `null`, or `[]`: English TMDB genre names separated by `, ` (the provider genre is otherwise kept, the stored genres being English while the other metadata uses `Tmdb:PreferredLanguage`)
+
+## TMDB rules
+
+TMDB metadata entries can be excluded, for every source:
+
+- manually, with the `IsExcluded` flag of the entry (`tmdb_infos.is_excluded`), from the `TMDB infos` screen
+- by TMDB rules (`tmdb_rules`), global per content type, which match the TMDB `Title` or `Genre` of the entry; a genre rule is evaluated per genre (the stored English names): `StartsWith` and `Contains` match when at least one genre matches, `NotStartsWith` and `NotContains` when no genre does (for example, exclude the items whose genre contains `Horror`)
+
+A manual exclusion wins; otherwise the first enabled matching TMDB rule by ascending sequence decides, and an entry no rule matches is included. TMDB rules are evaluated after the enrichment metadata is known and replace a second evaluation of the item rules. The enabled TMDB rules of the content type are loaded once per catalogue request; for the manually excluded entries, only their TMDB IDs are loaded (no metadata, no background load), and their items are not returned.
+
+Admin API:
+
+- `GET /api/admin/tmdb-infos?contentType=&search=&genre=&decision=&isExcluded=&isLoaded=&skip=&take=` - page (sorted by title, at most 200 entries) of the TMDB metadata of a content type with the decision of each entry, and counters and genre names (sorted) over the whole content type; the search matches the title, the original title, or the exact TMDB ID, the genre one of the genre names (ignoring case); posters are returned as `w92` and `w342` URLs
+- `GET /api/admin/tmdb-infos/{id}` - every value of an entry (overview, directors, cast, duration) with its decision
+- `PATCH /api/admin/tmdb-infos/{id}` with `{ isExcluded }` - sets the manual exclusion
+- `GET /api/admin/tmdb-rules?contentType=`, `POST /api/admin/tmdb-rules`, `PUT|DELETE /api/admin/tmdb-rules/{id}`, `PUT /api/admin/tmdb-rules/order` - same contracts as the item rules, without source, with a `field` (`Title` or `Genre`); invalid values return `400`
+
+## Background queue monitoring
+
+Background queues (the TMDB ID lookup queue, the TMDB metadata queue, and the watch history queue) implement `IMonitoredQueue` and are sampled by `QueueMonitor` (`Services/Monitoring`):
+
+- every 10 s, the size of each queue and the items processed since the previous sample (succeeded, no result, failed) are recorded; one hour of samples is kept in memory and lost on restart
+- `GET /api/admin/queues` returns the current size and the history of each queue, and the upstream hosts that answered HTTP 429 since the API started (current spacing, number of 429)
+- the Monitoring page (`/monitoring`) shows them live (refreshed every 5 s while the page is open): current size, peak and outcomes over the last hour, a chart of the waiting items and a chart of the processed items
+- the same values are published as OpenTelemetry metrics by the `XtreamForge.ApiService` meter: `xtreamforge.queue.size` (gauge, tag `queue`), `xtreamforge.queue.items.processed` (counter, tags `queue` and `outcome`) and `xtreamforge.upstream.rate_limited` (counter, tag `host`); they are visible in the Aspire dashboard
+
+## Administration UI
+
+`XtreamForge.Web` is a Blazor Web App using Interactive Server rendering and Fluent UI components.
+
+Boundaries:
+
+- the Web project owns UI state and event handling
+- the backend owns persistence and business rules
+- the Web project calls the backend admin API (`/api/admin/...`) through typed `HttpClient`s
+
+Features (`src/XtreamForge.Web/Features`):
+
+- `Dashboard` - application and database status; configuration counters (sources, Xtream and custom categories, category, item, and TMDB rules) and TMDB counters (known mappings, unresolved lookups, TMDB infos, failed TMDB loads, i.e. entries whose first load failed and that wait for a retry, and manually excluded entries; the last two link to the filtered TMDB infos screen)
+- `Monitoring` - live background queues (size, one hour charts) and upstream rate limits
+- `History` - watch history (`/history`): the playbacks, most recent first, with their start date, TMDB title and poster (paged by the API)
+- `Sources` - list, create (with provider discovery), delete
+- `Categories` - Xtream categories, custom categories, category rules; a click on an Xtream category opens its details (decision and deciding rule) where the manual exclusion and the custom category can also be changed
+- `Items` - item rules, and TMDB mappings: the mappings of a source and content type (stream ID, TMDB title and poster, or the state of the background lookup when not found; filtered by search and mapped state, and paged by the API), whose edit button opens an editor to set the TMDB ID
+- `Tmdb` - TMDB infos (poster, genres, rating, effective state and reason, manual exclusion; filtered by search, genre, state, and load state, and paged by the API) and TMDB rules; a click on an entry opens its details (decision and deciding rule, overview, directors, cast, and duration) where the manual exclusion can also be changed; the `New TMDB rule` button opens the rule editor prefilled with the search
+- `Rules` - shared rules screen and rule editor (category, item, and TMDB rules)
 
 ## Useful endpoints
 
-- Admin UI: `http://localhost:8081/`
-- Backend status: `http://localhost:8080/api/status`
-- Backend admin status: `http://localhost:8080/api/admin/status`
-- Backend health: `http://localhost:8080/health`
+- Backend admin status: `/api/admin/status`
+- Background queues and upstream rate limits: `/api/admin/queues`
+- Health: `/health` (all checks) and `/alive` (liveness)
+
+Ports are assigned by Aspire; use the Aspire dashboard to open the Web UI and the backend.
 
 ## Test
 
 ```bash
-dotnet restore
-dotnet build
-dotnet test
+dotnet build XtreamForge.slnx
+dotnet test --project tests/XtreamForge.Tests
 ```
 
-The test suite does not require a locally installed PostgreSQL instance.
+Tests use xUnit v3 on Microsoft Testing Platform (configured in `global.json`) and do not require a PostgreSQL instance.
+
+TRX reports and Cobertura code coverage are available through the Microsoft Testing Platform extensions:
+
+```bash
+dotnet test --solution XtreamForge.slnx --results-directory TestResults --report-trx --coverage --coverage-output-format cobertura
+```
+
+The GitHub Actions workflow (`.github/workflows/ci.yml`) restores, builds in Release, and runs the tests with these options on pull requests and pushes to `main`; the `TestResults` folder is uploaded as an artifact when the job fails.
 
 ## Known limitations
 
-- Xtream rewriting currently focuses on category translation for category, stream, and detail actions
-- TMDB enrichment currently depends only on upstream Xtream list/detail payloads and persisted mappings; no TMDB API integration exists yet
+- items without a known TMDB ID are hidden until the background lookup succeeds
+- an item whose lookup found nothing is looked up again only after its retry delay (up to 30 days), even if `Tmdb:ApiKey` is configured in the meantime
+- the TMDB lookup and metadata queues are in memory: pending lookups and loads are lost on restart (missing metadata is enqueued again by the next catalogue request)
+- the watch history only records movies, from the start of the playback, whatever the part actually watched; pending playbacks are lost on restart, and stream URLs that bypass XtreamForge are not recorded
+- items are hidden until their TMDB metadata is loaded, so the first catalogue requests return few items; without `Tmdb:ApiKey`, no metadata is loaded and no item is returned
+- changing `Tmdb:PreferredLanguage` only affects metadata loaded or refreshed afterwards
+- while a provider rate limits (HTTP 429), proxied client requests to it wait for their slot (up to one minute per attempt, three attempts), which can exceed the timeout of some IPTV clients
+- stream URLs without upstream prefix only work once the account has authenticated through XtreamForge since its last start, and use the host and port of the request received by XtreamForge (a reverse proxy must forward the original `Host`); the short live form `/{username}/{password}/{id}` and `/timeshift/...` are not supported
 - no admin authentication yet

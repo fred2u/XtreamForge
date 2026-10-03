@@ -1,0 +1,155 @@
+@page "/"
+@inject DashboardClient DashboardClient
+
+<PageTitle>Dashboard - XtreamForge</PageTitle>
+
+<PageHeader Title="Dashboard" Subtitle="Operational status for the XtreamForge administration application.">
+    <Actions>
+        <FluentButton Appearance="ButtonAppearance.Outline"
+                      IconStart="@(new Icons.Regular.Size16.ArrowClockwise())"
+                      Loading="@_isLoading"
+                      OnClick="@LoadAsync">
+            Refresh
+        </FluentButton>
+    </Actions>
+</PageHeader>
+
+@if (_status is null && _isLoading)
+{
+    <div class="dashboard-metrics-grid">
+        @for (var index = 0; index < 11; index++)
+        {
+            <FluentCard Class="dashboard-metric-card">
+                <FluentSkeleton Width="60%" Height="1rem" Shimmer="true" />
+                <FluentSkeleton Width="40%" Height="2rem" Shimmer="true" />
+            </FluentCard>
+        }
+    </div>
+}
+else if (_status is null)
+{
+    <FluentCard Class="status-card">
+        <EmptyState Title="Unable to load the dashboard"
+                    Description="@($"Try again after the backend and database are available. {_errorMessage}")"
+                    Icon="@(new Icons.Regular.Size24.PlugDisconnected())">
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@LoadAsync">Try again</FluentButton>
+        </EmptyState>
+    </FluentCard>
+}
+else
+{
+    <section class="dashboard-overview">
+        @foreach (var group in GetMetricGroups(_status))
+        {
+            <div>
+                <div class="dashboard-section-heading">
+                    <h2>@group.Title</h2>
+                    <span class="section-count">@group.Description</span>
+                </div>
+                <div class="dashboard-metrics-grid">
+                    @foreach (var metric in group.Metrics)
+                    {
+                        @if (metric.Href is null)
+                        {
+                            <FluentCard Class="dashboard-metric-card">
+                                <MetricContent Metric="@metric" />
+                            </FluentCard>
+                        }
+                        else
+                        {
+                            <a class="metric-link" href="@metric.Href" title="@($"Manage {metric.Label.ToLowerInvariant()}")">
+                                <FluentCard Class="dashboard-metric-card">
+                                    <MetricContent Metric="@metric" />
+                                </FluentCard>
+                            </a>
+                        }
+                    }
+                </div>
+            </div>
+        }
+
+        <FluentCard Class="dashboard-health-card">
+            <div class="dashboard-section-heading">
+                <h2>System health</h2>
+                <span class="section-count">Live administration summary</span>
+            </div>
+
+            <div class="dashboard-health-grid">
+                <div class="dashboard-health-row">
+                    <div class="dashboard-health-label">Application</div>
+                    <div class="@GetStatusClass(_status.Status)">
+                        <span class="status-dot"></span>
+                        <span>@_status.Status</span>
+                    </div>
+                    <div class="dashboard-health-meta">
+                        <span>@_status.ApplicationName</span>
+                        <span>Version @_status.ApplicationVersion</span>
+                    </div>
+                </div>
+
+                <div class="dashboard-health-row">
+                    <div class="dashboard-health-label">Database</div>
+                    <div class="@GetStatusClass(_status.DatabaseStatus)">
+                        <span class="status-dot"></span>
+                        <span>@_status.DatabaseStatus</span>
+                    </div>
+                    <div class="dashboard-health-meta">@_status.DatabaseDetails</div>
+                </div>
+            </div>
+        </FluentCard>
+    </section>
+}
+
+@code {
+    private DashboardStatusDto? _status;
+    private bool _isLoading = true;
+    private string? _errorMessage;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+        try
+        {
+            _status = await DashboardClient.GetStatusAsync();
+        }
+        catch (Exception exception)
+        {
+            _status = null;
+            _errorMessage = exception.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private static IEnumerable<DashboardMetricGroup> GetMetricGroups(DashboardStatusDto status) =>
+    [
+        new("Configuration", "Sources, categories and filtering rules",
+        [
+            new("Sources", status.SourceCount, new Icons.Regular.Size20.PlugConnected(), "/sources"),
+            new("Xtream categories", status.SourceCategoryCount, new Icons.Regular.Size20.Grid(), "/categories/xtream"),
+            new("Custom categories", status.CustomCategoryCount, new Icons.Regular.Size20.Tag(), "/categories/custom"),
+            new("Category rules", status.RuleCount, new Icons.Regular.Size20.Filter(), "/categories/rules"),
+            new("Item rules", status.ItemRuleCount, new Icons.Regular.Size20.TextBulletListLtr(), "/items/rules"),
+            new("TMDB rules", status.TmdbRuleCount, new Icons.Regular.Size20.Filter(), "/tmdb/rules")
+        ]),
+        new("TMDB", "Stream to TMDB ID mappings and TMDB metadata",
+        [
+            new("Known TMDB mappings", status.KnownTmdbMappingCount, new Icons.Regular.Size20.Link(), null),
+            new("Unresolved TMDB lookups", status.UnresolvedTmdbMappingCount, new Icons.Regular.Size20.LinkDismiss(), null),
+            new("TMDB infos", status.TmdbInfoCount, new Icons.Regular.Size20.Video(), "/tmdb/infos"),
+            new("Failed TMDB loads", status.NotLoadedTmdbInfoCount, new Icons.Regular.Size20.ErrorCircle(), "/tmdb/infos?load=NotLoaded"),
+            new("Manually excluded TMDB infos", status.ManuallyExcludedTmdbInfoCount, new Icons.Regular.Size20.EyeOff(), "/tmdb/infos?manual=Excluded")
+        ])
+    ];
+
+    private static string GetStatusClass(string status) =>
+        string.Equals(status, "Healthy", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, "Connected", StringComparison.OrdinalIgnoreCase)
+            ? "status-pill status-pill-success"
+            : "status-pill status-pill-danger";
+}

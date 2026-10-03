@@ -1,0 +1,568 @@
+@page "/items/tmdb-mappings"
+@using XtreamForge.Web.Features.Categories
+@using XtreamForge.Web.Features.Tmdb
+@implements IDisposable
+@inject TmdbMappingsClient TmdbMappingsClient
+@inject CategoriesClient CategoriesClient
+@inject INotificationService NotificationService
+@inject NavigationManager NavigationManager
+@inject TmdbScreenState ScreenState
+
+<PageTitle>TMDB mappings - XtreamForge</PageTitle>
+
+<PageHeader Title="TMDB mappings" Subtitle="TMDB IDs found in the background for the movies and series of a source without TMDB ID. Correct a wrong match or map manually a stream that could not be identified.">
+    <Actions>
+        <FluentButton Appearance="ButtonAppearance.Outline"
+                      IconStart="@(new Icons.Regular.Size16.ArrowClockwise())"
+                      Loading="@_isRefreshing"
+                      Disabled="@_isLoadingSources"
+                      OnClick="@RefreshAsync">
+            Refresh
+        </FluentButton>
+    </Actions>
+</PageHeader>
+
+@if (_isLoadingSources)
+{
+    <FluentCard Class="surface">
+        <div class="skeleton-list">
+            <FluentSkeleton Width="40%" Height="2rem" Shimmer="true" />
+            <FluentSkeleton Width="100%" Height="2.5rem" Shimmer="true" />
+        </div>
+    </FluentCard>
+}
+else if (_sourcesError is not null)
+{
+    <LoadErrorState Title="Unable to load the sources" Error="@_sourcesError" IsRetrying="@_isRefreshing" OnRetry="@RefreshAsync" />
+}
+else if (_sources.Count == 0)
+{
+    <FluentCard Class="surface">
+        <NoSourceMessage />
+    </FluentCard>
+}
+else
+{
+    <FluentCard Class="surface filter-bar">
+        <CategoryScopeBar Sources="@_sources"
+                          SourceId="@_sourceId"
+                          SourceIdChanged="@SetSourceAsync"
+                          ContentType="@_contentType"
+                          ContentTypeChanged="@SetContentTypeAsync">
+            <div class="filter-search">
+                <FluentTextInput Label="Search"
+                                 Value="@_filter.Search"
+                                 ValueChanged="@((string? value) => SetFilterAsync(_filter with { Search = value }))"
+                                 Immediate="true"
+                                 ImmediateDelay="300"
+                                 Placeholder="Stream ID, TMDB ID or TMDB title"
+                                 Width="100%">
+                    <StartTemplate>
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Search())" aria-hidden="true" />
+                    </StartTemplate>
+                </FluentTextInput>
+            </div>
+        </CategoryScopeBar>
+
+        <div class="filter-row">
+            <SegmentedControl TValue="MappingStateFilter" Label="TMDB ID" Options="@StateOptions"
+                              Value="@_filter.State" ValueChanged="@(value => SetFilterAsync(_filter with { State = value }))" />
+        </div>
+    </FluentCard>
+
+    <FluentCard Class="surface grid-surface">
+        @if (!IsScopeSelected)
+        {
+            <EmptyState Title="@(_sourceId is null ? "Select a source" : "Select a content type")"
+                        Description="TMDB mappings are listed per source and content type. Choose both above to see and correct them."
+                        Icon="@(new Icons.Regular.Size24.Link())" />
+        }
+        else if (_loadError is not null)
+        {
+            <LoadErrorState Title="Unable to load the TMDB mappings" Error="@_loadError" IsRetrying="@_isRefreshing" OnRetry="@RefreshAsync" />
+        }
+        else if (_page is { TotalCount: 0 })
+        {
+            <EmptyState Title="No TMDB mapping yet"
+                        Description="Mappings appear once clients request the movies or series of this source through the proxy and an item without TMDB ID is looked up in the background."
+                        Icon="@(new Icons.Regular.Size24.Link())" />
+        }
+        else
+        {
+            <div class="grid-caption" aria-live="polite">
+                @if (_page is { } counters)
+                {
+                    <span>
+                        Showing <strong>@counters.MatchingCount.ToString("N0", CultureInfo.CurrentCulture)</strong>
+                        of @counters.TotalCount.ToString("N0", CultureInfo.CurrentCulture)
+                        <ContentTypePill ContentType="@_contentType!.Value" />
+                        mappings of <strong>@SelectedSource?.DisplayName</strong>
+                    </span>
+                    <span class="grid-caption-stats">
+                        <span>@counters.MappedCount.ToString("N0", CultureInfo.CurrentCulture) mapped</span>
+                        <span>@((counters.TotalCount - counters.MappedCount).ToString("N0", CultureInfo.CurrentCulture)) not found</span>
+                    </span>
+                }
+                @if (!_filter.IsEmpty)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Subtle"
+                                  Size="ButtonSize.Small"
+                                  IconStart="@(new Icons.Regular.Size16.Dismiss())"
+                                  OnClick="@(() => SetFilterAsync(new TmdbMappingFilter()))">
+                        Clear filters
+                    </FluentButton>
+                }
+            </div>
+
+            @if (_page is { MatchingCount: 0 })
+            {
+                <EmptyState Compact="true"
+                            Title="No matching TMDB mapping"
+                            Description="Change the filters or the search text."
+                            Icon="@(new Icons.Regular.Size24.Search())">
+                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => SetFilterAsync(new TmdbMappingFilter()))">Clear filters</FluentButton>
+                </EmptyState>
+            }
+            else
+            {
+                <div class="grid-viewport">
+                    <FluentDataGrid @ref="_grid"
+                                    TGridItem="TmdbMappingDto"
+                                    ItemsProvider="@_itemsProvider"
+                                    ItemKey="@(mapping => mapping.Id)"
+                                    Virtualize="true"
+                                    ItemSize="64"
+                                    GridTemplateColumns="120px minmax(220px, 2.5fr) minmax(170px, 1.2fr) 64px">
+                        <TemplateColumn Title="Stream ID" HeaderTooltip="Identifier of the movie or series at the provider">
+                            <span class="cell-primary cell-truncate" title="@context.StreamId">@context.StreamId</span>
+                        </TemplateColumn>
+                        <TemplateColumn Title="TMDB">
+                            @if (context.TmdbId is { } tmdbId)
+                            {
+                                <div class="media-cell">
+                                    @if (context.PosterThumbnailUrl is { } posterUrl)
+                                    {
+                                        <img class="poster-thumb" src="@posterUrl" alt="" loading="lazy" />
+                                    }
+                                    else
+                                    {
+                                        <span class="poster-thumb poster-thumb-empty" aria-hidden="true">
+                                            <FluentIcon Value="@(new Icons.Regular.Size16.Image())" />
+                                        </span>
+                                    }
+                                    <div class="cell-stack">
+                                        <span class="cell-primary cell-truncate" title="@TitleText(context)">@TitleText(context)</span>
+                                        <span class="cell-secondary cell-truncate">@SubtitleText(context, tmdbId)</span>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="status-pill status-pill-warning" title="No TMDB ID was found for this stream: it is not returned to clients">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.QuestionCircle())" aria-hidden="true" />
+                                    Not found
+                                </span>
+                            }
+                        </TemplateColumn>
+                        <TemplateColumn Title="Background lookup" HeaderTooltip="Lookups ended without TMDB ID, and date of the next one">
+                            @if (context.IsMapped)
+                            {
+                                <span class="cell-secondary">Done</span>
+                            }
+                            else
+                            {
+                                <div class="cell-stack">
+                                    <span class="cell-secondary">@AttemptsText(context.LookupAttemptCount)</span>
+                                    @if (context.NextLookupAtUtc is { } nextLookup)
+                                    {
+                                        <span class="cell-secondary">Next: @nextLookup.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)</span>
+                                    }
+                                </div>
+                            }
+                        </TemplateColumn>
+                        <TemplateColumn Title="" Align="DataGridCellAlignment.End">
+                            <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" IconOnly="true"
+                                          IconStart="@(new Icons.Regular.Size16.Edit())"
+                                          aria-label="@($"Edit the TMDB ID of stream {context.StreamId}")" Tooltip="Edit the TMDB ID"
+                                          OnClick="@(() => OpenEditorAsync(context))" />
+                        </TemplateColumn>
+                    </FluentDataGrid>
+                </div>
+            }
+        }
+    </FluentCard>
+}
+
+<FluentDialog @ref="_editorDialog" OnStateChange="@OnEditorStateChange" PreventDismissOnEscape="@_isSaving">
+    <FluentDialogBody>
+        <TitleTemplate>
+            @(_edited is null ? "TMDB ID" : $"TMDB ID of stream {_edited.StreamId}")
+        </TitleTemplate>
+        <ChildContent>
+            @if (_edited is { } edited)
+            {
+                <form class="dialog-form" @onsubmit="@SaveAsync">
+                    <p class="cell-secondary">
+                        @if (edited.TmdbId is { } currentTmdbId)
+                        {
+                            <text>Currently mapped to </text>
+                            <a class="text-link" href="@edited.TmdbUrl" target="_blank" rel="noopener noreferrer">@TitleText(edited) (TMDB #@currentTmdbId.ToString(CultureInfo.InvariantCulture))</a>
+                            <text>.</text>
+                        }
+                        else
+                        {
+                            <text>No TMDB ID was found for this stream: it is not returned to clients until it is mapped.</text>
+                        }
+                    </p>
+                    <FluentTextInput Label="@($"TMDB {(edited.ContentType == ContentType.Series ? "TV show" : "movie")} ID")"
+                                     @bind-Value="_editorTmdbId"
+                                     Immediate="true"
+                                     Autofocus="true"
+                                     Disabled="@_isSaving"
+                                     Placeholder="For example: 603"
+                                     Message="@_editorError"
+                                     MessageCondition="@(field => !string.IsNullOrEmpty(field.Message))"
+                                     MessageState="@(_editorError is null ? null : MessageState.Error)"
+                                     Width="100%" />
+                    @if (ParseTmdbId(_editorTmdbId) is { } enteredTmdbId)
+                    {
+                        <a class="text-link" href="@TmdbLinks.Page(edited.ContentType, enteredTmdbId)" target="_blank" rel="noopener noreferrer">
+                            Check TMDB #@enteredTmdbId.ToString(CultureInfo.InvariantCulture) on the TMDB website
+                        </a>
+                    }
+                </form>
+            }
+        </ChildContent>
+        <ActionTemplate>
+            <FluentButton Appearance="ButtonAppearance.Primary" Loading="@_isSaving" Disabled="@(!CanSave)" OnClick="@SaveAsync">Save</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@_isSaving" OnClick="@CloseEditorAsync">Cancel</FluentButton>
+        </ActionTemplate>
+    </FluentDialogBody>
+</FluentDialog>
+
+@code {
+    // the API returns at most 200 entries per request; the virtualized grid requests the visible rows and a few more
+    private const int PageSize = 100;
+
+    private static readonly IReadOnlyList<SegmentOption<MappingStateFilter>> StateOptions =
+        [new(MappingStateFilter.All, "All"), new(MappingStateFilter.Mapped, "Mapped"), new(MappingStateFilter.NotMapped, "Not found")];
+
+    [SupplyParameterFromQuery(Name = "source")]
+    public int? SourceIdQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "type")]
+    public string? ContentTypeQuery { get; set; }
+
+    private readonly CancellationTokenSource _disposal = new();
+    private GridItemsProvider<TmdbMappingDto>? _itemsProvider;
+    private FluentDataGrid<TmdbMappingDto>? _grid;
+    private IReadOnlyList<XtreamSourceDto> _sources = [];
+    private int? _sourceId;
+    private ContentType? _contentType;
+    private TmdbMappingFilter _filter = new();
+    private TmdbMappingPageDto? _page;
+    private bool _isLoadingSources = true;
+    private bool _isRefreshing;
+    private Exception? _sourcesError;
+    private Exception? _loadError;
+    private FluentDialog? _editorDialog;
+    private TmdbMappingDto? _edited;
+    private string? _editorTmdbId;
+    private string? _editorError;
+    private bool _isSaving;
+
+    private bool IsScopeSelected => _sourceId is not null && _contentType is not null;
+
+    private XtreamSourceDto? SelectedSource => _sources.FirstOrDefault(source => source.Id == _sourceId);
+
+    private bool CanSave => _edited is not null && !_isSaving && ParseTmdbId(_editorTmdbId) is { } tmdbId && tmdbId != _edited.TmdbId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _itemsProvider = ProvideItemsAsync;
+        await LoadSourcesAsync();
+        _isLoadingSources = false;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_isLoadingSources || _sourcesError is not null)
+        {
+            return;
+        }
+
+        // Without a scope in the query string, the last scope of the circuit (or the first values) is shown.
+        var (sourceId, contentType) = ScreenState.Mappings.Resolve([.. _sources.Select(source => source.Id)], SourceIdQuery, ParseContentType(ContentTypeQuery));
+        if (sourceId == _sourceId && contentType == _contentType)
+        {
+            return;
+        }
+
+        _sourceId = sourceId;
+        _contentType = contentType;
+        _filter = ScreenState.MappingFilter;
+        RememberState();
+        if (SourceIdQuery != sourceId || ParseContentType(ContentTypeQuery) != contentType)
+        {
+            UpdateQueryString();
+        }
+
+        await ReloadAsync();
+    }
+
+    private async Task LoadSourcesAsync()
+    {
+        try
+        {
+            _sourcesError = null;
+            _sources = [.. (await CategoriesClient.GetSourcesAsync(_disposal.Token)).OrderBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase)];
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            _sourcesError = exception;
+        }
+    }
+
+    // Called by the virtualized grid for the visible rows; the API filters, sorts, and pages the mappings.
+    private async ValueTask<GridItemsProviderResult<TmdbMappingDto>> ProvideItemsAsync(GridItemsProviderRequest<TmdbMappingDto> request)
+    {
+        if (_sourceId is not { } sourceId || _contentType is not { } contentType)
+        {
+            return GridItemsProviderResult.From<TmdbMappingDto>([], 0);
+        }
+
+        try
+        {
+            var count = request.Count is int requested && requested > 0 ? Math.Min(requested, PageSize) : PageSize;
+            var page = await TmdbMappingsClient.GetPageAsync(sourceId, contentType, _filter, request.StartIndex, count, request.CancellationToken)
+                ?? throw new InvalidOperationException("The source no longer exists.");
+
+            var countersChanged = _page is not { } previous
+                || (previous.MatchingCount, previous.TotalCount, previous.MappedCount) != (page.MatchingCount, page.TotalCount, page.MappedCount);
+            _page = page;
+            if (countersChanged)
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+
+            return GridItemsProviderResult.From([.. page.Items], page.MatchingCount);
+        }
+        catch (OperationCanceledException) when (request.CancellationToken.IsCancellationRequested || _disposal.IsCancellationRequested)
+        {
+            return GridItemsProviderResult.From<TmdbMappingDto>([], 0);
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            _loadError = exception;
+            await InvokeAsync(StateHasChanged);
+            return GridItemsProviderResult.From<TmdbMappingDto>([], 0);
+        }
+    }
+
+    // The grid is shown again (and loads its first rows) after an error or an empty result; otherwise it reloads its rows.
+    private async Task ReloadAsync()
+    {
+        var isGridShown = _loadError is null && _page is not ({ MatchingCount: 0 } or { TotalCount: 0 });
+        _loadError = null;
+        if (isGridShown && _grid is { } grid)
+        {
+            await grid.RefreshDataAsync();
+        }
+        else
+        {
+            _page = null;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        _isRefreshing = true;
+        try
+        {
+            if (_sourcesError is not null || _sources.Count == 0)
+            {
+                // Re-applies the scope of the query string once the sources are known.
+                await LoadSourcesAsync();
+                _sourceId = null;
+                _contentType = null;
+                await OnParametersSetAsync();
+            }
+            else
+            {
+                await ReloadAsync();
+            }
+        }
+        finally
+        {
+            _isRefreshing = false;
+        }
+    }
+
+    private async Task SetSourceAsync(int? sourceId)
+    {
+        _sourceId = sourceId;
+        _contentType = sourceId is null ? null : _contentType;
+        RememberState();
+        UpdateQueryString();
+        await ReloadAsync();
+    }
+
+    private async Task SetContentTypeAsync(ContentType? contentType)
+    {
+        _contentType = contentType;
+        RememberState();
+        UpdateQueryString();
+        await ReloadAsync();
+    }
+
+    private async Task SetFilterAsync(TmdbMappingFilter filter)
+    {
+        if (filter == _filter)
+        {
+            return;
+        }
+
+        _filter = filter;
+        RememberState();
+        await ReloadAsync();
+    }
+
+    private void RememberState()
+    {
+        ScreenState.Mappings.SourceId = _sourceId;
+        ScreenState.Mappings.ContentType = _contentType;
+        ScreenState.MappingFilter = _filter;
+    }
+
+    private void UpdateQueryString()
+    {
+        var uri = NavigationManager.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["source"] = _sourceId,
+            ["type"] = _contentType?.ToString()
+        });
+        NavigationManager.NavigateTo(uri, replace: true);
+    }
+
+    private static ContentType? ParseContentType(string? value) =>
+        Enum.TryParse<ContentType>(value, ignoreCase: true, out var contentType) && Enum.IsDefined(contentType) ? contentType : null;
+
+    private static long? ParseTmdbId(string? value) =>
+        long.TryParse(value?.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var tmdbId) && tmdbId > 0 ? tmdbId : null;
+
+    private static string TitleText(TmdbMappingDto mapping) =>
+        string.IsNullOrWhiteSpace(mapping.Title) ? "Metadata not loaded" : mapping.Title;
+
+    // TMDB ID, release year, and original title when it differs from the title.
+    private static string SubtitleText(TmdbMappingDto mapping, long tmdbId)
+    {
+        List<string> parts = [$"TMDB #{tmdbId.ToString(CultureInfo.InvariantCulture)}"];
+        if (mapping.ReleaseDate is { } releaseDate)
+        {
+            parts.Add(releaseDate.Year.ToString(CultureInfo.InvariantCulture));
+        }
+
+        if (!string.IsNullOrWhiteSpace(mapping.OriginalTitle) && mapping.OriginalTitle != mapping.Title)
+        {
+            parts.Add(mapping.OriginalTitle);
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    private static string AttemptsText(int attempts) => attempts == 1 ? "1 attempt" : $"{attempts.ToString(CultureInfo.CurrentCulture)} attempts";
+
+    // ─── Editor ─────────────────────────────────────────────────────────────
+
+    private async Task OpenEditorAsync(TmdbMappingDto mapping)
+    {
+        if (_editorDialog is null)
+        {
+            return;
+        }
+
+        _edited = mapping;
+        _editorTmdbId = mapping.TmdbId?.ToString(CultureInfo.InvariantCulture);
+        _editorError = null;
+        await _editorDialog.ShowAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_edited is not { } mapping || _isSaving)
+        {
+            return;
+        }
+
+        if (ParseTmdbId(_editorTmdbId) is not { } tmdbId)
+        {
+            _editorError = "Enter a positive number.";
+            return;
+        }
+
+        _isSaving = true;
+        try
+        {
+            var result = await TmdbMappingsClient.SetTmdbIdAsync(mapping.Id, tmdbId, _disposal.Token);
+            switch (result)
+            {
+                case AdminOperationResult.Invalid:
+                    _editorError = "Enter a positive number.";
+                    return;
+                case AdminOperationResult.NotFound:
+                    await NotificationService.ShowWarningToastAsync($"The mapping of stream {mapping.StreamId} no longer exists.", "The list is reloaded.");
+                    break;
+                default:
+                    await NotificationService.ShowSuccessToastAsync(
+                        $"Stream {mapping.StreamId} mapped to TMDB #{tmdbId.ToString(CultureInfo.InvariantCulture)}.",
+                        "Its TMDB metadata is loaded in the background if needed.");
+                    break;
+            }
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            _editorError = $"Unable to save the TMDB ID. {ApiErrorMessage.Describe(exception)}";
+            return;
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+
+        await CloseEditorAsync();
+        await ReloadAsync();
+    }
+
+    private async Task CloseEditorAsync()
+    {
+        if (_editorDialog is not null)
+        {
+            await _editorDialog.HideAsync();
+        }
+
+        ResetEditor();
+    }
+
+    // Also called when the dialog is dismissed with Escape.
+    private void OnEditorStateChange(DialogEventArgs args)
+    {
+        if (args.State == DialogState.Closed)
+        {
+            ResetEditor();
+        }
+    }
+
+    private void ResetEditor()
+    {
+        _edited = null;
+        _editorTmdbId = null;
+        _editorError = null;
+    }
+
+    public void Dispose()
+    {
+        _disposal.Cancel();
+        _disposal.Dispose();
+    }
+}

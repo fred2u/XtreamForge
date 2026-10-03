@@ -1,0 +1,4 @@
+interface:
+  display_name: "XtreamForge – Xtream Proxy"
+  short_description: "Xtream proxy forwarding and transformations"
+  default_prompt: "Use $xtream-proxy to add response header transformation to the Xtream forwarding pipeline."

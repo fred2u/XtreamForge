@@ -1,0 +1,4 @@
+interface:
+  display_name: "XtreamForge – Aspire"
+  short_description: "Configure .NET Aspire resources and wiring"
+  default_prompt: "Use $aspire to add a new Redis resource to XtreamForge AppHost."

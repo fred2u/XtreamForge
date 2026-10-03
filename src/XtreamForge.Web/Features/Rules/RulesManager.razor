@@ -1,0 +1,533 @@
+@*
+    Rules screen shared by the category, item, and TMDB rules: they have the same shape, the same evaluation
+    (first matching enabled rule by ascending sequence) and the same endpoints. Kind selects the endpoints and the texts.
+    Category and item rules are scoped by source and content type; TMDB rules are global per content type.
+*@
+@using System.Net
+@using XtreamForge.Web.Features.Categories
+@implements IDisposable
+@inject CategoriesClient CategoriesClient
+@inject INotificationService NotificationService
+@inject IDialogService DialogService
+@inject NavigationManager NavigationManager
+@inject CategoryScreenState ScreenState
+
+<PageTitle>@Texts.Title - XtreamForge</PageTitle>
+
+<PageHeader Title="@Texts.Title" Subtitle="@Texts.Subtitle">
+    <Actions>
+        <FluentButton Appearance="ButtonAppearance.Outline"
+                      IconStart="@(new Icons.Regular.Size16.ArrowClockwise())"
+                      Loading="@_isRefreshing"
+                      Disabled="@(_isLoadingSources || _isLoadingRules)"
+                      OnClick="@RefreshAsync">
+            Refresh
+        </FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary"
+                      IconStart="@(new Icons.Regular.Size16.Add())"
+                      Disabled="@(!IsScopeSelected || _isLoadingRules || _rulesError is not null || IsEditing)"
+                      OnClick="@(() => _editorDialog!.ShowAsync())">
+            New rule
+        </FluentButton>
+    </Actions>
+</PageHeader>
+
+@if (_isLoadingSources)
+{
+    <FluentCard Class="surface">
+        <div class="skeleton-list">
+            <FluentSkeleton Width="40%" Height="2rem" Shimmer="true" />
+            <FluentSkeleton Width="100%" Height="2.5rem" Shimmer="true" />
+        </div>
+    </FluentCard>
+}
+else if (_sourcesError is not null)
+{
+    <LoadErrorState Title="Unable to load the sources" Error="@_sourcesError" IsRetrying="@_isRefreshing" OnRetry="@RefreshAsync" />
+}
+else if (!IsGlobal && _sources.Count == 0)
+{
+    <FluentCard Class="surface">
+        <NoSourceMessage />
+    </FluentCard>
+}
+else
+{
+    <div class="rules-help" role="note">
+        <FluentIcon Value="@(new Icons.Regular.Size20.Info())" aria-hidden="true" />
+        <div>
+            <p>
+                <strong>Rules are evaluated from top to bottom and the first enabled rule that matches the @MatchedText decides.</strong>
+                @Texts.HelpSummary
+            </p>
+            <p>
+                @Texts.HelpDetails
+                Drag a rule by its handle, or use the arrows, to change its priority.
+            </p>
+        </div>
+    </div>
+
+    <FluentCard Class="surface filter-bar">
+        <CategoryScopeBar Sources="@(IsGlobal ? null : _sources)"
+                          SourceId="@_sourceId"
+                          SourceIdChanged="@SetSourceAsync"
+                          ContentType="@_contentType"
+                          ContentTypeChanged="@SetContentTypeAsync"
+                          Disabled="@(_isReordering || IsEditing)" />
+    </FluentCard>
+
+    <FluentCard Class="surface grid-surface">
+        @if (!IsScopeSelected)
+        {
+            <EmptyState Title="@(!IsGlobal && _sourceId is null ? "Select a source" : "Select a content type")"
+                        Description="@(IsGlobal
+                            ? $"{Texts.Title} are defined per content type. Choose one above to see and edit the rules."
+                            : $"{Texts.Title} are defined per source and content type. Choose both above to see and edit the rules.")"
+                        Icon="@(new Icons.Regular.Size24.Filter())" />
+        }
+        else if (_isLoadingRules)
+        {
+            <div class="skeleton-list" aria-busy="true">
+                @for (var index = 0; index < 4; index++)
+                {
+                    <FluentSkeleton Width="100%" Height="3rem" Shimmer="true" />
+                }
+            </div>
+        }
+        else if (_rulesError is not null)
+        {
+            <LoadErrorState Title="Unable to load the rules" Error="@_rulesError" IsRetrying="@_isRefreshing" OnRetry="@RefreshAsync" />
+        }
+        else if (_rules.Count == 0)
+        {
+            <EmptyState Title="No rule yet"
+                        Description="@Texts.EmptyDescription"
+                        Icon="@(new Icons.Regular.Size24.Filter())">
+                @if (!IsEditing)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size16.Add())" OnClick="@(() => _editorDialog!.ShowAsync())">New rule</FluentButton>
+                }
+            </EmptyState>
+        }
+        else
+        {
+            <div class="grid-caption" aria-live="polite">
+                <span>
+                    <strong>@_rules.Count</strong> @(_rules.Count == 1 ? "rule" : "rules")
+                    (@_rules.Count(rule => rule.IsEnabled) enabled) for
+                    <ContentTypePill ContentType="@_contentType!.Value" />
+                    @if (IsGlobal)
+                    {
+                        <text>@Texts.Plural of every source</text>
+                    }
+                    else
+                    {
+                        <text>@Texts.Plural of <strong>@SelectedSource?.DisplayName</strong></text>
+                    }
+                </span>
+                @if (_isReordering)
+                {
+                    <span class="saving-indicator"><FluentSpinner Size="SpinnerSize.Tiny" /> Saving order…</span>
+                }
+            </div>
+
+            <div class="rule-order-hint" aria-hidden="true">
+                <FluentIcon Value="@(new Icons.Regular.Size16.ArrowUp())" /> Evaluated first
+            </div>
+            <FluentSortableList TItem="RuleDto"
+                                Items="@_rules"
+                                ItemsChanged="@OnRulesReorderedAsync"
+                                Handle="true"
+                                Sort="@CanReorder"
+                                AriaLabel="@($"{Texts.Title}, in evaluation order")"
+                                Class="rule-list">
+                <ItemTemplate>
+                    @{
+                        var index = IndexOf(context);
+                        var isBusy = _busyIds.Contains(context.Id);
+                    }
+                    <div class="rule-item @(context.IsEnabled ? null : "is-disabled") @(context.Id == HighlightedRuleId ? "is-highlighted" : null) @(context.Id == EditedRuleId ? "is-editing" : null)">
+                        <span class="sortable-grab rule-handle" title="Drag to change the priority">
+                            <FluentIcon Value="@(new Icons.Regular.Size20.ReOrderDotsVertical())" aria-hidden="true" />
+                        </span>
+                        <div class="sortable-item-content rule-content">
+                            <span class="rule-priority" title="@($"Priority {index + 1} (sequence {context.Sequence})")">@(index + 1)</span>
+                            <div class="rule-preview">
+                                <RuleSentence Action="@context.Action" Operator="@context.Operator" Pattern="@context.Pattern" CaseSensitive="@context.CaseSensitive" Subject="@Texts.Plural"
+                                              FieldName="@RuleKindTexts.FieldName(Kind, context.Field)" />
+                                <span class="cell-secondary">
+                                    Rule #@context.Id · sequence @context.Sequence
+                                    @if (!context.IsEnabled)
+                                    {
+                                        <text> · disabled, skipped during evaluation</text>
+                                    }
+                                </span>
+                            </div>
+                            <div class="rule-actions">
+                                <FluentSwitch Value="@context.IsEnabled"
+                                              ValueChanged="@((bool value) => SetEnabledAsync(context, value))"
+                                              Disabled="@(isBusy || _isReordering)"
+                                              AriaLabel="@($"Enable rule #{context.Id}")"
+                                              Tooltip="@(context.IsEnabled ? "Enabled" : "Disabled")" />
+                                <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" IconOnly="true"
+                                              IconStart="@(new Icons.Regular.Size16.ArrowUp())"
+                                              aria-label="@($"Move rule #{context.Id} up")" Tooltip="Move up"
+                                              Disabled="@(!CanReorder || index == 0)"
+                                              OnClick="@(() => MoveAsync(index, index - 1))" />
+                                <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" IconOnly="true"
+                                              IconStart="@(new Icons.Regular.Size16.ArrowDown())"
+                                              aria-label="@($"Move rule #{context.Id} down")" Tooltip="Move down"
+                                              Disabled="@(!CanReorder || index == _rules.Count - 1)"
+                                              OnClick="@(() => MoveAsync(index, index + 1))" />
+                                <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" IconOnly="true"
+                                              IconStart="@(new Icons.Regular.Size16.Edit())"
+                                              aria-label="@($"Edit rule #{context.Id}")" Tooltip="Edit"
+                                              Disabled="@(isBusy || _isReordering || IsEditing)"
+                                              OnClick="@(() => _editorDialog!.ShowAsync(context))" />
+                                <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" IconOnly="true"
+                                              IconStart="@(new Icons.Regular.Size16.Delete())"
+                                              aria-label="@($"Delete rule #{context.Id}")" Tooltip="Delete"
+                                              Loading="@isBusy"
+                                              Disabled="@(isBusy || _isReordering || IsEditing)"
+                                              OnClick="@(() => DeleteAsync(context))" />
+                            </div>
+                        </div>
+                    </div>
+                </ItemTemplate>
+            </FluentSortableList>
+            <div class="rule-order-hint" aria-hidden="true">
+                <FluentIcon Value="@(new Icons.Regular.Size16.ArrowDown())" /> Evaluated last · no match: included
+            </div>
+        }
+    </FluentCard>
+}
+
+<RuleEditorDialog @ref="_editorDialog"
+                  Kind="@Kind"
+                  SourceId="@_sourceId"
+                  ContentType="@_contentType"
+                  SourceName="@SelectedSource?.DisplayName"
+                  Rules="@_rules"
+                  Saved="@(() => LoadRulesAsync(showLoading: false))"
+                  OpenChanged="@OnEditorOpenChanged" />
+
+@code {
+    /// <summary>Selects the endpoints and the texts: category, item, or TMDB rules.</summary>
+    [Parameter, EditorRequired]
+    public RuleKind Kind { get; set; }
+
+    [SupplyParameterFromQuery(Name = "source")]
+    public int? SourceIdQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "type")]
+    public string? ContentTypeQuery { get; set; }
+
+    /// <summary>Rule to highlight, for example when coming from the explanation of an Xtream category.</summary>
+    [SupplyParameterFromQuery(Name = "rule")]
+    public int? HighlightedRuleId { get; set; }
+
+    private readonly CancellationTokenSource _disposal = new();
+    private readonly HashSet<int> _busyIds = [];
+    private IReadOnlyList<XtreamSourceDto> _sources = [];
+    private int? _sourceId;
+    private ContentType? _contentType;
+    private List<RuleDto> _rules = [];
+    private bool _isLoadingSources = true;
+    private bool _isLoadingRules;
+    private bool _isRefreshing;
+    private bool _isReordering;
+    private Exception? _sourcesError;
+    private Exception? _rulesError;
+    private RuleEditorDialog? _editorDialog;
+    private int _loadVersion;
+
+    private RuleKindTexts Texts => RuleKindTexts.For(Kind);
+
+    // TMDB rules have no source: the scope is the content type only
+    private bool IsGlobal => Kind == RuleKind.Tmdb;
+
+    private string MatchedText => IsGlobal ? "TMDB title or genre of the item" : $"{Texts.Singular} name";
+
+    private bool IsEditing => _editorDialog?.IsOpen == true;
+
+    // Receiving the callback re-renders this screen, which enables or disables its controls while the editor is open.
+    private static Task OnEditorOpenChanged(bool isOpen) => Task.CompletedTask;
+
+    private int? EditedRuleId => _editorDialog?.EditedRuleId;
+
+    // Each screen remembers its own scope.
+    private CategoryScope Scope => Kind switch
+    {
+        RuleKind.Item => ScreenState.ItemRules,
+        RuleKind.Tmdb => ScreenState.TmdbRules,
+        _ => ScreenState.CategoryRules
+    };
+
+    private bool IsScopeSelected => (IsGlobal || _sourceId is not null) && _contentType is not null;
+
+    private bool CanReorder => !_isReordering && !IsEditing && _busyIds.Count == 0 && _rules.Count > 1;
+
+    private XtreamSourceDto? SelectedSource => _sources.FirstOrDefault(source => source.Id == _sourceId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!IsGlobal)
+        {
+            await LoadSourcesAsync();
+        }
+
+        _isLoadingSources = false;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_isLoadingSources || _sourcesError is not null)
+        {
+            return;
+        }
+
+        // Without a scope in the query string, the last scope of the circuit (or the first values) is shown.
+        var (sourceId, contentType) = Scope.Resolve([.. _sources.Select(source => source.Id)], SourceIdQuery, ParseContentType(ContentTypeQuery));
+        if (sourceId == _sourceId && contentType == _contentType)
+        {
+            return;
+        }
+
+        _sourceId = sourceId;
+        _contentType = contentType;
+        RememberScope();
+        if (SourceIdQuery != sourceId || ParseContentType(ContentTypeQuery) != contentType)
+        {
+            UpdateQueryString(keepHighlightedRule: true);
+        }
+
+        await LoadRulesAsync();
+    }
+
+    private async Task LoadSourcesAsync()
+    {
+        try
+        {
+            _sourcesError = null;
+            _sources = [.. (await CategoriesClient.GetSourcesAsync(_disposal.Token)).OrderBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase)];
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            _sourcesError = exception;
+        }
+    }
+
+    private async Task LoadRulesAsync(bool showLoading = true)
+    {
+        if (!IsScopeSelected || _contentType is not { } contentType)
+        {
+            _rules = [];
+            return;
+        }
+
+        var version = ++_loadVersion;
+        _isLoadingRules = showLoading;
+        try
+        {
+            var rules = await CategoriesClient.GetRulesAsync(Kind, _sourceId, contentType, _disposal.Token);
+            if (version == _loadVersion)
+            {
+                _rules = [.. rules.OrderBy(rule => rule.Sequence)];
+                _rulesError = null;
+            }
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested && version == _loadVersion)
+        {
+            _rulesError = exception;
+        }
+        finally
+        {
+            if (version == _loadVersion)
+            {
+                _isLoadingRules = false;
+            }
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        _isRefreshing = true;
+        try
+        {
+            if (!IsGlobal && (_sourcesError is not null || _sources.Count == 0))
+            {
+                // Re-applies the scope of the query string once the sources are known.
+                await LoadSourcesAsync();
+                _sourceId = null;
+                _contentType = null;
+                await OnParametersSetAsync();
+            }
+            else
+            {
+                await LoadRulesAsync();
+            }
+        }
+        finally
+        {
+            _isRefreshing = false;
+        }
+    }
+
+    private async Task SetSourceAsync(int? sourceId)
+    {
+        _sourceId = sourceId;
+        _contentType = sourceId is null ? null : _contentType;
+        RememberScope();
+        UpdateQueryString();
+        await LoadRulesAsync();
+    }
+
+    private async Task SetContentTypeAsync(ContentType? contentType)
+    {
+        _contentType = contentType;
+        RememberScope();
+        UpdateQueryString();
+        await LoadRulesAsync();
+    }
+
+    private void RememberScope()
+    {
+        Scope.SourceId = _sourceId;
+        Scope.ContentType = _contentType;
+    }
+
+    private void UpdateQueryString(bool keepHighlightedRule = false)
+    {
+        var uri = NavigationManager.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["source"] = _sourceId,
+            ["type"] = _contentType?.ToString(),
+            ["rule"] = keepHighlightedRule ? HighlightedRuleId : null
+        });
+        NavigationManager.NavigateTo(uri, replace: true);
+    }
+
+    private static ContentType? ParseContentType(string? value) =>
+        Enum.TryParse<ContentType>(value, ignoreCase: true, out var contentType) && Enum.IsDefined(contentType) ? contentType : null;
+
+    private int IndexOf(RuleDto rule) => _rules.FindIndex(current => current.Id == rule.Id);
+
+    // ─── Ordering ───────────────────────────────────────────────────────────
+
+    private Task OnRulesReorderedAsync(IEnumerable<RuleDto> rules) => SaveOrderAsync([.. rules]);
+
+    private Task MoveAsync(int oldIndex, int newIndex) => SaveOrderAsync(RuleOrdering.Move(_rules, oldIndex, newIndex));
+
+    // The new order is stored with a single atomic request; the backend assigns the sequences.
+    private async Task SaveOrderAsync(List<RuleDto> reordered)
+    {
+        if (!IsScopeSelected || _contentType is not { } contentType || RuleOrdering.HasSameOrder(_rules, reordered))
+        {
+            return;
+        }
+
+        var previous = _rules;
+        _rules = reordered;
+        _isReordering = true;
+        try
+        {
+            var request = new RuleOrderRequest(contentType, [.. reordered.Select(rule => rule.Id)]);
+            var result = await CategoriesClient.ReorderRulesAsync(Kind, _sourceId, request, _disposal.Token);
+            if (result == AdminOperationResult.Success)
+            {
+                await NotificationService.ShowSuccessToastAsync("Rule order saved.");
+            }
+            else
+            {
+                _rules = previous;
+                await NotificationService.ShowWarningToastAsync("The rules were changed meanwhile.", "The order was not saved. The latest rules are shown again.");
+            }
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            _rules = previous;
+            await NotificationService.ShowErrorToastAsync("Unable to save the rule order.", ApiErrorMessage.Describe(exception));
+        }
+        finally
+        {
+            _isReordering = false;
+        }
+
+        await LoadRulesAsync(showLoading: false);
+    }
+
+    private async Task SetEnabledAsync(RuleDto rule, bool isEnabled)
+    {
+        if (rule.IsEnabled == isEnabled || !_busyIds.Add(rule.Id))
+        {
+            return;
+        }
+
+        try
+        {
+            var request = new RuleRequest(rule.ContentType, rule.Sequence, rule.Action, rule.Operator, rule.Pattern, rule.CaseSensitive, isEnabled, rule.Field);
+            var result = await CategoriesClient.UpdateRuleAsync(Kind, rule.Id, request, _disposal.Token);
+            if (result == AdminOperationResult.Success)
+            {
+                await NotificationService.ShowSuccessToastAsync($"Rule #{rule.Id} {(isEnabled ? "enabled" : "disabled")}.");
+            }
+            else
+            {
+                await NotificationService.ShowWarningToastAsync($"Rule #{rule.Id} could not be updated.", "The latest rules are shown again.");
+            }
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            await NotificationService.ShowErrorToastAsync($"Unable to update rule #{rule.Id}.", ApiErrorMessage.Describe(exception));
+        }
+        finally
+        {
+            _busyIds.Remove(rule.Id);
+        }
+
+        await LoadRulesAsync(showLoading: false);
+    }
+
+    private async Task DeleteAsync(RuleDto rule)
+    {
+        var confirmation = await DialogService.ShowConfirmationAsync(
+            $"Delete rule #{rule.Id} <em>{CategoryLabels.ActionName(rule.Action)} {Texts.Plural} whose {RuleKindTexts.FieldName(Kind, rule.Field)} {CategoryLabels.OperatorName(rule.Operator).ToLowerInvariant()} "
+                + $"\"{WebUtility.HtmlEncode(rule.Pattern)}\"</em>? {CultureInfo.InvariantCulture.TextInfo.ToTitleCase(Texts.Plural)} it matches will be evaluated by the next rules. This cannot be undone.",
+            "Delete rule",
+            "Delete",
+            "Cancel");
+        if (confirmation.Cancelled || !_busyIds.Add(rule.Id))
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await CategoriesClient.DeleteRuleAsync(Kind, rule.Id, _disposal.Token);
+            if (result == AdminOperationResult.NotFound)
+            {
+                await NotificationService.ShowWarningToastAsync($"Rule #{rule.Id} no longer exists.");
+            }
+            else
+            {
+                await NotificationService.ShowSuccessToastAsync($"Rule #{rule.Id} deleted.");
+            }
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            await NotificationService.ShowErrorToastAsync($"Unable to delete rule #{rule.Id}.", ApiErrorMessage.Describe(exception));
+        }
+        finally
+        {
+            _busyIds.Remove(rule.Id);
+        }
+
+        await LoadRulesAsync(showLoading: false);
+    }
+
+    public void Dispose()
+    {
+        _disposal.Cancel();
+        _disposal.Dispose();
+    }
+}

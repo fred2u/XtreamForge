@@ -1,22 +1,21 @@
 <Project Sdk="Aspire.AppHost.Sdk/13.5.4">
 
-  <ItemGroup>
-    <ProjectReference Include="..\XtreamForge.Blazor\XtreamForge.Blazor.csproj" />
-    <ProjectReference Include="..\XtreamForge\XtreamForge.csproj" />
-  </ItemGroup>
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <AspireUseCliBundle>true</AspireUseCliBundle>
+        <UserSecretsId>21a896bc-b422-44e2-bb28-6627c91ec25d</UserSecretsId>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.PostgreSQL" />
-  </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Aspire.Hosting.PostgreSQL" />
+    </ItemGroup>
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <AspireUseCliBundle>false</AspireUseCliBundle>
-    <NoWarn>$(NoWarn);ASPIRE010</NoWarn>
-    <UserSecretsId>43b142a2-e885-4481-a4b3-c6118e8262b7</UserSecretsId>
-  </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\XtreamForge.ApiService\XtreamForge.ApiService.csproj" />
+        <ProjectReference Include="..\XtreamForge.Web\XtreamForge.Web.csproj" />
+    </ItemGroup>
 
 </Project>

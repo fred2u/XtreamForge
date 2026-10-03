@@ -1,0 +1,20 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using XtreamForge.Domain.History;
+
+namespace XtreamForge.Database.Mappings;
+
+public class WatchHistoryEntryConfiguration : IEntityTypeConfiguration<WatchHistoryEntry>
+{
+    public void Configure(EntityTypeBuilder<WatchHistoryEntry> watchHistory)
+    {
+        watchHistory.ToTable("watch_history");
+
+        watchHistory.HasKey(entry => entry.Id);
+
+        watchHistory.Property(entry => entry.Id).HasColumnName("id");
+        watchHistory.Property(entry => entry.ContentType).HasColumnName("content_type").HasConversion<string>().HasMaxLength(20);
+        watchHistory.Property(entry => entry.TmdbId).HasColumnName("tmdb_id");
+        watchHistory.Property(entry => entry.StartedAtUtc).HasColumnName("started_at_utc");
+    }
+}

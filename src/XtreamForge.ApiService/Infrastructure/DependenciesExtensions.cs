@@ -51,6 +51,10 @@ public static class DependenciesExtensions
         services.AddSingleton<TmdbInfoQueue>();
         services.AddScoped<WatchHistoryService>();
         services.AddSingleton<WatchHistoryQueue>();
+        services.AddScoped<RecommendationService>();
+        services.AddScoped<PopularService>();
+        services.AddScoped<VirtualCategoryService>();
+        services.AddSingleton<TmdbIdCache>();
 
         // monitoring: every background queue is also registered as IMonitoredQueue
         services.AddSingleton<IMonitoredQueue>(serviceProvider => serviceProvider.GetRequiredService<TmdbIdRetrieverQueue>());
@@ -90,7 +94,6 @@ public static class DependenciesExtensions
         services.AddScoped<TmdbInfoAdminService>();
         services.AddScoped<StreamTmdbMappingAdminService>();
         services.AddScoped<WatchHistoryAdminService>();
-        services.AddScoped<RecommendationAdminService>();
 
         // endpoints
         services.AddScoped<DashboardStatusGetEndpoint>();

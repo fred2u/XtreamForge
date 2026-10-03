@@ -109,9 +109,17 @@ public class CategoryService(XtreamForgeDbContext dbContext)
     /// (custom category ID when mapped, otherwise the Xtream category ID); empty when nothing matches.
     /// </summary>
     public async Task<Dictionary<string, int>> GetXtreamCategoryIdMappingAsync(XtreamContext xtreamContext, XtreamSourceSnapshot source, CancellationToken cancellationToken)
-    {
-        var requestedCategoryId = xtreamContext.Request.Query["category_id"].ToString();
+        => await GetXtreamCategoryIdMappingAsync(xtreamContext, source, xtreamContext.Request.Query["category_id"].ToString(), cancellationToken);
 
+    /// <summary>
+    /// Maps every included upstream category ID to its XtreamForge category ID, whatever the requested <c>category_id</c>
+    /// (used for the recommendations category, filled from all the categories).
+    /// </summary>
+    public async Task<Dictionary<string, int>> GetAllXtreamCategoryIdMappingAsync(XtreamContext xtreamContext, XtreamSourceSnapshot source, CancellationToken cancellationToken)
+        => await GetXtreamCategoryIdMappingAsync(xtreamContext, source, requestedCategoryId: null, cancellationToken);
+
+    private async Task<Dictionary<string, int>> GetXtreamCategoryIdMappingAsync(XtreamContext xtreamContext, XtreamSourceSnapshot source, string? requestedCategoryId, CancellationToken cancellationToken)
+    {
         List<Domain.Categories.XtreamCategory> xtreamCategories;
         if (IsGetAll(requestedCategoryId))
         {

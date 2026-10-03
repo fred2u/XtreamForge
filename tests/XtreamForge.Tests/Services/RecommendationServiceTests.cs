@@ -1,23 +1,22 @@
-using Microsoft.Extensions.Options;
-using XtreamForge.ApiService.Options;
-using XtreamForge.ApiService.Services.Admin;
+using XtreamForge.ApiService.Services;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;
 using XtreamForge.Domain.History;
 using XtreamForge.Domain.Tmdb;
 using XtreamForge.Tests.Infrastructure;
 
-namespace XtreamForge.Tests.Services.Admin;
+namespace XtreamForge.Tests.Services;
 
-public class RecommendationAdminServiceTests : IAsyncDisposable
+public class RecommendationServiceTests : IAsyncDisposable
 {
     private static readonly DateTimeOffset Day = new(2026, 10, 1, 20, 0, 0, TimeSpan.Zero);
 
     private readonly XtreamForgeDbContext _dbContext;
     private readonly Dictionary<string, string> _responses = [];
     private readonly StubTmdbHttpClientFactory _tmdb;
+    private readonly TmdbIdCache _cache = new(TimeProvider.System);
 
-    public RecommendationAdminServiceTests()
+    public RecommendationServiceTests()
     {
         _dbContext = SqliteDbContextFactory.Create();
         _tmdb = new StubTmdbHttpClientFactory(_responses);
@@ -108,12 +107,39 @@ public class RecommendationAdminServiceTests : IAsyncDisposable
         Assert.Equal(["Action"], recommendation.Genres);
     }
 
-    private RecommendationAdminService CreateService(string apiKey = "token")
+    [Fact]
+    public async Task GetRecommendedTmdbIds_IsCachedUntilTheCacheIsInvalidated()
     {
-        var options = Options.Create(new TmdbOptions { BaseUrl = StubTmdbHttpClientFactory.BaseAddress.AbsoluteUri, ApiKey = apiKey });
+        await WatchAsync(603);
+        _responses["movie/603/recommendations"] = Recommendations(604);
+        var service = CreateService();
 
-        return new RecommendationAdminService(_dbContext, _tmdb.CreateTmdbClient(), options);
+        Assert.Equal([604L], await service.GetRecommendedTmdbIdsAsync(TestContext.Current.CancellationToken));
+        _responses["movie/603/recommendations"] = Recommendations(605);
+        Assert.Equal([604L], await service.GetRecommendedTmdbIdsAsync(TestContext.Current.CancellationToken));
+        Assert.Single(_tmdb.RequestedUris);
+
+        _cache.Invalidate(TmdbIdCache.RecommendationsKey);
+
+        Assert.Equal([605L], await service.GetRecommendedTmdbIdsAsync(TestContext.Current.CancellationToken));
     }
+
+    [Fact]
+    public async Task GetRecommendedTmdbIds_WhenTmdbFails_ReturnsNoRecommendationAndRetriesNextTime()
+    {
+        await WatchAsync(603);
+        var failing = true;
+        var tmdb = new StubTmdbHttpClientFactory(_ => failing ? throw new HttpRequestException("TMDB is down") : Recommendations(604));
+        var service = tmdb.CreateRecommendationService(_dbContext, _cache);
+
+        Assert.Empty(await service.GetRecommendedTmdbIdsAsync(TestContext.Current.CancellationToken));
+
+        failing = false;
+
+        Assert.Equal([604L], await service.GetRecommendedTmdbIdsAsync(TestContext.Current.CancellationToken));
+    }
+
+    private RecommendationService CreateService(string apiKey = "token") => _tmdb.CreateRecommendationService(_dbContext, _cache, apiKey);
 
     // records one playback per movie, in the given order
     private async Task WatchAsync(params long[] tmdbIds)
@@ -131,6 +157,7 @@ public class RecommendationAdminServiceTests : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _dbContext.DisposeAsync();
+        _cache.Dispose();
         GC.SuppressFinalize(this);
     }
 }

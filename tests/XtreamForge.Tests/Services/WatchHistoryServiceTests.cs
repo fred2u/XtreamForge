@@ -15,10 +15,30 @@ public class WatchHistoryServiceTests : IAsyncDisposable
     private static readonly DateTimeOffset StartedAtUtc = new(2026, 10, 1, 20, 30, 0, TimeSpan.Zero);
 
     private readonly XtreamForgeDbContext _dbContext;
+    private readonly TmdbIdCache _recommendationCache = new(TimeProvider.System);
 
     public WatchHistoryServiceTests()
     {
         _dbContext = SqliteDbContextFactory.Create();
+    }
+
+    [Fact]
+    public async Task RecordAsync_InvalidatesTheCachedRecommendations()
+    {
+        var source = await CreateSourceAsync();
+        await AddMappingAsync(source.Id, ContentType.Vod, 603);
+        var computeCount = 0;
+        Task<IReadOnlySet<long>?> ComputeAsync(CancellationToken _)
+        {
+            computeCount++;
+            return Task.FromResult<IReadOnlySet<long>?>(new HashSet<long> { 604 });
+        }
+
+        await _recommendationCache.GetOrComputeAsync(TmdbIdCache.RecommendationsKey, ComputeAsync, TestContext.Current.CancellationToken);
+        await new WatchHistoryService(Provider("{}"), _dbContext, _recommendationCache).RecordAsync(CreateRequest(), TestContext.Current.CancellationToken);
+        await _recommendationCache.GetOrComputeAsync(TmdbIdCache.RecommendationsKey, ComputeAsync, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, computeCount);
     }
 
     [Fact]
@@ -28,7 +48,7 @@ public class WatchHistoryServiceTests : IAsyncDisposable
         await AddMappingAsync(source.Id, ContentType.Vod, 603);
         var httpClientFactory = Provider("""{ "info": { "tmdb_id": "999" } }""");
 
-        var recorded = await new WatchHistoryService(httpClientFactory, _dbContext).RecordAsync(CreateRequest(), TestContext.Current.CancellationToken);
+        var recorded = await new WatchHistoryService(httpClientFactory, _dbContext, _recommendationCache).RecordAsync(CreateRequest(), TestContext.Current.CancellationToken);
 
         Assert.True(recorded);
         var entry = await _dbContext.WatchHistory.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
@@ -42,7 +62,7 @@ public class WatchHistoryServiceTests : IAsyncDisposable
         await CreateSourceAsync();
         var httpClientFactory = Provider("""{ "info": [], "movie_data": { "tmdb_id": 603 } }""");
 
-        var recorded = await new WatchHistoryService(httpClientFactory, _dbContext).RecordAsync(CreateRequest(), TestContext.Current.CancellationToken);
+        var recorded = await new WatchHistoryService(httpClientFactory, _dbContext, _recommendationCache).RecordAsync(CreateRequest(), TestContext.Current.CancellationToken);
 
         Assert.True(recorded);
         Assert.Equal(603, (await _dbContext.WatchHistory.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).TmdbId);
@@ -60,7 +80,7 @@ public class WatchHistoryServiceTests : IAsyncDisposable
         await AddMappingAsync(source.Id, contentType, tmdbId);
         var httpClientFactory = Provider("""{ "info": { "tmdb_id": "603" } }""");
 
-        await new WatchHistoryService(httpClientFactory, _dbContext).RecordAsync(CreateRequest(), TestContext.Current.CancellationToken);
+        await new WatchHistoryService(httpClientFactory, _dbContext, _recommendationCache).RecordAsync(CreateRequest(), TestContext.Current.CancellationToken);
 
         Assert.Equal(603, (await _dbContext.WatchHistory.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).TmdbId);
     }
@@ -73,7 +93,7 @@ public class WatchHistoryServiceTests : IAsyncDisposable
     {
         await CreateSourceAsync();
 
-        var recorded = await new WatchHistoryService(Provider(providerInfo), _dbContext).RecordAsync(CreateRequest(), TestContext.Current.CancellationToken);
+        var recorded = await new WatchHistoryService(Provider(providerInfo), _dbContext, _recommendationCache).RecordAsync(CreateRequest(), TestContext.Current.CancellationToken);
 
         Assert.False(recorded);
         Assert.False(await _dbContext.WatchHistory.AnyAsync(TestContext.Current.CancellationToken));
@@ -84,7 +104,7 @@ public class WatchHistoryServiceTests : IAsyncDisposable
     {
         var httpClientFactory = Provider("""{ "info": { "tmdb_id": "603" } }""");
 
-        var recorded = await new WatchHistoryService(httpClientFactory, _dbContext).RecordAsync(CreateRequest(), TestContext.Current.CancellationToken);
+        var recorded = await new WatchHistoryService(httpClientFactory, _dbContext, _recommendationCache).RecordAsync(CreateRequest(), TestContext.Current.CancellationToken);
 
         Assert.False(recorded);
         Assert.Empty(httpClientFactory.RequestedUris);
@@ -96,7 +116,7 @@ public class WatchHistoryServiceTests : IAsyncDisposable
         await CreateSourceAsync();
         var httpClientFactory = new StubXtreamHttpClientFactory(new Dictionary<string, (HttpStatusCode, string)> { ["get_vod_info"] = (HttpStatusCode.BadGateway, string.Empty) });
 
-        await Assert.ThrowsAsync<HttpRequestException>(() => new WatchHistoryService(httpClientFactory, _dbContext).RecordAsync(CreateRequest(), TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<HttpRequestException>(() => new WatchHistoryService(httpClientFactory, _dbContext, _recommendationCache).RecordAsync(CreateRequest(), TestContext.Current.CancellationToken));
         Assert.False(await _dbContext.WatchHistory.AnyAsync(TestContext.Current.CancellationToken));
     }
 
@@ -105,7 +125,7 @@ public class WatchHistoryServiceTests : IAsyncDisposable
     {
         var source = await CreateSourceAsync();
         await AddMappingAsync(source.Id, ContentType.Vod, 603);
-        var service = new WatchHistoryService(Provider("{}"), _dbContext);
+        var service = new WatchHistoryService(Provider("{}"), _dbContext, _recommendationCache);
 
         await service.RecordAsync(CreateRequest(), TestContext.Current.CancellationToken);
         await service.RecordAsync(CreateRequest() with { StartedAtUtc = StartedAtUtc.AddDays(1) }, TestContext.Current.CancellationToken);
@@ -139,6 +159,7 @@ public class WatchHistoryServiceTests : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _dbContext.DisposeAsync();
+        _recommendationCache.Dispose();
         GC.SuppressFinalize(this);
     }
 }

@@ -10,6 +10,7 @@ using XtreamForge.ApiService.Xtream;
 using XtreamForge.Database;
 using XtreamForge.Domain.Categories;
 using XtreamForge.Domain.Enums;
+using XtreamForge.Domain.History;
 using XtreamForge.Domain.Items;
 using XtreamForge.Domain.Sources;
 using XtreamForge.Domain.Tmdb;
@@ -28,10 +29,40 @@ public class ItemGetEndpointTests : IAsyncDisposable
         """;
 
     private readonly XtreamForgeDbContext _dbContext;
+    private readonly Dictionary<string, string> _tmdbResponses = [];
+    private readonly TmdbIdCache _recommendationCache = new(TimeProvider.System);
 
     public ItemGetEndpointTests()
     {
         _dbContext = SqliteDbContextFactory.Create();
+    }
+
+    [Fact]
+    public async Task GetAsync_ForARecommendedMovie_ReturnsItInTheRecommendationsCategory()
+    {
+        await SeedAsync(ContentType.Vod, tmdbId: 603);
+        await AddLoadedTmdbInfoAsync(ContentType.Vod, 603, "Action movie");
+        _dbContext.WatchHistory.Add(new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 999, StartedAtUtc = DateTimeOffset.UtcNow });
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        _tmdbResponses["movie/999/recommendations"] = """{ "results": [ { "id": 603 } ] }""";
+        var context = CreateContext(ContentType.Vod, "?action=get_vod_info&vod_id=1");
+
+        await CreateEndpoint(CreateHttpClientFactory(HttpStatusCode.OK, UpstreamVodInfo)).GetAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.Equal(new RecommendationOptions().CategoryId.ToString(), ReadResponse(context)["movie_data"]?["category_id"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task GetAsync_ForAPopularShow_ReturnsItInThePopularCategory()
+    {
+        await SeedAsync(ContentType.Series, tmdbId: 1399);
+        await AddLoadedTmdbInfoAsync(ContentType.Series, 1399, "Action show");
+        _tmdbResponses["tv/popular"] = """{ "results": [ { "id": 1399 } ] }""";
+        var context = CreateContext(ContentType.Series, "?action=get_series_info&series_id=1");
+
+        await CreateEndpoint(CreateHttpClientFactory(HttpStatusCode.OK, UpstreamSeriesInfo, "get_series_info")).GetAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.Equal(new PopularOptions().CategoryId.ToString(), ReadResponse(context)["info"]?["category_id"]?.GetValue<string>());
     }
 
     [Fact]
@@ -206,6 +237,7 @@ public class ItemGetEndpointTests : IAsyncDisposable
             new CategoryService(_dbContext),
             new ItemService(new TmdbIdRetrieverQueue(), new TmdbInfoQueue(), Options.Create(new TmdbOptions { ApiKey = "token" }), TimeProvider.System),
             new StubTmdbHttpClientFactory(_ => null).CreateTmdbInfoService(_dbContext, TimeProvider.System),
+            new StubTmdbHttpClientFactory(_tmdbResponses).CreateVirtualCategoryService(_dbContext, _recommendationCache),
             NullLogger<ItemGetEndpoint>.Instance);
 
     private static StubXtreamHttpClientFactory CreateHttpClientFactory(HttpStatusCode statusCode, string content, string action = "get_vod_info")
@@ -230,6 +262,7 @@ public class ItemGetEndpointTests : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _dbContext.DisposeAsync();
+        _recommendationCache.Dispose();
         GC.SuppressFinalize(this);
     }
 }

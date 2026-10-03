@@ -1,4 +1,5 @@
 using System.Net;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using XtreamForge.ApiService.Options;
 using XtreamForge.ApiService.Services;
@@ -37,6 +38,34 @@ public sealed class StubTmdbHttpClientFactory : IHttpClientFactory
     public HttpClient CreateClient(string name) => new(new StubHandler(this)) { BaseAddress = BaseAddress };
 
     public TmdbClient CreateTmdbClient() => new(this, CreateOptions("token", 85));
+
+    // without an api key, RecommendationService does not call TMDB
+    public RecommendationService CreateRecommendationService(XtreamForgeDbContext dbContext, TmdbIdCache cache, string apiKey = "token")
+    {
+        var options = CreateOptions(apiKey, 85);
+
+        return new RecommendationService(dbContext, new TmdbClient(this, options), cache, options, NullLogger<RecommendationService>.Instance);
+    }
+
+    // without an api key, PopularService does not call TMDB
+    public PopularService CreatePopularService(TmdbIdCache cache, string apiKey = "token")
+    {
+        var options = CreateOptions(apiKey, 85);
+
+        return new PopularService(new TmdbClient(this, options), cache, options, NullLogger<PopularService>.Instance);
+    }
+
+    // recommendations and popular titles both answered by this stub, with the default category names and IDs unless given
+    public VirtualCategoryService CreateVirtualCategoryService(
+        XtreamForgeDbContext dbContext,
+        TmdbIdCache cache,
+        RecommendationOptions? recommendationOptions = null,
+        PopularOptions? popularOptions = null)
+        => new(
+            CreateRecommendationService(dbContext, cache),
+            CreatePopularService(cache),
+            Options.Create(recommendationOptions ?? new RecommendationOptions()),
+            Options.Create(popularOptions ?? new PopularOptions()));
 
     // without an api key, TmdbInfoService does not call TMDB
     public TmdbInfoService CreateTmdbInfoService(XtreamForgeDbContext dbContext, TimeProvider timeProvider, string apiKey = "token")

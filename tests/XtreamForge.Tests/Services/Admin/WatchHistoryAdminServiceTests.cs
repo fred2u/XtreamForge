@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using XtreamForge.ApiService.Services;
 using XtreamForge.ApiService.Services.Admin;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;
@@ -13,13 +14,14 @@ public class WatchHistoryAdminServiceTests : IAsyncDisposable
     private static readonly DateTimeOffset Day = new(2026, 10, 1, 20, 0, 0, TimeSpan.Zero);
 
     private readonly XtreamForgeDbContext _dbContext;
+    private readonly TmdbIdCache _recommendationCache = new(TimeProvider.System);
     private readonly SteppingTimeProvider _time = new() { Now = Day.AddDays(1) };
     private readonly WatchHistoryAdminService _service;
 
     public WatchHistoryAdminServiceTests()
     {
         _dbContext = SqliteDbContextFactory.Create();
-        _service = new WatchHistoryAdminService(_dbContext, _time);
+        _service = new WatchHistoryAdminService(_dbContext, _recommendationCache, _time);
     }
 
     [Fact]
@@ -158,6 +160,7 @@ public class WatchHistoryAdminServiceTests : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _dbContext.DisposeAsync();
+        _recommendationCache.Dispose();
         GC.SuppressFinalize(this);
     }
 }

@@ -108,7 +108,19 @@ public class TmdbClient(IHttpClientFactory httpClientFactory, IOptions<TmdbOptio
             .Select(result => result.ToRecommendation())];
     }
 
+    /// <summary>Returns the IDs of a page (from 1) of the movies or TV shows currently popular on TMDB, in TMDB order.</summary>
+    public async Task<IReadOnlyList<long>> GetPopularAsync(ContentType type, int page, CancellationToken cancellationToken)
+    {
+        var path = type == ContentType.Vod ? "movie/popular" : "tv/popular";
+
+        return await GetResultIdsAsync($"{path}?language={Language}&page={page.ToString(CultureInfo.InvariantCulture)}", cancellationToken);
+    }
+
     private async Task<List<long>> SearchAsync(string url, CancellationToken cancellationToken)
+        => await GetResultIdsAsync(url, cancellationToken);
+
+    // search and list results share the same shape: { "results": [ { "id": ... } ] }
+    private async Task<List<long>> GetResultIdsAsync(string url, CancellationToken cancellationToken)
     {
         var response = await GetAsync<TmdbSearchResponse>(url, cancellationToken);
 

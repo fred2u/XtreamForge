@@ -31,7 +31,7 @@ public sealed record WatchHistoryDayActivity(DateOnly Date, int Count);
 /// <summary>Movie playbacks per day from <see cref="From"/> to <see cref="To"/> (included); the days without playback are omitted.</summary>
 public sealed record WatchHistoryActivity(DateOnly From, DateOnly To, IReadOnlyList<WatchHistoryDayActivity> Days);
 
-public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TimeProvider timeProvider)
+public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TmdbIdCache recommendationCache, TimeProvider timeProvider)
 {
     public const int DefaultPageSize = 50;
     public const int MaximumPageSize = 200;
@@ -81,13 +81,22 @@ public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TimeProvid
         var entry = new WatchHistoryEntry { ContentType = info.ContentType, TmdbId = info.TmdbId, StartedAtUtc = timeProvider.GetUtcNow() };
         dbContext.WatchHistory.Add(entry);
         await dbContext.SaveChangesAsync(cancellationToken);
+        recommendationCache.Invalidate(TmdbIdCache.RecommendationsKey);
 
         return new WatchHistoryEntryItem(entry.Id, entry.ContentType, entry.TmdbId, entry.StartedAtUtc, info.Title, info.OriginalTitle, info.ReleaseDate, info.PosterPath);
     }
 
     /// <summary>Deletes one playback of the watch history; returns false when it does not exist.</summary>
     public async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)
-        => await dbContext.WatchHistory.Where(entry => entry.Id == id).ExecuteDeleteAsync(cancellationToken) > 0;
+    {
+        var deleted = await dbContext.WatchHistory.Where(entry => entry.Id == id).ExecuteDeleteAsync(cancellationToken) > 0;
+        if (deleted)
+        {
+            recommendationCache.Invalidate(TmdbIdCache.RecommendationsKey);
+        }
+
+        return deleted;
+    }
 
     /// <summary>
     /// Returns a page of the watch history, the most recent playback first: the playbacks are recorded in their start order,

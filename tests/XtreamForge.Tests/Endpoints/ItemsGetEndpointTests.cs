@@ -11,6 +11,7 @@ using XtreamForge.ApiService.Xtream;
 using XtreamForge.Database;
 using XtreamForge.Domain.Categories;
 using XtreamForge.Domain.Enums;
+using XtreamForge.Domain.History;
 using XtreamForge.Domain.Sources;
 using XtreamForge.Domain.Tmdb;
 using XtreamForge.Tests.Infrastructure;
@@ -30,10 +31,127 @@ public class ItemsGetEndpointTests : IAsyncDisposable
 
     private readonly XtreamForgeDbContext _dbContext;
     private readonly TmdbInfoQueue _tmdbInfoQueue = new();
+    private readonly Dictionary<string, string> _tmdbResponses = [];
+    private readonly StubTmdbHttpClientFactory _tmdb;
+    private readonly TmdbIdCache _recommendationCache = new(TimeProvider.System);
 
     public ItemsGetEndpointTests()
     {
         _dbContext = SqliteDbContextFactory.Create();
+        _tmdb = new StubTmdbHttpClientFactory(_tmdbResponses);
+    }
+
+    [Fact]
+    public async Task GetAsync_WhenAllCategoriesAreRequested_MovesTheRecommendedMoviesToTheRecommendationsCategory()
+    {
+        var (customCategory, drama) = await SeedAsync();
+        await AddLoadedTmdbInfosAsync((101, "Action movie"), (102, "Comedy movie"), (103, "Drama movie"));
+        await RecommendAsync(102);
+        var context = CreateContext("?action=get_vod_streams&category_id=ALL");
+
+        await CreateEndpoint(CreateHttpClientFactory(HttpStatusCode.OK)).GetAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [("Action movie", customCategory.Id.ToString()), ("Comedy movie", RecommendationCategoryId), ("Drama movie", drama.Id.ToString())],
+            ReadResponseItems(context).Select(item => (item["name"]?.GetValue<string>(), item["category_id"]?.GetValue<string>())));
+    }
+
+    [Fact]
+    public async Task GetAsync_WhenTheRecommendationsCategoryIsRequested_RequestsAllAndReturnsOnlyTheRecommendedMovies()
+    {
+        await SeedAsync();
+        await AddLoadedTmdbInfosAsync((101, "Action movie"), (102, "Comedy movie"), (103, "Drama movie"));
+        await RecommendAsync(102, 103);
+        var httpClientFactory = CreateHttpClientFactory(HttpStatusCode.OK);
+        var context = CreateContext($"?action=get_vod_streams&category_id={RecommendationCategoryId}");
+
+        await CreateEndpoint(httpClientFactory).GetAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.Equal("ALL", GetRequestedCategoryId(Assert.Single(httpClientFactory.RequestedUris)));
+        Assert.Equal(
+            [("Comedy movie", RecommendationCategoryId), ("Drama movie", RecommendationCategoryId)],
+            ReadResponseItems(context).Select(item => (item["name"]?.GetValue<string>(), item["category_id"]?.GetValue<string>())));
+    }
+
+    [Fact]
+    public async Task GetAsync_WhenAnotherCategoryIsRequested_KeepsTheCategoryOfTheRecommendedMoviesWithoutCallingTmdb()
+    {
+        var (customCategory, _) = await SeedAsync();
+        await AddLoadedTmdbInfosAsync((101, "Action movie"), (102, "Comedy movie"));
+        await RecommendAsync(102);
+        var context = CreateContext($"?action=get_vod_streams&category_id={customCategory.Id}");
+
+        await CreateEndpoint(CreateHttpClientFactory(HttpStatusCode.OK)).GetAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.All(ReadResponseItems(context), item => Assert.Equal(customCategory.Id.ToString(), item["category_id"]?.GetValue<string>()));
+        Assert.Empty(_tmdb.RequestedUris);
+    }
+
+    [Fact]
+    public async Task GetAsync_WhenAllCategoriesAreRequested_MovesThePopularMoviesToThePopularCategoryAfterTheRecommendations()
+    {
+        var (_, drama) = await SeedAsync();
+        await AddLoadedTmdbInfosAsync((101, "Action movie"), (102, "Comedy movie"), (103, "Drama movie"));
+        await RecommendAsync(102);
+        SetPopular("movie/popular", 101, 102);
+        var context = CreateContext("?action=get_vod_streams");
+
+        await CreateEndpoint(CreateHttpClientFactory(HttpStatusCode.OK)).GetAsync(context, TestContext.Current.CancellationToken);
+
+        // 102 is both recommended and popular: the recommendations come first
+        Assert.Equal(
+            [("Action movie", PopularCategoryId), ("Comedy movie", RecommendationCategoryId), ("Drama movie", drama.Id.ToString())],
+            ReadResponseItems(context).Select(item => (item["name"]?.GetValue<string>(), item["category_id"]?.GetValue<string>())));
+    }
+
+    [Fact]
+    public async Task GetAsync_WhenThePopularCategoryIsRequested_RequestsAllAndReturnsOnlyThePopularMovies()
+    {
+        await SeedAsync();
+        await AddLoadedTmdbInfosAsync((101, "Action movie"), (102, "Comedy movie"), (103, "Drama movie"));
+        await RecommendAsync(102);
+        SetPopular("movie/popular", 102, 103);
+        var httpClientFactory = CreateHttpClientFactory(HttpStatusCode.OK);
+        var context = CreateContext($"?action=get_vod_streams&category_id={PopularCategoryId}");
+
+        await CreateEndpoint(httpClientFactory).GetAsync(context, TestContext.Current.CancellationToken);
+
+        // a recommended movie is listed in the popular category too when it is requested
+        Assert.Equal("ALL", GetRequestedCategoryId(Assert.Single(httpClientFactory.RequestedUris)));
+        Assert.Equal(
+            [("Comedy movie", PopularCategoryId), ("Drama movie", PopularCategoryId)],
+            ReadResponseItems(context).Select(item => (item["name"]?.GetValue<string>(), item["category_id"]?.GetValue<string>())));
+        Assert.Equal(PopularService.PageCount, _tmdb.RequestedUris.Count(uri => StubTmdbHttpClientFactory.GetRelativePath(uri) == "movie/popular"));
+    }
+
+    [Fact]
+    public async Task GetAsync_ForSeries_MovesThePopularShowsToThePopularCategory()
+    {
+        var source = new XtreamSource { Protocol = "http", Host = "provider.example.com", Port = 8080 };
+        var drama = new XtreamCategory { XtreamId = "12", Name = "Drama", ContentType = ContentType.Series };
+        source.XtreamCategories.Add(drama);
+        _dbContext.XtreamSources.Add(source);
+        _dbContext.TmdbInfos.AddRange(
+            new TmdbInfo { TmdbId = 201, ContentType = ContentType.Series, Title = "Show A", LoadedAtUtc = DateTimeOffset.UtcNow, NextLoadAtUtc = DateTimeOffset.UtcNow.AddDays(60) },
+            new TmdbInfo { TmdbId = 202, ContentType = ContentType.Series, Title = "Show B", LoadedAtUtc = DateTimeOffset.UtcNow, NextLoadAtUtc = DateTimeOffset.UtcNow.AddDays(60) });
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        _dbContext.ChangeTracker.Clear();
+        SetPopular("tv/popular", 202);
+        const string UpstreamSeries = """
+            [
+              { "series_id": 1, "name": "Show A", "category_id": "12", "tmdb_id": "201" },
+              { "series_id": 2, "name": "Show B", "category_id": "12", "tmdb_id": "202" }
+            ]
+            """;
+        var httpClientFactory = new StubXtreamHttpClientFactory(new Dictionary<string, (HttpStatusCode, string)> { ["get_series"] = (HttpStatusCode.OK, UpstreamSeries) });
+        var context = CreateContext("?action=get_series", ContentType.Series);
+
+        await CreateEndpoint(httpClientFactory).GetAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [("Show A", drama.Id.ToString()), ("Show B", PopularCategoryId)],
+            ReadResponseItems(context).Select(item => (item["name"]?.GetValue<string>(), item["category_id"]?.GetValue<string>())));
+        Assert.DoesNotContain(_tmdb.RequestedUris, uri => StubTmdbHttpClientFactory.GetRelativePath(uri).EndsWith("/recommendations", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -190,6 +308,22 @@ public class ItemsGetEndpointTests : IAsyncDisposable
         _dbContext.ChangeTracker.Clear();
     }
 
+    // the watched movie 999 is recommended the given movies by TMDB
+    private async Task RecommendAsync(params long[] tmdbIds)
+    {
+        _dbContext.WatchHistory.Add(new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 999, StartedAtUtc = DateTimeOffset.UtcNow });
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        _dbContext.ChangeTracker.Clear();
+        _tmdbResponses["movie/999/recommendations"] = $$"""{ "results": [{{string.Join(", ", tmdbIds.Select(tmdbId => $$"""{ "id": {{tmdbId}} }"""))}}] }""";
+    }
+
+    private void SetPopular(string path, params long[] tmdbIds)
+        => _tmdbResponses[path] = $$"""{ "results": [{{string.Join(", ", tmdbIds.Select(tmdbId => $$"""{ "id": {{tmdbId}} }"""))}}] }""";
+
+    private static string RecommendationCategoryId => new RecommendationOptions().CategoryId.ToString();
+
+    private static string PopularCategoryId => new PopularOptions().CategoryId.ToString();
+
     private ItemsGetEndpoint CreateEndpoint(StubXtreamHttpClientFactory httpClientFactory)
         => new(
             httpClientFactory,
@@ -197,6 +331,7 @@ public class ItemsGetEndpointTests : IAsyncDisposable
             new CategoryService(_dbContext),
             new ItemService(new TmdbIdRetrieverQueue(), _tmdbInfoQueue, Options.Create(new TmdbOptions { ApiKey = "token" }), TimeProvider.System),
             new StubTmdbHttpClientFactory(_ => null).CreateTmdbInfoService(_dbContext, TimeProvider.System),
+            _tmdb.CreateVirtualCategoryService(_dbContext, _recommendationCache),
             NullLogger<ItemsGetEndpoint>.Instance);
 
     private static StubXtreamHttpClientFactory CreateHttpClientFactory(HttpStatusCode statusCode)
@@ -212,18 +347,19 @@ public class ItemsGetEndpointTests : IAsyncDisposable
         return [.. items.Select(item => Assert.IsType<JsonObject>(item))];
     }
 
-    private static XtreamContext CreateContext(string queryString)
+    private static XtreamContext CreateContext(string queryString, ContentType contentType = ContentType.Vod)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Method = HttpMethods.Get;
         httpContext.Request.QueryString = new QueryString(queryString);
         httpContext.Response.Body = new MemoryStream();
-        return new XtreamContext("http", "provider.example.com", 8080, "player_api.php", httpContext, RequestAction.GetItems, ContentType.Vod);
+        return new XtreamContext("http", "provider.example.com", 8080, "player_api.php", httpContext, RequestAction.GetItems, contentType);
     }
 
     public async ValueTask DisposeAsync()
     {
         await _dbContext.DisposeAsync();
+        _recommendationCache.Dispose();
         GC.SuppressFinalize(this);
     }
 }

@@ -204,6 +204,10 @@ public sealed class XtreamRoutesTests : IAsyncDisposable
         builder.Services.AddScoped<CategoryService>();
         builder.Services.AddScoped<ItemService>();
         builder.Services.AddScoped<TmdbInfoService>();
+        builder.Services.AddScoped<RecommendationService>();
+        builder.Services.AddScoped<PopularService>();
+        builder.Services.AddScoped<VirtualCategoryService>();
+        builder.Services.AddSingleton<TmdbIdCache>();
         builder.Services.AddScoped<AuthenticateEndpoint>();
         builder.Services.AddScoped<CategoriesGetEndpoint>();
         builder.Services.AddScoped<ItemsGetEndpoint>();

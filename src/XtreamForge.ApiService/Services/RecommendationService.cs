@@ -4,8 +4,9 @@ using XtreamForge.ApiService.Options;
 using XtreamForge.ApiService.Services.Tmdb;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;
+using XtreamForge.ServiceDefaults;
 
-namespace XtreamForge.ApiService.Services.Admin;
+namespace XtreamForge.ApiService.Services;
 
 /// <summary>
 /// Movie recommended from the watch history. <see cref="Score"/> sums the weight of the watched movies recommending it
@@ -25,12 +26,24 @@ public sealed record RecommendationItem(
     int RecommendedByCount,
     bool IsInCatalogue);
 
-public class RecommendationAdminService(XtreamForgeDbContext dbContext, TmdbClient tmdbClient, IOptions<TmdbOptions> tmdbOptions)
+public class RecommendationService(
+    XtreamForgeDbContext dbContext,
+    TmdbClient tmdbClient,
+    TmdbIdCache cache,
+    IOptions<TmdbOptions> tmdbOptions,
+    ILogger<RecommendationService> logger)
 {
     /// <summary>Number of the most recently watched movies whose TMDB recommendations are requested.</summary>
     public const int SeedCount = 20;
 
     public const int MaximumCount = 50;
+
+    /// <summary>
+    /// Returns the TMDB IDs of the recommended movies for the Xtream requests, from <see cref="TmdbIdCache"/> when available.
+    /// A TMDB failure is logged and gives no recommendation, so that the catalogue is still returned.
+    /// </summary>
+    public Task<IReadOnlySet<long>> GetRecommendedTmdbIdsAsync(CancellationToken cancellationToken = default)
+        => cache.GetOrComputeAsync(TmdbIdCache.RecommendationsKey, ComputeRecommendedTmdbIdsAsync, cancellationToken);
 
     /// <summary>
     /// Returns the movies recommended by TMDB for the most recently watched movies, the best score first.
@@ -103,5 +116,24 @@ public class RecommendationAdminService(XtreamForgeDbContext dbContext, TmdbClie
                 candidate.Score,
                 candidate.Count,
                 knownInfos.ContainsKey(candidate.Recommendation.Id)))];
+    }
+
+    private async Task<IReadOnlySet<long>?> ComputeRecommendedTmdbIdsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var recommendations = await GetAsync(cancellationToken);
+            return recommendations.Select(recommendation => recommendation.TmdbId).ToHashSet();
+        }
+        catch (HttpRequestException exception)
+        {
+            logger.LogWarning(exception, "Unable to load the TMDB recommendations. ErrorMessage: {ErrorMessage}", XtreamCredentialRedaction.SanitizeText(exception.Message));
+            return null;
+        }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(exception, "The TMDB recommendations timed out. ErrorMessage: {ErrorMessage}", XtreamCredentialRedaction.SanitizeText(exception.Message));
+            return null;
+        }
     }
 }

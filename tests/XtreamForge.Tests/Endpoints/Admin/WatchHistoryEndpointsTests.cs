@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using XtreamForge.ApiService.Endpoints.Admin.WatchHistory;
 using XtreamForge.ApiService.Endpoints.Admin.WatchHistory.Dto;
 using XtreamForge.ApiService.Options;
+using XtreamForge.ApiService.Services;
 using XtreamForge.ApiService.Services.Admin;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;
@@ -17,6 +18,7 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
     private static readonly IOptions<TmdbOptions> TmdbOptions = Options.Create(new TmdbOptions { ImageBaseUrl = "https://image.tmdb.org/t/p/" });
 
     private readonly XtreamForgeDbContext _dbContext;
+    private readonly TmdbIdCache _recommendationCache = new(TimeProvider.System);
     private readonly WatchHistoryGetEndpoint _endpoint;
     private readonly WatchHistoryPostEndpoint _postEndpoint;
     private readonly WatchHistoryDeleteEndpoint _deleteEndpoint;
@@ -24,7 +26,7 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
     public WatchHistoryEndpointsTests()
     {
         _dbContext = SqliteDbContextFactory.Create();
-        var service = new WatchHistoryAdminService(_dbContext, TimeProvider.System);
+        var service = new WatchHistoryAdminService(_dbContext, _recommendationCache, TimeProvider.System);
         _endpoint = new WatchHistoryGetEndpoint(service, TmdbOptions);
         _postEndpoint = new WatchHistoryPostEndpoint(service, TmdbOptions);
         _deleteEndpoint = new WatchHistoryDeleteEndpoint(service);
@@ -33,7 +35,7 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
     [Fact]
     public async Task GetActivity_WithUnknownTimeZone_ReturnsValidationProblem()
     {
-        var result = await new WatchHistoryActivityGetEndpoint(new WatchHistoryAdminService(_dbContext, TimeProvider.System))
+        var result = await new WatchHistoryActivityGetEndpoint(new WatchHistoryAdminService(_dbContext, _recommendationCache, TimeProvider.System))
             .GetAsync("Mars/Olympus_Mons", TestContext.Current.CancellationToken);
 
         Assert.Contains("timeZone", Assert.IsType<ValidationProblem>(result).ProblemDetails.Errors.Keys);
@@ -43,7 +45,7 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
     public async Task GetActivity_WithoutTimeZone_UsesUtc()
     {
         var before = DateOnly.FromDateTime(DateTime.UtcNow);
-        var result = await new WatchHistoryActivityGetEndpoint(new WatchHistoryAdminService(_dbContext, TimeProvider.System))
+        var result = await new WatchHistoryActivityGetEndpoint(new WatchHistoryAdminService(_dbContext, _recommendationCache, TimeProvider.System))
             .GetAsync(null, TestContext.Current.CancellationToken);
         var after = DateOnly.FromDateTime(DateTime.UtcNow);
 
@@ -115,6 +117,7 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _dbContext.DisposeAsync();
+        _recommendationCache.Dispose();
         GC.SuppressFinalize(this);
     }
 }

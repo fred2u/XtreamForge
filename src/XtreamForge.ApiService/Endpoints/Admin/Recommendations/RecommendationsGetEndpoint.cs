@@ -1,15 +1,15 @@
 using Microsoft.Extensions.Options;
 using XtreamForge.ApiService.Endpoints.Admin.Recommendations.Dto;
 using XtreamForge.ApiService.Options;
-using XtreamForge.ApiService.Services.Admin;
+using XtreamForge.ApiService.Services;
 
 namespace XtreamForge.ApiService.Endpoints.Admin.Recommendations;
 
-public class RecommendationsGetEndpoint(RecommendationAdminService recommendationAdminService, IOptions<TmdbOptions> tmdbOptions)
+public class RecommendationsGetEndpoint(RecommendationService recommendationService, IOptions<TmdbOptions> tmdbOptions)
 {
     public async Task<IResult> GetAsync(CancellationToken cancellationToken = default)
     {
-        var recommendations = await recommendationAdminService.GetAsync(cancellationToken);
+        var recommendations = await recommendationService.GetAsync(cancellationToken);
         var imageBaseUrl = tmdbOptions.Value.ImageBaseUrl;
 
         return TypedResults.Ok<IReadOnlyList<AdminRecommendationDto>>(

@@ -19,6 +19,16 @@ public static class BindOptionsExtensions
             services.AddOptions<XtreamProxyOptions>()
                 .BindConfiguration(XtreamProxyOptions.SectionName);
 
+            services.AddOptions<RecommendationOptions>()
+                .BindConfiguration(RecommendationOptions.SectionName)
+                .Validate(options => options.CategoryId > 0, $"{RecommendationOptions.SectionName}:CategoryId must be a positive number.")
+                .ValidateOnStart();
+
+            services.AddOptions<PopularOptions>()
+                .BindConfiguration(PopularOptions.SectionName)
+                .Validate(options => options.CategoryId > 0, $"{PopularOptions.SectionName}:CategoryId must be a positive number.")
+                .ValidateOnStart();
+
             return services;
         }
     }

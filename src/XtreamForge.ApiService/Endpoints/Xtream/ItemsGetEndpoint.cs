@@ -7,7 +7,14 @@ using XtreamForge.ServiceDefaults;
 
 namespace XtreamForge.ApiService.Endpoints.Xtream;
 
-public class ItemsGetEndpoint(IHttpClientFactory httpClientFactory, SourceService sourceService, CategoryService categoryService, ItemService itemService, TmdbInfoService tmdbInfoService, ILogger<ItemsGetEndpoint> logger)
+public class ItemsGetEndpoint(
+    IHttpClientFactory httpClientFactory,
+    SourceService sourceService,
+    CategoryService categoryService,
+    ItemService itemService,
+    TmdbInfoService tmdbInfoService,
+    VirtualCategoryService virtualCategoryService,
+    ILogger<ItemsGetEndpoint> logger)
 {
     // the response is flushed in chunks rather than after every item
     private const int FlushThresholdBytes = 32 * 1024;
@@ -29,16 +36,23 @@ public class ItemsGetEndpoint(IHttpClientFactory httpClientFactory, SourceServic
                 return Results.BadRequest("Unknown source: request the categories first.");
             }
 
-            var xtreamCategoryIdMapping = await categoryService.GetXtreamCategoryIdMappingAsync(xtreamContext, source, cancellationToken);
+            // a virtual category (recommendations, popular) is filled from all the categories
+            var isVirtualCategory = virtualCategoryService.IsVirtualCategoryRequested(xtreamContext);
+            var xtreamCategoryIdMapping = isVirtualCategory
+                ? await categoryService.GetAllXtreamCategoryIdMappingAsync(xtreamContext, source, cancellationToken)
+                : await categoryService.GetXtreamCategoryIdMappingAsync(xtreamContext, source, cancellationToken);
             if (xtreamCategoryIdMapping.Count == 0)
             {
                 return Results.BadRequest("No categories found for the requested category_id.");
             }
 
             // a single upstream request: the only mapped category, or ALL filtered through the category mapping
-            var upstreamCategoryId = !CategoryService.IsGetAll(xtreamContext) && xtreamCategoryIdMapping.Count == 1
+            var upstreamCategoryId = !isVirtualCategory && !CategoryService.IsGetAll(xtreamContext) && xtreamCategoryIdMapping.Count == 1
                 ? xtreamCategoryIdMapping.Keys.Single()
                 : "ALL";
+
+            // with all the categories, an item is moved to its virtual category; a requested virtual category only lists its items
+            var virtualCategories = await virtualCategoryService.GetListAssignmentAsync(xtreamContext, cancellationToken);
 
             using var requestMessage = XtreamHttpRequestMessageFactory.Create(xtreamContext.BuildTargetUri(new KeyValuePair<string, string>("category_id", upstreamCategoryId)), xtreamContext.Request);
             var httpClient = httpClientFactory.CreateClient(XtreamProxyOptions.HttpClientName);
@@ -58,19 +72,20 @@ public class ItemsGetEndpoint(IHttpClientFactory httpClientFactory, SourceServic
             await using var payloadStream = await responseMessage.Content.ReadAsStreamAsync(cancellationToken);
             await foreach (var item in JsonSerializer.DeserializeAsyncEnumerable<JsonNode>(payloadStream, topLevelValues: false, cancellationToken: cancellationToken))
             {
-                if (itemService.TransformStreamItem(item, xtreamContext, source, xtreamCategoryIdMapping, seenIds) is { } transformedItem)
+                if (itemService.TransformStreamItem(item, xtreamContext, source, xtreamCategoryIdMapping, seenIds) is { } transformedItem
+                    && (virtualCategories is null || virtualCategories.Includes(ItemService.ReadTmdbId(transformedItem))))
                     batch.Add(transformedItem);
 
                 if (batch.Count >= TmdbInfoBatchSize)
                 {
-                    await WriteBatchAsync(batch, writer, xtreamContext, source, cancellationToken);
+                    await WriteBatchAsync(batch, writer, xtreamContext, source, virtualCategories, cancellationToken);
 
                     if (writer.BytesPending >= FlushThresholdBytes)
                         await FlushAsync(writer, xtreamContext.Response, cancellationToken);
                 }
             }
 
-            await WriteBatchAsync(batch, writer, xtreamContext, source, cancellationToken);
+            await WriteBatchAsync(batch, writer, xtreamContext, source, virtualCategories, cancellationToken);
             writer.WriteEndArray();
             await FlushAsync(writer, xtreamContext.Response, cancellationToken);
 
@@ -108,7 +123,7 @@ public class ItemsGetEndpoint(IHttpClientFactory httpClientFactory, SourceServic
     }
 
     // enriches the batched items with their TMDB metadata, writes the ones still included, and empties the batch
-    private async Task WriteBatchAsync(List<JsonObject> batch, Utf8JsonWriter writer, XtreamContext xtreamContext, XtreamSourceSnapshot source, CancellationToken cancellationToken)
+    private async Task WriteBatchAsync(List<JsonObject> batch, Utf8JsonWriter writer, XtreamContext xtreamContext, XtreamSourceSnapshot source, VirtualCategoryAssignment? virtualCategories, CancellationToken cancellationToken)
     {
         if (batch.Count == 0)
             return;
@@ -118,6 +133,9 @@ public class ItemsGetEndpoint(IHttpClientFactory httpClientFactory, SourceServic
 
         foreach (var item in batch.Where(item => itemService.EnrichStreamItem(item, xtreamContext.ContentType, tmdbInfos, source)))
         {
+            if (virtualCategories is not null)
+                ItemService.ApplyVirtualCategory(virtualCategories, ItemService.ReadTmdbId(item), item);
+
             item.WriteTo(writer);
         }
 

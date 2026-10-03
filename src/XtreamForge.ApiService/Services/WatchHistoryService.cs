@@ -7,7 +7,7 @@ using XtreamForge.Domain.History;
 
 namespace XtreamForge.ApiService.Services;
 
-public class WatchHistoryService(IHttpClientFactory httpClientFactory, XtreamForgeDbContext dbContext)
+public class WatchHistoryService(IHttpClientFactory httpClientFactory, XtreamForgeDbContext dbContext, TmdbIdCache recommendationCache)
 {
     /// <summary>
     /// Records a movie playback with its TMDB ID; returns false when the source is unknown or the movie has no TMDB ID.
@@ -40,6 +40,7 @@ public class WatchHistoryService(IHttpClientFactory httpClientFactory, XtreamFor
             StartedAtUtc = request.StartedAtUtc
         });
         await dbContext.SaveChangesAsync(cancellationToken);
+        recommendationCache.Invalidate(TmdbIdCache.RecommendationsKey);
 
         return true;
     }

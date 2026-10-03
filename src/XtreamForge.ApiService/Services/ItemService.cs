@@ -49,6 +49,26 @@ public class ItemService(TmdbIdRetrieverQueue tmdbIdRetrieverQueue, TmdbInfoQueu
     }
 
     /// <summary>
+    /// Replaces the category of the given sections (list item, or <c>movie_data</c> and <c>info</c>) by the virtual category of the item
+    /// (recommendations, popular), if any; only the category keys already present are rewritten.
+    /// </summary>
+    public static void ApplyVirtualCategory(VirtualCategoryAssignment assignment, long? tmdbId, params JsonObject[] sections)
+    {
+        if (assignment.CategoryOf(tmdbId) is not { } virtualCategory)
+            return;
+
+        var categoryId = virtualCategory.CategoryId.ToString(CultureInfo.InvariantCulture);
+        foreach (var section in sections)
+        {
+            if (section.ContainsKey("category_id"))
+                section["category_id"] = categoryId;
+
+            if (section.ContainsKey("category_ids"))
+                section["category_ids"] = new JsonArray(categoryId);
+        }
+    }
+
+    /// <summary>
     /// Evaluates the TMDB rules on the TMDB metadata of a list item returned by <see cref="TransformStreamItem"/>, then applies the metadata;
     /// returns false when the item must not be returned. An item that cannot be enriched (invalid TMDB ID, metadata not loaded yet)
     /// or whose metadata is excluded (manually or by a TMDB rule) is not returned; a missing or outdated metadata is enqueued for loading,

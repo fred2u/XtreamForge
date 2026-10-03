@@ -65,6 +65,10 @@ Backend (`XtreamForge.ApiService`):
 - `Tmdb:ImageBaseUrl` - TMDB image base URL used for the posters (default `https://image.tmdb.org/t/p/`); must be an absolute HTTP(S) URL, validated at startup
 - `Tmdb:PreferredLanguage` - language used for TMDB searches and details (default `fr-FR`)
 - `Tmdb:MinimumConfidenceScore` - minimum score for a TMDB match to be accepted (default `85`)
+- `Recommendations:CategoryName` - name of the VOD recommendations category (`RECOMMANDATIONS` in `appsettings.json`); the category is disabled when empty, see [Recommendations category](#recommendations-category)
+- `Recommendations:CategoryId` - XtreamForge ID of the recommendations category (default `999999999`); must be positive (validated at startup) and must not be the ID of an Xtream or custom category
+- `Popular:CategoryName` - name of the VOD and series popular category (`POPULAIRES` in `appsettings.json`); the category is disabled when empty, see [Popular category](#popular-category)
+- `Popular:CategoryId` - XtreamForge ID of the popular category (default `999999998`); must be positive (validated at startup) and must not be the ID of an Xtream, custom, or recommendations category
 - `ConnectionStrings:database` - PostgreSQL connection string (supplied by Aspire)
 
 Web (`XtreamForge.Web`):
@@ -117,7 +121,7 @@ Only `GET` and `HEAD` requests are accepted. Two routes share this URL shape: `/
 
 Behavior by `player_api.php` action:
 
-- `get_vod_categories` / `get_series_categories` - fetched from upstream, synchronized in PostgreSQL, filtered by category rules, and returned with XtreamForge category IDs
+- `get_vod_categories` / `get_series_categories` - fetched from upstream, synchronized in PostgreSQL, filtered by category rules, and returned with XtreamForge category IDs; they start with the virtual categories: recommendations (VOD only), then popular
 - `get_vod_streams` / `get_series` - see [Catalogue processing](#catalogue-processing)
 - `get_vod_info` / `get_series_info` - see [Item details](#item-details)
 - no action (authentication) - see [Authentication and stream URLs](#authentication-and-stream-urls)
@@ -158,6 +162,26 @@ Movies are recommended from the watch history, computed on each request (nothing
 - each watched movie gives its recommendations a weight (20 for the most recent, down to 1); the 50 best summed weights are returned, then by vote average
 - a recommendation is flagged as available in the catalogue when TMDB metadata is known for it (TMDB rules are not applied)
 - `GET /api/admin/recommendations` - the recommendations with title, original title, release date, `w92` poster, vote average and count, English genre names, score, number of watched movies recommending it, and the catalogue flag
+
+### Recommendations category
+
+When `Recommendations:CategoryName` is set, the recommended movies are exposed to the Xtream clients in a virtual VOD category:
+
+- `get_vod_categories` returns it first, with the ID `Recommendations:CategoryId`
+- `get_vod_streams` with all the categories (`category_id` missing, empty, or `ALL`): a recommended movie is returned in the recommendations category (`category_id` and `category_ids` rewritten) instead of its own category
+- `get_vod_streams` with the recommendations `category_id`: the provider is called once with `category_id=ALL` and only the recommended movies are returned, in the recommendations category
+- `get_vod_info`: a recommended movie is returned in the recommendations category (`movie_data` and `info`)
+- `get_vod_streams` with another category keeps the category of the recommended movies
+- the TMDB IDs of the recommended movies are kept in memory for 6 hours (`TmdbIdCache`) and recomputed when the watch history changes (playback recorded, added, or deleted); when TMDB fails, the catalogue is returned without recommendation and the next request tries again
+
+### Popular category
+
+When `Popular:CategoryName` is set, the movies and TV shows currently popular on TMDB (`movie/popular` / `tv/popular`, first 5 pages, i.e. up to 100 titles per content type) are exposed in a virtual category, for VOD and series:
+
+- `get_vod_categories` / `get_series_categories` return it after the recommendations category, with the ID `Popular:CategoryId`
+- with all the categories (`get_vod_streams` / `get_series`), and in `get_vod_info` / `get_series_info`, a popular item is moved to the popular category, unless it is a recommended movie: the recommendations category wins
+- `get_vod_streams` / `get_series` with the popular `category_id`: the provider is called once with `category_id=ALL` and only the popular items are returned, in the popular category (recommended movies included)
+- the popular TMDB IDs are kept in memory for 6 hours per content type (`TmdbIdCache`); without `Tmdb:ApiKey` the category is empty; when TMDB fails, the catalogue is returned without popular item and the next request tries again
 
 ## Sources
 

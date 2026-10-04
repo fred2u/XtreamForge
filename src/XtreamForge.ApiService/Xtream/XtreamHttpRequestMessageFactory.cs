@@ -1,4 +1,5 @@
 using Microsoft.Net.Http.Headers;
+using XtreamForge.ServiceDefaults;
 
 namespace XtreamForge.ApiService.Xtream;
 
@@ -35,6 +36,9 @@ public static class XtreamHttpRequestMessageFactory
             // content headers are rejected here and dropped, as there is no request content
             requestMessage.Headers.TryAddWithoutValidation(header.Key, [.. header.Value]);
         }
+
+        // credentials of the incoming route, redacted from the telemetry and logs of the upstream request
+        XtreamCredentialRedaction.SetPathCredentials(requestMessage, request);
 
         return requestMessage;
     }

@@ -47,11 +47,13 @@ public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TmdbIdCach
         var to = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(timeProvider.GetUtcNow(), timeZone).DateTime);
         var from = to.AddDays(1 - ActivityDayCount);
 
-        // the movie history is small (one entry per playback): the start dates are converted to the time zone in memory,
-        // which keeps the day boundaries exact for every offset and daylight saving time
+        // only the playbacks of the period are read: a local day starts at most 14 hours before the same UTC day (UTC+14),
+        // so starting one UTC day before the first day keeps all of its playbacks; their start dates are then converted to the
+        // time zone in memory, which keeps the day boundaries exact for every offset and daylight saving time
+        var fromUtc = new DateTimeOffset(from.AddDays(-1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var startDates = await dbContext.WatchHistory
             .AsNoTracking()
-            .Where(entry => entry.ContentType == ContentType.Vod)
+            .Where(entry => entry.ContentType == ContentType.Vod && entry.StartedAtUtc >= fromUtc)
             .Select(entry => entry.StartedAtUtc)
             .ToListAsync(cancellationToken);
 

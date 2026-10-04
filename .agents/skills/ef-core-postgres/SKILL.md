@@ -44,7 +44,7 @@ Follow existing repository conventions instead of inventing a new persistence pa
 - `ItemRules` (`ItemRule`) — ordered item rules per source + ContentType
 - `StreamTmdbMappings` (`StreamTmdbMapping`) — `Source + ContentType + StreamId -> TmdbId`; a null `TmdbId` is a lookup without result, retried from `NextLookupAtUtc`
 - `TmdbInfos` (`TmdbInfo`) — TMDB metadata per `ContentType + TmdbId`, with its load state (`LoadedAtUtc`, `LoadAttemptCount`, `NextLoadAtUtc`); every metadata value is nullable; `GenreIds`, `Genres`, `Directors`, and `Cast` (column `cast_members`, `cast` being a PostgreSQL reserved word) are PostgreSQL arrays (`integer[]` / `text[]`, JSON in SQLite tests), never null; a migration adding a non-nullable array column to an existing table needs `defaultValueSql: "'{}'"`; `IsExcluded` is the manual exclusion
-- `WatchHistory` (`WatchHistoryEntry`) - one row per movie playback (`ContentType`, `TmdbId`, `StartedAtUtc`), global (no source, no account); listed by descending `Id`, which follows the start order, because SQLite tests cannot order by `DateTimeOffset`
+- `WatchHistory` (`WatchHistoryEntry`) - one row per movie playback (`ContentType`, `TmdbId`, `StartedAtUtc`), global (no source, no account); listed by descending `Id`, which follows the start order; indexed on `(ContentType, TmdbId)` (recommendation seeds) and `(ContentType, StartedAtUtc)` (activity of the last year)
 - `TmdbRules` (`TmdbRule`) - global TMDB rules per content type (unique `ContentType + Sequence`), on the TMDB `Title` or `Genre`
 
 Migrations live under `XtreamForge.Database/Migrations/`.

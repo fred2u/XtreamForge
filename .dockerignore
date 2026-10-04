@@ -7,3 +7,5 @@
 artifacts
 README.md
 LICENSE
+# the SDK of the image is defined by its base image tag, whose feature band may differ from the one pinned for development
+global.json

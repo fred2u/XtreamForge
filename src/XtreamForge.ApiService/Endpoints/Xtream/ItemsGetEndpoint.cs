@@ -3,7 +3,6 @@ using System.Text.Json.Nodes;
 using XtreamForge.ApiService.Options;
 using XtreamForge.ApiService.Services;
 using XtreamForge.ApiService.Xtream;
-using XtreamForge.ServiceDefaults;
 
 namespace XtreamForge.ApiService.Endpoints.Xtream;
 
@@ -21,6 +20,8 @@ public class ItemsGetEndpoint(
 
     // the TMDB metadata is loaded with one query per batch: preloading it for a whole catalogue would hold every overview in memory
     private const int TmdbInfoBatchSize = 500;
+
+    private const string JsonContentType = "application/json; charset=utf-8";
 
     public async Task<IResult> GetAsync(XtreamContext xtreamContext, CancellationToken cancellationToken)
     {
@@ -64,6 +65,11 @@ public class ItemsGetEndpoint(
                 return Results.Empty;
             }
 
+            // the media type lets the response compression apply to the largest Xtream payloads; the response is started explicitly,
+            // so that a failure while streaming the list aborts the connection instead of returning an error status (see XtreamUpstreamFailure)
+            xtreamContext.Response.ContentType = JsonContentType;
+            await xtreamContext.Response.StartAsync(cancellationToken);
+
             await using var writer = new Utf8JsonWriter(xtreamContext.Response.BodyWriter);
             writer.WriteStartArray();
 
@@ -91,27 +97,9 @@ public class ItemsGetEndpoint(
 
             return Results.Empty;
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (Exception exception) when (XtreamUpstreamFailure.IsUpstreamFailure(exception, cancellationToken))
         {
-            throw;
-        }
-        catch (OperationCanceledException exception)
-        {
-            logger.LogWarning(exception, "ErrorMessage: {ErrorMessage}", XtreamCredentialRedaction.SanitizeText(exception.Message));
-
-            return Results.StatusCode(StatusCodes.Status504GatewayTimeout);
-        }
-        catch (HttpRequestException exception)
-        {
-            logger.LogWarning(exception, "ErrorMessage: {ErrorMessage}", XtreamCredentialRedaction.SanitizeText(exception.Message));
-
-            return Results.StatusCode(StatusCodes.Status502BadGateway);
-        }
-        catch (JsonException exception)
-        {
-            logger.LogWarning(exception, "ErrorMessage: {ErrorMessage}", XtreamCredentialRedaction.SanitizeText(exception.Message));
-
-            return Results.StatusCode(StatusCodes.Status502BadGateway);
+            return XtreamUpstreamFailure.Handle(exception, xtreamContext, logger);
         }
     }
 

@@ -117,7 +117,7 @@ Example:
 {xtreamforge-base-url}/http/example.com/8080/player_api.php?username=user&password=pass&action=get_vod_streams
 ```
 
-Only `GET` and `HEAD` requests are accepted. Two routes share this URL shape: `/{protocol}/{host}/{port}/player_api.php` (case-insensitive) is handled by XtreamForge as described below, and every other path (streams, other files) is forwarded upstream by a separate route that does not load any XtreamForge data (movie streams are only reported in memory to the [watch history](#watch-history)).
+Only `GET` and `HEAD` requests are accepted. Several routes share this URL shape: `/{protocol}/{host}/{port}/player_api.php` (case-insensitive) is handled by XtreamForge as described below, and every other path (streams, other files) is forwarded upstream by separate routes that do not load any XtreamForge data (movie streams are only reported in memory to the [watch history](#watch-history)). The short live form `/{protocol}/{host}/{port}/{username}/{password}/{streamId}` has its own route, only so that its credentials are known from the route values and redacted; it is forwarded like any other path.
 
 Behavior by `player_api.php` action:
 
@@ -125,12 +125,15 @@ Behavior by `player_api.php` action:
 - `get_vod_streams` / `get_series` - see [Catalogue processing](#catalogue-processing)
 - `get_vod_info` / `get_series_info` - see [Item details](#item-details)
 - no action (authentication) - see [Authentication and stream URLs](#authentication-and-stream-urls)
-- any other action, or a non-`player_api.php` request - forwarded upstream unchanged (status, headers, and streamed body preserved)
+- any other action, or a non-`player_api.php` request - forwarded upstream unchanged (status, headers including `Content-Length`, and streamed body preserved)
+
+Upstream failures: an upstream timeout returns `504 Gateway Timeout`, and a network error, an interrupted body, or invalid JSON returns `502 Bad Gateway`. When the failure happens after the response has started (streamed list or body), its status can no longer change, so the connection is aborted and the client sees a truncated response rather than a complete one. The failure is logged with the action and the upstream host.
 
 Security notes:
 
 - XtreamForge validates `protocol`, `host`, and `port`, and enforces the `XtreamProxy` host allowlist (SSRF protection)
-- Xtream credentials are forwarded upstream but are not persisted; they are redacted (`***`) from the request spans and from the request logs of the Xtream HTTP client, in the query string and in the stream paths (`movie|series|live|timeshift/{username}/{password}/...`), except for the short live form (see [Known limitations](#known-limitations))
+- Xtream credentials are forwarded upstream but are not persisted; they are redacted (`***`) from the request spans and from the request logs of the Xtream HTTP client, in the query string, in the stream paths (`movie|series|live|timeshift/{username}/{password}/...`), and in the short live form (from the `username` / `password` route values, once the request is routed)
+- the ASP.NET Core request logs and their log scope (`RequestPath`, attached to every log of a request) write the raw path, so `Microsoft.AspNetCore.Hosting.Diagnostics` is disabled in code (`LogLevel.None`) whatever the configured log levels; the redacted spans describe the requests instead
 - the Xtream proxy routes are excluded from generated OpenAPI documentation
 
 ## Authentication and stream URLs
@@ -190,7 +193,7 @@ A source is identified by its upstream destination (`protocol` + `host` + `port`
 A source is created either:
 
 - from the admin UI (`Sources` screen / `POST /api/admin/sources`): the URL and credentials are used once to discover VOD and Series categories, then discarded; nothing is saved when the provider is unreachable
-- implicitly on the first `get_vod_categories` / `get_series_categories` request going through the proxy
+- implicitly on the first `get_vod_categories` / `get_series_categories` request going through the proxy; when parallel requests synchronize the same new source or category (clients often request the VOD and series categories together), the one rejected by the unique indexes synchronizes again once and updates what the other inserted
 
 `get_vod_streams` / `get_series` require an already known source; otherwise XtreamForge returns `400 Bad Request` without calling the provider.
 
@@ -238,7 +241,7 @@ For `get_vod_streams` and `get_series`:
 
 1. Xtream clients send XtreamForge category IDs; they are resolved to the effective included upstream category IDs (manual exclusions and category rules are respected).
 2. A `category_id` that is not a number or matches no included category returns `400 Bad Request`. A missing, empty, or `ALL` `category_id` means all categories: XtreamForge sends one upstream request with `category_id=ALL`. Otherwise a single upstream request is also sent: with the upstream category ID when the requested category maps to one upstream category, or with `category_id=ALL` filtered through the mapping when it maps to several (custom category).
-3. Items are processed in a streaming way (parsed once, response flushed in chunks):
+3. Items are processed in a streaming way (parsed once, response flushed in chunks, as `application/json; charset=utf-8`, so that the response compression applies):
    - items whose category is not effectively included are removed, and `category_id` / `category_ids` are rewritten to XtreamForge IDs
    - item rules are applied
    - a TMDB ID must be known (see below), otherwise the item is removed from the current response
@@ -401,8 +404,7 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) restores, builds in Rel
 - changing `Tmdb:PreferredLanguage` only affects metadata loaded or refreshed afterwards
 - while a provider rate limits (HTTP 429), proxied client requests to it wait for their slot (up to one minute per attempt, three attempts), which can exceed the timeout of some IPTV clients
 - stream URLs without upstream prefix only work once the account has authenticated through XtreamForge since its last start, and use the host, port, and scheme of the request received by XtreamForge (a reverse proxy must forward the original `Host`; forwarded headers such as `X-Forwarded-Proto` are not processed); the short live form `/{username}/{password}/{id}` and `/timeshift/...` are not supported
-- the credentials of the short live stream form (`/{protocol}/{host}/{port}/{username}/{password}/{id}`) are not redacted from telemetry nor from the Xtream HTTP client logs, and ASP.NET Core writes the request paths unredacted if its log level is lowered to `Information`
 - no admin authentication yet: the admin API is served by the same host and port as the Xtream proxy, so it must not be exposed to untrusted networks
-- only local development through Aspire is supported: the ApiService is not declared as an external endpoint, and the Dockerfiles under `src/` do not build
+- only local development through Aspire is supported: the ApiService is not declared as an external endpoint, and no deployment is documented; the Dockerfiles under `src/` build the ApiService and Web images from the repository root (for example `docker build -f src/XtreamForge.ApiService/Dockerfile .`), with the SDK of their base image (`global.json` is excluded from the Docker context)
 
 Known bugs and design issues are tracked in [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md).

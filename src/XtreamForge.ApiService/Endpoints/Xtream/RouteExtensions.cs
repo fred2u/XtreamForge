@@ -1,5 +1,6 @@
 using XtreamForge.ApiService.Xtream;
 using XtreamForge.Domain.Enums;
+using XtreamForge.ServiceDefaults;
 
 namespace XtreamForge.ApiService.Endpoints.Xtream;
 
@@ -25,6 +26,16 @@ public static class RouteExtensions
             endpoints
                 .MapMethods($"/{{protocol}}/{{host}}/{{port}}/{PlayerApiPath}", SupportedHttpMethods, HandlePlayerApiRequestAsync)
                 .WithName("HandleXtreamPlayerApiRequest")
+                .ExcludeFromDescription();
+
+            // the short live form {username}/{password}/{streamId} has no stream kind: its credentials are only recognized
+            // from the route values, which the telemetry and the upstream request logs redact; it is forwarded like any other path
+            endpoints
+                .MapMethods(
+                    $"/{{protocol}}/{{host}}/{{port}}/{{{XtreamCredentialRedaction.UsernameRouteValue}}}/{{{XtreamCredentialRedaction.PasswordRouteValue}}}/{{streamId}}",
+                    SupportedHttpMethods,
+                    ForwardShortLiveStreamAsync)
+                .WithName("ForwardXtreamShortLiveStream")
                 .ExcludeFromDescription();
 
             endpoints
@@ -86,6 +97,13 @@ public static class RouteExtensions
 
         return await xtreamRequestForwardEndpoint.ForwardAsync(xtreamContext, httpContext.RequestAborted);
     }
+
+    private static Task<IResult> ForwardShortLiveStreamAsync(
+       string protocol, string host, int port, string username, string password, string streamId,
+       HttpContext httpContext,
+       XtreamRequestForwardEndpoint xtreamRequestForwardEndpoint,
+       XtreamContextBuilder contextBuilder)
+        => ForwardXtreamRequestAsync(protocol, host, port, $"{username}/{password}/{streamId}", httpContext, xtreamRequestForwardEndpoint, contextBuilder);
 
     // the upstream of a stream path without destination is the one of its account, known once the account has authenticated
     private static async Task<IResult> ForwardAccountStreamAsync(

@@ -274,6 +274,41 @@ public class ItemsGetEndpointTests : IAsyncDisposable
         Assert.Equal(Enumerable.Range(1, 1201).Select(id => $"Movie {id}"), ReadResponseItems(context).Select(item => item["name"]?.GetValue<string>()));
     }
 
+    [Fact]
+    public async Task GetAsync_WritesTheListAsJson()
+    {
+        await SeedAsync();
+        await AddLoadedTmdbInfosAsync((101, "Action movie"));
+        var context = CreateContext("?action=get_vod_streams");
+
+        await CreateEndpoint(CreateHttpClientFactory(HttpStatusCode.OK)).GetAsync(context, TestContext.Current.CancellationToken);
+
+        // the media type lets the response compression apply to the list
+        Assert.Equal("application/json; charset=utf-8", context.Response.ContentType);
+    }
+
+    [Fact]
+    public async Task GetAsync_WhenTheUpstreamListBreaksWhileStreaming_AbortsTheConnection()
+    {
+        await SeedAsync();
+        await AddLoadedTmdbInfosAsync((101, "Action movie"));
+        var httpClientFactory = new StubXtreamHttpClientFactory(new Dictionary<string, (HttpStatusCode, string)>
+        {
+            ["get_vod_streams"] = (HttpStatusCode.OK, """[{ "stream_id": 1, "name": "Action movie", "category_id": "10", "tmdb_id": "101" }, { "stream_id": """)
+        });
+        var httpContext = new ServerLikeHttpContext();
+        httpContext.HttpContext.Request.Method = HttpMethods.Get;
+        httpContext.HttpContext.Request.QueryString = new QueryString("?action=get_vod_streams");
+        var context = new XtreamContext("http", "provider.example.com", 8080, "player_api.php", httpContext.HttpContext, RequestAction.GetItems, ContentType.Vod);
+
+        var result = await CreateEndpoint(httpClientFactory).GetAsync(context, TestContext.Current.CancellationToken);
+
+        // the status is already sent: the truncated list must not look complete to the client
+        Assert.IsType<EmptyHttpResult>(result);
+        Assert.True(httpContext.IsAborted);
+        Assert.Equal(StatusCodes.Status200OK, httpContext.HttpContext.Response.StatusCode);
+    }
+
     // categories 10 and 11 share a custom category, category 12 is exposed with its original name
     private async Task<(CustomCategory CustomCategory, XtreamCategory Drama)> SeedAsync()
     {

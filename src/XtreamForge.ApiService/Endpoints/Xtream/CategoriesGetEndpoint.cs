@@ -3,7 +3,6 @@ using XtreamForge.ApiService.Endpoints.Xtream.Dto;
 using XtreamForge.ApiService.Options;
 using XtreamForge.ApiService.Services;
 using XtreamForge.ApiService.Xtream;
-using XtreamForge.ServiceDefaults;
 
 namespace XtreamForge.ApiService.Endpoints.Xtream;
 
@@ -42,27 +41,9 @@ public class CategoriesGetEndpoint(IHttpClientFactory httpClientFactory, Categor
 
             return Results.Empty;
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (Exception exception) when (XtreamUpstreamFailure.IsUpstreamFailure(exception, cancellationToken))
         {
-            throw;
-        }
-        catch (OperationCanceledException exception)
-        {
-            logger.LogWarning(exception, "ErrorMessage: {ErrorMessage}", XtreamCredentialRedaction.SanitizeText(exception.Message));
-
-            return Results.StatusCode(StatusCodes.Status504GatewayTimeout);
-        }
-        catch (HttpRequestException exception)
-        {
-            logger.LogWarning(exception, "ErrorMessage: {ErrorMessage}", XtreamCredentialRedaction.SanitizeText(exception.Message));
-
-            return Results.StatusCode(StatusCodes.Status502BadGateway);
-        }
-        catch (JsonException exception)
-        {
-            logger.LogWarning(exception, "ErrorMessage: {ErrorMessage}", XtreamCredentialRedaction.SanitizeText(exception.Message));
-
-            return Results.StatusCode(StatusCodes.Status502BadGateway);
+            return XtreamUpstreamFailure.Handle(exception, xtreamContext, logger);
         }
     }
 }

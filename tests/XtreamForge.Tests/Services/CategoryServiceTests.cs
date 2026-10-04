@@ -139,6 +139,56 @@ public class CategoryServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task SyncCategoriesAsync_WhenTheSourceIsCreatedConcurrently_SynchronizesTheExistingSource()
+    {
+        // a parallel request (for example get_series_categories) creates the same source just before this one saves
+        var interceptor = new BeforeFirstSaveInterceptor(async (dbContext, cancellationToken) =>
+        {
+            await using var concurrentDbContext = SqliteDbContextFactory.CreateOnSameDatabase(dbContext);
+            concurrentDbContext.XtreamSources.Add(new XtreamSource { Protocol = Protocol, Host = Host, Port = Port });
+            await concurrentDbContext.SaveChangesAsync(cancellationToken);
+        });
+        await using var dbContext = SqliteDbContextFactory.Create(interceptor);
+
+        var result = await new CategoryService(dbContext).SyncCategoriesAsync(
+            CreateContext(RequestAction.GetCategories),
+            [new XtreamCategoryDto("1", "Action")],
+            TestContext.Current.CancellationToken);
+
+        var source = await dbContext.XtreamSources.AsNoTracking().Include(s => s.XtreamCategories).SingleAsync(TestContext.Current.CancellationToken);
+        var category = Assert.Single(source.XtreamCategories);
+        Assert.Equal("1", category.XtreamId);
+        Assert.Equal([new XtreamCategoryDto(category.Id.ToString(), "Action")], result);
+    }
+
+    [Fact]
+    public async Task SyncCategoriesAsync_WhenACategoryIsCreatedConcurrently_SynchronizesTheExistingCategory()
+    {
+        var interceptor = new BeforeFirstSaveInterceptor(async (dbContext, cancellationToken) =>
+        {
+            await using var concurrentDbContext = SqliteDbContextFactory.CreateOnSameDatabase(dbContext);
+            var sourceId = await concurrentDbContext.XtreamSources.Select(s => s.Id).SingleAsync(cancellationToken);
+            concurrentDbContext.XtreamCategories.Add(new XtreamCategory { XtreamSourceId = sourceId, XtreamId = "1", Name = "Action", ContentType = ContentType.Vod });
+            await concurrentDbContext.SaveChangesAsync(cancellationToken);
+        });
+        await using var dbContext = SqliteDbContextFactory.Create(interceptor);
+        await using (var seedDbContext = SqliteDbContextFactory.CreateOnSameDatabase(dbContext))
+        {
+            seedDbContext.XtreamSources.Add(new XtreamSource { Protocol = Protocol, Host = Host, Port = Port });
+            await seedDbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        // the category is new when read, then created by a parallel request of the same content type before the save
+        var result = await new CategoryService(dbContext).SyncCategoriesAsync(
+            CreateContext(RequestAction.GetCategories),
+            [new XtreamCategoryDto("1", "Action")],
+            TestContext.Current.CancellationToken);
+
+        var category = await dbContext.XtreamCategories.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal([new XtreamCategoryDto(category.Id.ToString(), "Action")], result);
+    }
+
+    [Fact]
     public async Task SyncCategoriesAsync_WhenCategoryDisappearsAndComesBack_LosesItsCustomCategory()
     {
         var source = await AddSourceAsync();

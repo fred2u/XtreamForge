@@ -308,6 +308,8 @@ Background queues are monitored by `Services/Monitoring/QueueMonitor`: a new que
 
 HTTP 429 from TMDB or an Xtream provider is handled by `Infrastructure/RateLimiting`: `RateLimitHandler` is inserted as the outermost handler of both named clients (before the resilience handler, so its waits are not counted by the resilience timeouts) and paces each upstream host through the singleton `UpstreamRateLimiter` (`Retry-After`, doubling interval, gradual recovery, up to three GET/HEAD attempts). The standard resilience options are configured so that 429 is neither retried nor counted by the circuit breaker. Do not add 429 retry loops in callers.
 
+Upstream failures of the Xtream endpoints go through `Xtream/XtreamUpstreamFailure`: `catch (Exception exception) when (XtreamUpstreamFailure.IsUpstreamFailure(exception, cancellationToken))` then `XtreamUpstreamFailure.Handle` (504 for a timeout, 502 otherwise, logged with the action and upstream host; once the response has started, the connection is aborted instead, as the status can no longer change). Do not repeat per-endpoint `try/catch` blocks. A streamed response must be started explicitly (`Response.StartAsync`) before writing, with its `Content-Type`.
+
 Avoid buffering complete payloads when streaming is possible and no transformation requires buffering.
 
 Avoid unnecessary JSON deserialization when a response can be transparently forwarded.
@@ -349,6 +351,8 @@ Sensitive information must not appear in:
 Use existing redaction mechanisms:
 
 - `XtreamCredentialRedaction` (ServiceDefaults) redacts the `username` / `password` query parameters and the credentials of the stream paths (`movie|series|live|timeshift/{username}/{password}/...`); it is applied to the server and client spans, and `SanitizeText` must wrap any logged text that may contain an upstream URL;
+- credentials without a recognizable path shape (short live form `{username}/{password}/{streamId}`) are redacted from the `username` / `password` route values (`XtreamCredentialRedaction.UsernameRouteValue` / `PasswordRouteValue`): the server spans are redacted again once routed (`RedactServerResponse`), and `XtreamHttpRequestMessageFactory` marks them on the upstream request (`SetPathCredentials`) for the client spans and `XtreamHttpClientLogger` (`RedactRequestUri`). A new route carrying credentials in its path must name them `username` / `password`;
+- `Microsoft.AspNetCore.Hosting.Diagnostics` is disabled in `Program.cs` (`LogLevel.None`): its request logs and its log scope (`RequestPath`, exported with every log) write the raw path. Do not re-enable it;
 - the Xtream HTTP client does not use the default `IHttpClientFactory` logging, which writes the request URL: `XtreamHttpClientLogger` logs the redacted URL instead. Do not add loggers that write raw upstream URLs;
 - log caught exceptions with the exception object (SonarAnalyzer rule S6667) and `SanitizeText(exception.Message)`; never put a request URL in an exception message.
 
@@ -716,7 +720,9 @@ Tests use xUnit v3 (`xunit.v3`) on Microsoft Testing Platform; `global.json` opt
 
 Pass `TestContext.Current.CancellationToken` to methods that accept a `CancellationToken` (analyzer rule xUnit1051, enforced as an error).
 
-Database-backed tests use SQLite in-memory through `SqliteDbContextFactory`; hold the context in the test class and dispose it through `IAsyncDisposable`.
+Database-backed tests use SQLite in-memory through `SqliteDbContextFactory`; hold the context in the test class and dispose it through `IAsyncDisposable`. The factory stores `DateTimeOffset` values as binary numbers ordered by their UTC instant (`DateTimeOffsetToBinaryConverter`), so comparisons and ordering on dates translate as on PostgreSQL `timestamptz`. A concurrent write can be simulated with `BeforeFirstSaveInterceptor` and `SqliteDbContextFactory.CreateOnSameDatabase`.
+
+Code depending on `HttpResponse.HasStarted` or `HttpContext.Abort()` is tested with `Infrastructure/ServerLikeHttpContext`: the features of `DefaultHttpContext` never report a started response.
 
 Upstream Xtream and TMDB HTTP calls are replaced by the stub `IHttpClientFactory` implementations under `tests/XtreamForge.Tests/Infrastructure`.
 

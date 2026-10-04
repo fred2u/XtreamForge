@@ -46,6 +46,22 @@ public class WatchHistoryAdminServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task GetActivityAsync_InTheMostAdvancedTimeZone_KeepsThePlaybacksOfTheFirstDay()
+    {
+        // now: 2026-10-03 10:00 in Kiritimati (UTC+14), so the first day, 2025-09-28, starts at 2025-09-27 10:00 UTC
+        var kiritimati = TimeZoneInfo.FindSystemTimeZoneById("Pacific/Kiritimati");
+        _dbContext.WatchHistory.AddRange(
+            new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 1, StartedAtUtc = new DateTimeOffset(2025, 9, 27, 9, 30, 0, TimeSpan.Zero) },
+            new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 2, StartedAtUtc = new DateTimeOffset(2025, 9, 27, 10, 30, 0, TimeSpan.Zero) });
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var activity = await _service.GetActivityAsync(kiritimati, TestContext.Current.CancellationToken);
+
+        Assert.Equal(new DateOnly(2025, 9, 28), activity.From);
+        Assert.Equal([new WatchHistoryDayActivity(new DateOnly(2025, 9, 28), 1)], activity.Days);
+    }
+
+    [Fact]
     public async Task AddAsync_RecordsAPlaybackOfTheTmdbInfoStartedNow()
     {
         var info = new TmdbInfo { ContentType = ContentType.Vod, TmdbId = 603, Title = "The Matrix", PosterPath = "/matrix.jpg" };

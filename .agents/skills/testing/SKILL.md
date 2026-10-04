@@ -33,11 +33,11 @@ Test folders mirror the `XtreamForge.ApiService` structure, and namespaces match
 - `Services/` — core services (`CategoryRuleService`, `ItemRuleService`, `ItemService`, `CategoryService`).
 - `Services/Admin/` — admin services (`*AdminServiceTests.cs`).
 - `Xtream/` — Xtream request pipeline (`XtreamProviderValidator`, `XtreamContextBuilder`, `XtreamContext`, `XtreamHttpRequestMessageFactory`, `XtreamStreamPath`).
-- `Infrastructure/` — shared test helpers (`SqliteDbContextFactory`, `StubXtreamHttpClientFactory`, `StubTmdbHttpClientFactory`, `SteppingTimeProvider`, `TestMeterFactory`), and the tests of the ApiService `Infrastructure` code (`RateLimiting/`).
+- `Infrastructure/` — shared test helpers (`SqliteDbContextFactory`, `BeforeFirstSaveInterceptor` to simulate a concurrent write, `StubXtreamHttpClientFactory`, `StubTmdbHttpClientFactory`, `ServerLikeHttpContext` for code depending on `HttpResponse.HasStarted` or `HttpContext.Abort()`, `SteppingTimeProvider`, `TestMeterFactory`), and the tests of the ApiService `Infrastructure` code (`RateLimiting/`).
 - `ServiceDefaults/` — shared hosting code (`XtreamCredentialRedaction`).
 - `Web/` — `XtreamForge.Web` helpers and clients, by feature (`Web/Categories/`, `Web/Tmdb/`).
 
-Tests needing a DbContext use SQLite in-memory + `EnsureCreated()` through `Infrastructure/SqliteDbContextFactory`.
+Tests needing a DbContext use SQLite in-memory + `EnsureCreated()` through `Infrastructure/SqliteDbContextFactory`. It stores `DateTimeOffset` values as binary numbers ordered by their UTC instant, so date comparisons and ordering translate as on PostgreSQL.
 
 Do NOT add a `Version` to any `<PackageReference>` in the test project; `Directory.Packages.props` manages versions centrally.
 

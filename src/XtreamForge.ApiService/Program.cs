@@ -8,6 +8,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
+// the request logs and the request log scope (RequestPath, attached to every log of the request) write the raw path,
+// which carries the stream credentials; the redacted server spans describe the requests instead
+builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.None);
+
 builder.Services.AddBindedOptions();
 builder.Services.AddDatabase();
 builder.Services.AddHttpClients();

@@ -57,6 +57,8 @@ public static class Extensions
                             && !context.Request.Path.StartsWithSegments(AlivenessEndpointPath);
                         options.EnrichWithHttpRequest = static (activity, request) =>
                             XtreamCredentialRedaction.RedactServerRequest(activity, request);
+                        options.EnrichWithHttpResponse = static (activity, response) =>
+                            XtreamCredentialRedaction.RedactServerResponse(activity, response);
                     })
                     .AddHttpClientInstrumentation(options =>
                     {

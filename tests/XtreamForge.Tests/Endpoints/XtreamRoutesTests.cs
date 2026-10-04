@@ -42,6 +42,21 @@ public sealed class XtreamRoutesTests : IAsyncDisposable
         Assert.Equal(0, _dbContextCount);
     }
 
+    [Theory]
+    [InlineData("/user/secret/123", "/***/***/123")]
+    [InlineData("/movie/user/secret/1.mp4", "/movie/***/***/1.mp4")]
+    public async Task StreamRequest_IsForwardedWithItsCredentialsRedactedFromTheUpstreamRequestTelemetry(string path, string expectedRedactedPath)
+    {
+        var client = await StartAsync();
+
+        using var response = await client.GetAsync(ProviderPrefix + path, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(path, Assert.Single(_upstream.RequestedUris).AbsolutePath);
+        Assert.Equal(expectedRedactedPath, Assert.Single(_upstream.RedactedRequestUris)?.AbsolutePath);
+        Assert.Equal(0, _dbContextCount);
+    }
+
     [Fact]
     public async Task MovieStreamRequest_EnqueuesThePlaybackForTheWatchHistory()
     {

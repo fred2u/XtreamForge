@@ -40,6 +40,10 @@ public static class XtreamHttpResponseMessageWriter
             response.Headers[header.Key] = header.Value.ToArray();
         }
 
+        // the body is copied unchanged, so its length is kept: players use it to show the duration and to seek, also for HEAD and 206.
+        // It is null for a chunked upstream body, and for a body decompressed by the Xtream client, whose length is unknown
+        response.ContentLength = responseMessage.Content.Headers.ContentLength;
+
         foreach (var headerName in headersToSkip)
         {
             response.Headers.Remove(headerName);

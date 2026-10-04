@@ -1,10 +1,8 @@
 using System.Globalization;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using XtreamForge.ApiService.Options;
 using XtreamForge.ApiService.Xtream;
 using XtreamForge.Domain.Enums;
-using XtreamForge.ServiceDefaults;
 
 namespace XtreamForge.ApiService.Endpoints.Xtream;
 
@@ -48,27 +46,9 @@ public class AuthenticateEndpoint(IHttpClientFactory httpClientFactory, XtreamAc
 
             return Results.Empty;
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (Exception exception) when (XtreamUpstreamFailure.IsUpstreamFailure(exception, cancellationToken))
         {
-            throw;
-        }
-        catch (OperationCanceledException exception)
-        {
-            logger.LogWarning(exception, "ErrorMessage: {ErrorMessage}", XtreamCredentialRedaction.SanitizeText(exception.Message));
-
-            return Results.StatusCode(StatusCodes.Status504GatewayTimeout);
-        }
-        catch (HttpRequestException exception)
-        {
-            logger.LogWarning(exception, "ErrorMessage: {ErrorMessage}", XtreamCredentialRedaction.SanitizeText(exception.Message));
-
-            return Results.StatusCode(StatusCodes.Status502BadGateway);
-        }
-        catch (JsonException exception)
-        {
-            logger.LogWarning(exception, "ErrorMessage: {ErrorMessage}", XtreamCredentialRedaction.SanitizeText(exception.Message));
-
-            return Results.StatusCode(StatusCodes.Status502BadGateway);
+            return XtreamUpstreamFailure.Handle(exception, xtreamContext, logger);
         }
     }
 

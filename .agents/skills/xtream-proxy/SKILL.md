@@ -20,7 +20,7 @@ and:
 Request path (read all components before modifying any one):
 
 ```
-MapXtreamEndpoints()                    (RouteExtensions.cs: player_api.php, prefixed forward, and account stream routes)
+MapXtreamEndpoints()                    (RouteExtensions.cs: player_api.php, short live, prefixed forward, and account stream routes)
 
 /{protocol}/{host}/{port}/player_api.php → HandlePlayerApiRequestAsync
   → XtreamContextBuilder.Build()        (validates + assembles XtreamContext)
@@ -31,6 +31,9 @@ MapXtreamEndpoints()                    (RouteExtensions.cs: player_api.php, pre
       RequestAction.Authenticate        → AuthenticateEndpoint (GET, no action: server_info rewritten to XtreamForge, account upstream remembered in XtreamAccountDirectory)
       RequestAction.GetInfo             → ItemGetEndpoint (get_vod_info / get_series_info, rewritten via ItemService.TransformInfo)
       _                                 → XtreamRequestForwardEndpoint (transparent)
+
+/{protocol}/{host}/{port}/{username}/{password}/{streamId} → ForwardShortLiveStreamAsync (short live form, forwarded like the catch-all route;
+                                          its own route only names the credentials route values, which the telemetry redacts)
 
 /{protocol}/{host}/{port}/{**rest}      → ForwardXtreamRequestAsync (streams and any other path)
   → XtreamContextBuilder.Build()        (same validation)
@@ -136,9 +139,13 @@ They must not be exposed through:
 - metrics;
 - diagnostic URLs.
 
-Use the existing credential-redaction mechanisms: `XtreamCredentialRedaction` (query parameters and stream path credentials, see `RedactPath`) and the `XtreamHttpClientLogger` of the Xtream HTTP client, which replaces the default `IHttpClientFactory` logging. A new stream path kind carrying credentials must be added to the stream path pattern of `XtreamCredentialRedaction`.
+Use the existing credential-redaction mechanisms: `XtreamCredentialRedaction` (query parameters and stream path credentials, see `RedactPath`) and the `XtreamHttpClientLogger` of the Xtream HTTP client, which replaces the default `IHttpClientFactory` logging. A new stream path kind carrying credentials must be added to the stream path pattern of `XtreamCredentialRedaction`. Credentials without a recognizable path shape must be route values named `username` / `password`: `RedactServerResponse` redacts them from the server spans once routed, and `XtreamHttpRequestMessageFactory` marks them on the upstream request (`SetPathCredentials`) for the client spans and logs (`RedactRequestUri`). The ASP.NET Core request logs (`Microsoft.AspNetCore.Hosting.Diagnostics`) stay disabled: they and their `RequestPath` log scope write the raw path.
 
 Never persist upstream credentials as source identity unless explicitly designed and security-reviewed.
+
+# Upstream failures
+
+The Xtream endpoints translate upstream failures with `XtreamUpstreamFailure` (`IsUpstreamFailure` as exception filter, then `Handle`): 504 for a timeout, 502 for a network error, an interrupted body (`IOException`), or invalid JSON, and an aborted connection once the response has started. Start a streamed response explicitly (`Response.StartAsync`, with its `Content-Type`) before writing to it. `XtreamHttpResponseMessageWriter` copies the body unchanged and keeps `Content-Length` (null for a chunked or decompressed upstream body).
 
 # HttpClient
 

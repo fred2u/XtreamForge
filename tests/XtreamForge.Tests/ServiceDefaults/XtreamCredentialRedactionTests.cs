@@ -74,4 +74,89 @@ public class XtreamCredentialRedactionTests
         Assert.Equal("http://provider.example.com:8080/series/***/***/7.mkv", activity.GetTagItem("url.full"));
         Assert.DoesNotContain(activity.TagObjects, tag => tag.Value?.ToString()?.Contains(Password, StringComparison.Ordinal) == true);
     }
+
+    [Fact]
+    public void RedactRequestUri_RedactsThePathCredentialsOfTheIncomingRoute()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "http://provider.example.com:8080/user/secret/123");
+        XtreamCredentialRedaction.SetPathCredentials(request, CreateRoutedRequest("/http/provider.example.com/8080/user/secret/123", "user", Password));
+
+        var redacted = XtreamCredentialRedaction.RedactRequestUri(request);
+
+        Assert.Equal("http://provider.example.com:8080/***/***/123", redacted?.ToString());
+    }
+
+    [Fact]
+    public void RedactRequestUri_ComparesThePathSegmentsDecoded()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "http://provider.example.com:8080/us%20er/s%40cret/123");
+        XtreamCredentialRedaction.SetPathCredentials(request, CreateRoutedRequest("/http/provider.example.com/8080/us er/s@cret/123", "us er", "s@cret"));
+
+        var redacted = XtreamCredentialRedaction.RedactRequestUri(request);
+
+        Assert.Equal("http://provider.example.com:8080/***/***/123", redacted?.ToString());
+    }
+
+    [Fact]
+    public void RedactRequestUri_WithoutRouteCredentials_KeepsPathsWithoutStreamKind()
+    {
+        // a TMDB detail path has the shape of the short live form: only the route values identify credentials
+        using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.themoviedb.org/3/movie/603");
+        XtreamCredentialRedaction.SetPathCredentials(request, new DefaultHttpContext().Request);
+
+        var redacted = XtreamCredentialRedaction.RedactRequestUri(request);
+
+        Assert.Equal("https://api.themoviedb.org/3/movie/603", redacted?.ToString());
+    }
+
+    [Fact]
+    public void RedactClientRequest_RedactsThePathCredentialsOfTheIncomingRoute()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "http://provider.example.com:8080/user/secret/123");
+        XtreamCredentialRedaction.SetPathCredentials(request, CreateRoutedRequest("/http/provider.example.com/8080/user/secret/123", "user", Password));
+        using var activity = new Activity("request");
+
+        XtreamCredentialRedaction.RedactClientRequest(activity, request);
+
+        Assert.Equal("http://provider.example.com:8080/***/***/123", activity.GetTagItem("url.full"));
+        Assert.DoesNotContain(activity.TagObjects, tag => tag.Value?.ToString()?.Contains(Password, StringComparison.Ordinal) == true);
+    }
+
+    [Fact]
+    public void RedactServerResponse_RedactsThePathCredentialsOfTheRouteValues()
+    {
+        var request = CreateRoutedRequest("/http/provider.example.com/8080/user/secret/123", "user", Password);
+        using var activity = new Activity("request");
+        XtreamCredentialRedaction.RedactServerRequest(activity, request);
+
+        XtreamCredentialRedaction.RedactServerResponse(activity, request.HttpContext.Response);
+
+        Assert.Equal("/http/provider.example.com/8080/***/***/123", activity.GetTagItem("url.path"));
+        Assert.Equal("http://xtreamforge.local:5202/http/provider.example.com/8080/***/***/123", activity.GetTagItem("url.full"));
+        Assert.DoesNotContain(activity.TagObjects, tag => tag.Value?.ToString()?.Contains(Password, StringComparison.Ordinal) == true);
+    }
+
+    [Fact]
+    public void RedactServerResponse_WithoutRouteCredentials_KeepsTheTags()
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Path = "/http/provider.example.com/8080/player_api.php";
+        using var activity = new Activity("request");
+        activity.SetTag("url.path", "kept");
+
+        XtreamCredentialRedaction.RedactServerResponse(activity, httpContext.Response);
+
+        Assert.Equal("kept", activity.GetTagItem("url.path"));
+    }
+
+    private static HttpRequest CreateRoutedRequest(string path, string username, string password)
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Scheme = "http";
+        httpContext.Request.Host = new HostString("xtreamforge.local", 5202);
+        httpContext.Request.Path = path;
+        httpContext.Request.RouteValues[XtreamCredentialRedaction.UsernameRouteValue] = username;
+        httpContext.Request.RouteValues[XtreamCredentialRedaction.PasswordRouteValue] = password;
+        return httpContext.Request;
+    }
 }

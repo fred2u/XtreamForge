@@ -5,7 +5,8 @@ namespace XtreamForge.ApiService.Infrastructure;
 
 /// <summary>
 /// Request logging of the Xtream HTTP client. It replaces the default <see cref="IHttpClientFactory"/> logging, which writes the
-/// request URL, while Xtream URLs carry the credentials in their query string or, for the streams, in their path.
+/// request URL, while Xtream URLs carry the credentials in their query string or, for the streams, in their path
+/// (redacted by their shape or, for the short live form, from the route values marked on the request).
 /// </summary>
 public sealed class XtreamHttpClientLogger(ILogger<XtreamHttpClientLogger> logger) : IHttpClientLogger
 {
@@ -28,5 +29,5 @@ public sealed class XtreamHttpClientLogger(ILogger<XtreamHttpClientLogger> logge
             request.Method, Redact(request), elapsed.TotalMilliseconds);
 
     private static string Redact(HttpRequestMessage request)
-        => request.RequestUri is { } uri ? XtreamCredentialRedaction.RedactUri(uri).ToString() : string.Empty;
+        => XtreamCredentialRedaction.RedactRequestUri(request)?.ToString() ?? string.Empty;
 }

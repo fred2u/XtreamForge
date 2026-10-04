@@ -21,6 +21,22 @@ public class CategoryService(XtreamForgeDbContext dbContext)
 
     public async Task<Domain.Sources.XtreamSource> SyncCategoriesAsync(string protocol, string host, int port, ContentType contentType, IReadOnlyCollection<XtreamCategoryDto> categories, CancellationToken cancellationToken)
     {
+        try
+        {
+            return await SyncCategoriesOnceAsync(protocol, host, port, contentType, categories, cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // a concurrent synchronization inserted the source or a category first (clients often request the VOD and series
+            // categories in parallel on startup), so the unique indexes rejected the insert: the second attempt reads and updates them
+            dbContext.ChangeTracker.Clear();
+
+            return await SyncCategoriesOnceAsync(protocol, host, port, contentType, categories, cancellationToken);
+        }
+    }
+
+    private async Task<Domain.Sources.XtreamSource> SyncCategoriesOnceAsync(string protocol, string host, int port, ContentType contentType, IReadOnlyCollection<XtreamCategoryDto> categories, CancellationToken cancellationToken)
+    {
         var source = await dbContext.XtreamSources
             .Include(s => s.XtreamCategories.Where(c => c.ContentType == contentType))
             .ThenInclude(c => c.CustomCategory)

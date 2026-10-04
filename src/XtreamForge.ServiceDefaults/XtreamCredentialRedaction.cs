@@ -8,10 +8,17 @@ namespace XtreamForge.ServiceDefaults;
 
 public static partial class XtreamCredentialRedaction
 {
+    /// <summary>Route values carrying the Xtream credentials in the path of an incoming request.</summary>
+    public const string UsernameRouteValue = "username";
+    public const string PasswordRouteValue = "password";
+
     private const string RedactedValue = "***";
 
     // the username and password segments of a stream path
     private const string RedactedPathCredentials = $"{RedactedValue}/{RedactedValue}";
+
+    // credentials carried by the path of an upstream request, whatever its shape (see SetPathCredentials)
+    private static readonly HttpRequestOptionsKey<IReadOnlyList<string>> PathCredentialsOption = new("XtreamForge.PathCredentials");
 
     private static readonly HashSet<string> SensitiveQueryKeys = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -68,21 +75,68 @@ public static partial class XtreamCredentialRedaction
         return uriBuilder.Uri;
     }
 
+    /// <summary>
+    /// Marks the credentials route values of the incoming request on its upstream request, so that <see cref="RedactRequestUri"/>
+    /// also redacts the path segments that are not recognized by their shape (short live form <c>{username}/{password}/{streamId}</c>).
+    /// </summary>
+    public static void SetPathCredentials(HttpRequestMessage requestMessage, HttpRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(requestMessage);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var credentials = GetRouteCredentials(request);
+        if (credentials.Count > 0)
+        {
+            requestMessage.Options.Set(PathCredentialsOption, credentials);
+        }
+    }
+
+    /// <summary>
+    /// Redacts the URI of an upstream request: see <see cref="RedactUri"/>, plus the path segments marked by <see cref="SetPathCredentials"/>.
+    /// </summary>
+    public static Uri? RedactRequestUri(HttpRequestMessage request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request.RequestUri is null)
+        {
+            return null;
+        }
+
+        var redactedUri = RedactUri(request.RequestUri);
+        if (!redactedUri.IsAbsoluteUri || !request.Options.TryGetValue(PathCredentialsOption, out var credentials))
+        {
+            return redactedUri;
+        }
+
+        return new UriBuilder(redactedUri) { Path = RedactPathSegments(redactedUri.AbsolutePath, credentials) }.Uri;
+    }
+
     public static void RedactServerRequest(Activity activity, HttpRequest request)
     {
         ArgumentNullException.ThrowIfNull(activity);
         ArgumentNullException.ThrowIfNull(request);
 
-        var redactedUrl = SanitizeText(request.GetDisplayUrl());
-        var redactedQuery = RedactQueryString(request.QueryString.Value);
-        var redactedPath = RedactPath($"{request.PathBase}{request.Path}");
-        var redactedTarget = BuildRequestTarget(redactedPath, redactedQuery);
+        SetServerUrlTags(activity, request, RedactPath($"{request.PathBase}{request.Path}"));
+    }
 
-        activity.SetTag("url.full", redactedUrl);
-        activity.SetTag("http.url", redactedUrl);
-        activity.SetTag("url.path", redactedPath);
-        activity.SetTag("url.query", redactedQuery);
-        activity.SetTag("http.target", redactedTarget);
+    /// <summary>
+    /// Redacts the URL tags of a server span again once the request has been routed: the path segments matching the credentials
+    /// route values (see <see cref="UsernameRouteValue"/>) are only known after routing, which follows the start of the span.
+    /// </summary>
+    public static void RedactServerResponse(Activity activity, HttpResponse response)
+    {
+        ArgumentNullException.ThrowIfNull(activity);
+        ArgumentNullException.ThrowIfNull(response);
+
+        var request = response.HttpContext.Request;
+        var credentials = GetRouteCredentials(request);
+        if (credentials.Count == 0)
+        {
+            return;
+        }
+
+        SetServerUrlTags(activity, request, RedactPathSegments(RedactPath($"{request.PathBase}{request.Path}"), credentials));
     }
 
     public static void RedactClientRequest(Activity activity, HttpRequestMessage request)
@@ -90,12 +144,11 @@ public static partial class XtreamCredentialRedaction
         ArgumentNullException.ThrowIfNull(activity);
         ArgumentNullException.ThrowIfNull(request);
 
-        if (request.RequestUri is null)
+        if (RedactRequestUri(request) is not { } redactedUri)
         {
             return;
         }
 
-        var redactedUri = RedactUri(request.RequestUri);
         var redactedUrl = redactedUri.ToString();
         var redactedQuery = RedactQueryString(redactedUri.Query);
         var redactedTarget = BuildRequestTarget(redactedUri.AbsolutePath, redactedQuery);
@@ -145,6 +198,31 @@ public static partial class XtreamCredentialRedaction
         string.IsNullOrEmpty(redactedQuery)
             ? path
             : $"{path}?{redactedQuery}";
+
+    private static void SetServerUrlTags(Activity activity, HttpRequest request, string redactedPath)
+    {
+        var redactedQuery = RedactQueryString(request.QueryString.Value);
+        var redactedTarget = BuildRequestTarget(redactedPath, redactedQuery);
+        var redactedUrl = $"{request.Scheme}://{request.Host.Value}{redactedTarget}";
+
+        activity.SetTag("url.full", redactedUrl);
+        activity.SetTag("http.url", redactedUrl);
+        activity.SetTag("url.path", redactedPath);
+        activity.SetTag("url.query", redactedQuery);
+        activity.SetTag("http.target", redactedTarget);
+    }
+
+    private static List<string> GetRouteCredentials(HttpRequest request) =>
+        [.. new[] { request.RouteValues[UsernameRouteValue], request.RouteValues[PasswordRouteValue] }
+            .OfType<string>()
+            .Where(value => value.Length > 0)];
+
+    // the segments are compared decoded (upstream URI) and as is (incoming path, already decoded)
+    private static string RedactPathSegments(string path, IReadOnlyList<string> credentials) =>
+        string.Join('/', path.Split('/').Select(segment =>
+            segment.Length > 0 && (credentials.Contains(segment) || credentials.Contains(Uri.UnescapeDataString(segment)))
+                ? RedactedValue
+                : segment));
 
     [GeneratedRegex(@"((?:\?|&)(?:username|password)=)([^&#\s]*)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SensitiveQueryParameterPattern();

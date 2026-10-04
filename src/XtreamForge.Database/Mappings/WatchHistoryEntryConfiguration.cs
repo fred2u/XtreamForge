@@ -15,6 +15,9 @@ public class WatchHistoryEntryConfiguration : IEntityTypeConfiguration<WatchHist
         // recommendation seeds: the watched movies grouped by TMDB ID
         watchHistory.HasIndex(entry => new { entry.ContentType, entry.TmdbId });
 
+        // activity: the playbacks of the last year
+        watchHistory.HasIndex(entry => new { entry.ContentType, entry.StartedAtUtc });
+
         watchHistory.Property(entry => entry.Id).HasColumnName("id");
         watchHistory.Property(entry => entry.ContentType).HasColumnName("content_type").HasConversion<string>().HasMaxLength(20);
         watchHistory.Property(entry => entry.TmdbId).HasColumnName("tmdb_id");

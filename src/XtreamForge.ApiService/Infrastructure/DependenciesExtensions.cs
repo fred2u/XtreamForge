@@ -38,7 +38,6 @@ public static class DependenciesExtensions
     {
         // infrastructure
         services.AddSingleton<XtreamContextBuilder>();
-        services.AddSingleton<XtreamProviderValidator>();
         services.AddSingleton<XtreamAccountDirectory>();
 
         // services

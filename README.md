@@ -58,8 +58,8 @@ XtreamForge uses standard .NET configuration.
 
 Backend (`XtreamForge.ApiService`):
 
-- `XtreamProxy:AllowAnyDestination` - development convenience switch; leave `false` outside trusted local development
-- `XtreamProxy:AllowedHosts` - explicit upstream DNS/IP allowlist used when `AllowAnyDestination` is `false`
+- `XtreamProxy:AllowAnyDestination` - development convenience switch allowing any upstream host whose addresses are all publicly routable; leave `false` outside trusted local development
+- `XtreamProxy:AllowedHosts` - explicit upstream DNS/IP allowlist; a listed host is always allowed, even when it resolves to a private address
 - `Tmdb:ApiKey` - TMDB API read access token (Bearer); when empty, the TMDB search is skipped
 - `Tmdb:BaseUrl` - TMDB API base URL (`https://api.themoviedb.org/3/` in `appsettings.json`); required and validated at startup
 - `Tmdb:ImageBaseUrl` - TMDB image base URL used for the posters (default `https://image.tmdb.org/t/p/`); must be an absolute HTTP(S) URL, validated at startup
@@ -131,7 +131,7 @@ Upstream failures: an upstream timeout returns `504 Gateway Timeout`, and a netw
 
 Security notes:
 
-- XtreamForge validates `protocol`, `host`, and `port`, and enforces the `XtreamProxy` host allowlist (SSRF protection)
+- XtreamForge validates `protocol`, `host`, and `port`, and enforces the `XtreamProxy` host allowlist (SSRF protection); with `AllowAnyDestination`, the addresses are checked when the Xtream HTTP client connects (not only when the request is validated), so a host resolving to a non-public address, even after a DNS change, is refused (`502 Bad Gateway`). For this check to apply, the Xtream HTTP client ignores the system HTTP proxy settings
 - Xtream credentials are forwarded upstream but are not persisted; they are redacted (`***`) from the request spans and from the request logs of the Xtream HTTP client, in the query string, in the stream paths (`movie|series|live|timeshift/{username}/{password}/...`), and in the short live form (from the `username` / `password` route values, once the request is routed)
 - the ASP.NET Core request logs and their log scope (`RequestPath`, attached to every log of a request) write the raw path, so `Microsoft.AspNetCore.Hosting.Diagnostics` is disabled in code (`LogLevel.None`) whatever the configured log levels; the redacted spans describe the requests instead
 - the Xtream proxy routes are excluded from generated OpenAPI documentation

@@ -124,6 +124,8 @@ Preserve validation of:
 
 Never bypass `XtreamProviderValidator` or equivalent destination validation merely because a URL appears syntactically valid.
 
+`XtreamProviderValidator.Validate` does not resolve host names: with `AllowAnyDestination`, the resolved addresses are checked by `XtreamProviderValidator.ConnectAsync`, the `SocketsHttpHandler.ConnectCallback` of the Xtream HTTP client, on the addresses actually connected to (DNS rebinding). Keep the Xtream client on this handler, with `UseProxy = false` (through a proxy, only the proxy address would be checked), and send every upstream Xtream request through this client.
+
 Treat SSRF as a primary security concern.
 
 # Credentials

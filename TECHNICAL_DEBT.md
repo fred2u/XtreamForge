@@ -12,12 +12,6 @@ Remove an entry in the same change that fixes it. Keep the remaining entries acc
 
 Fix: map the admin endpoints in a `MapGroup("/api/admin")` to apply an authorization policy (or serve them on a separate, non-exposed endpoint), and authenticate the Web UI.
 
-### SSRF validation open to DNS rebinding
-
-`XtreamProviderValidator` resolves the host when the request is validated (cached 5 minutes in a static, unbounded dictionary), but `HttpClient` resolves it again when connecting: a host can resolve to a public address during validation and to a private one at connection time. The resolution is also synchronous (`Dns.GetHostAddresses`) on the request path, failures are swallowed by a bare `catch`, and some non-public IPv4 ranges are allowed (224.0.0.0/4 multicast, 240.0.0.0/4 reserved, 198.18.0.0/15 benchmarking, 192.0.0.0/24).
-
-Fix: validate the address actually connected to in the `SocketsHttpHandler.ConnectCallback` of the Xtream client, block the missing ranges, and bound or remove the static cache.
-
 ## Design
 
 ### Catalogue can stay empty

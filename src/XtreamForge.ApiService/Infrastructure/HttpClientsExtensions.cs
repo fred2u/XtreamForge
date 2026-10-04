@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using XtreamForge.ApiService.Infrastructure.RateLimiting;
 using XtreamForge.ApiService.Options;
+using XtreamForge.ApiService.Xtream;
 
 namespace XtreamForge.ApiService.Infrastructure;
 
@@ -19,6 +20,8 @@ public static class HttpClientsExtensions
             services.AddSingleton<UpstreamRateLimiter>();
             services.AddTransient<RateLimitHandler>();
             services.AddSingleton<XtreamHttpClientLogger>();
+            // also the connect callback of the Xtream client
+            services.AddSingleton<XtreamProviderValidator>();
 
             // HTTP 429 is handled by RateLimitHandler (per-host adaptive spacing, Retry-After): the standard resilience
             // pipeline of the service defaults must neither retry it immediately nor count it for its circuit breaker.
@@ -30,11 +33,15 @@ public static class HttpClientsExtensions
 
             services
                 .AddHttpClient(XtreamProxyOptions.HttpClientName)
-                .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+                .ConfigurePrimaryHttpMessageHandler(serviceProvider => new SocketsHttpHandler
                 {
                     AllowAutoRedirect = false,
                     UseCookies = false,
-                    AutomaticDecompression = DecompressionMethods.All
+                    AutomaticDecompression = DecompressionMethods.All,
+                    // the destination is validated on the address actually connected to (DNS rebinding); through a
+                    // proxy, the connection would be to the proxy and the upstream address could not be checked
+                    UseProxy = false,
+                    ConnectCallback = serviceProvider.GetRequiredService<XtreamProviderValidator>().ConnectAsync
                 })
                 // the default logging writes the request URL, which carries the Xtream credentials
                 .RemoveAllLoggers()

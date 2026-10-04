@@ -110,6 +110,56 @@ public class SourceServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task GetItemSnapshotAsync_LoadsOnlyTheMappingOfTheRequestedStream()
+    {
+        var source = new XtreamSource { Protocol = "http", Host = "provider.example.com", Port = 8080 };
+        source.ItemRules.Add(new ItemRule { ContentType = ContentType.Vod, Sequence = 10, Pattern = "rule" });
+        source.StreamTmdbMappings.AddRange(
+        [
+            new StreamTmdbMapping { ContentType = ContentType.Vod, StreamId = "1", TmdbId = 603 },
+            new StreamTmdbMapping { ContentType = ContentType.Vod, StreamId = "2", TmdbId = 604 },
+            new StreamTmdbMapping { ContentType = ContentType.Vod, StreamId = "3", LookupAttemptCount = 1, NextLookupAtUtc = _time.Now.AddHours(1) },
+            new StreamTmdbMapping { ContentType = ContentType.Series, StreamId = "2", TmdbId = 1399 }
+        ]);
+        await SaveAsync(source);
+
+        var snapshot = await _service.GetItemSnapshotAsync(CreateContext(), "2", TestContext.Current.CancellationToken);
+
+        Assert.NotNull(snapshot);
+        Assert.Equal(source.Id, snapshot.Id);
+        Assert.Equal(["rule"], snapshot.ItemRules.Select(rule => rule.Pattern));
+        Assert.Equal(["2"], snapshot.StreamTmdbMappings.Keys);
+        Assert.Equal(604, snapshot.StreamTmdbMappings["2"]);
+        Assert.Empty(snapshot.DeferredTmdbLookups);
+    }
+
+    [Fact]
+    public async Task GetItemSnapshotAsync_ExposesTheDeferredLookupOfTheRequestedStream()
+    {
+        var source = new XtreamSource { Protocol = "http", Host = "provider.example.com", Port = 8080 };
+        source.StreamTmdbMappings.AddRange(
+        [
+            new StreamTmdbMapping { ContentType = ContentType.Vod, StreamId = "1", TmdbId = 603 },
+            new StreamTmdbMapping { ContentType = ContentType.Vod, StreamId = "3", LookupAttemptCount = 1, NextLookupAtUtc = _time.Now.AddHours(1) }
+        ]);
+        await SaveAsync(source);
+
+        var snapshot = await _service.GetItemSnapshotAsync(CreateContext(), "3", TestContext.Current.CancellationToken);
+
+        Assert.NotNull(snapshot);
+        Assert.Empty(snapshot.StreamTmdbMappings);
+        Assert.Equal(["3"], snapshot.DeferredTmdbLookups);
+    }
+
+    [Fact]
+    public async Task GetItemSnapshotAsync_WhenSourceIsUnknown_ReturnsNull()
+    {
+        var snapshot = await _service.GetItemSnapshotAsync(CreateContext(), "1", TestContext.Current.CancellationToken);
+
+        Assert.Null(snapshot);
+    }
+
+    [Fact]
     public async Task GetSnapshotAsync_LoadsTheEnabledTmdbRulesOfTheContentTypeInSequenceOrder()
     {
         await SaveAsync(new XtreamSource { Protocol = "http", Host = "provider.example.com", Port = 8080 });

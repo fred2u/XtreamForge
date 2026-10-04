@@ -126,14 +126,8 @@ Fix: use one comparison for provider IDs in memory and in the database, and inje
 
 ## Performance
 
-### Item details load every mapping of the source
+### Watch activity reads the whole history
 
-`ItemGetEndpoint` calls `SourceService.GetSnapshotAsync`, which loads every `StreamTmdbMapping` of the source and content type (possibly tens of thousands of rows) to read the mapping of a single stream.
+`WatchHistoryAdminService.GetActivityAsync` loads the start date of every movie playback ever recorded and keeps the last 371 days in memory: the query has no date filter, because SQLite tests cannot compare `DateTimeOffset`. An index on `started_at_utc` would only help once the query filters on it.
 
-Fix: give `get_vod_info` / `get_series_info` a snapshot that only reads the mapping of the requested stream.
-
-### Missing indexes
-
-`watch_history` has no index on `started_at_utc` (history paging, activity) nor on `(content_type, tmdb_id)` (recommendation seeds), and `stream_tmdb_mappings` has none on `tmdb_id` (admin search by TMDB ID).
-
-Fix: add the indexes in a migration once the tables grow.
+Fix: filter server-side from the UTC start of the first day (minus one day for the time zone offsets) and add the index, with a test strategy supporting `DateTimeOffset` comparisons.

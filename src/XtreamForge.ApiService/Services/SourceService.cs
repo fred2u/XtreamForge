@@ -9,7 +9,17 @@ public class SourceService(XtreamForgeDbContext dbContext, TimeProvider timeProv
     /// <summary>
     /// Loads the data of the source matching the request destination for the requested content type; returns null when the source is unknown.
     /// </summary>
-    public async Task<XtreamSourceSnapshot?> GetSnapshotAsync(XtreamContext xtreamContext, CancellationToken cancellationToken)
+    public Task<XtreamSourceSnapshot?> GetSnapshotAsync(XtreamContext xtreamContext, CancellationToken cancellationToken)
+        => LoadSnapshotAsync(xtreamContext, streamId: null, cancellationToken);
+
+    /// <summary>
+    /// Same as <see cref="GetSnapshotAsync"/> for a single item (<c>get_vod_info</c> / <c>get_series_info</c>):
+    /// only the TMDB mapping of <paramref name="streamId"/> is loaded instead of every mapping of the source.
+    /// </summary>
+    public Task<XtreamSourceSnapshot?> GetItemSnapshotAsync(XtreamContext xtreamContext, string streamId, CancellationToken cancellationToken)
+        => LoadSnapshotAsync(xtreamContext, streamId, cancellationToken);
+
+    private async Task<XtreamSourceSnapshot?> LoadSnapshotAsync(XtreamContext xtreamContext, string? streamId, CancellationToken cancellationToken)
     {
         var source = await dbContext.XtreamSources
             .AsNoTracking()
@@ -21,9 +31,13 @@ public class SourceService(XtreamForgeDbContext dbContext, TimeProvider timeProv
             return null;
 
         // only the lookup state of each stream is needed, and the mappings can be numerous
-        var mappings = await dbContext.StreamTmdbMappings
+        var mappingQuery = dbContext.StreamTmdbMappings
             .AsNoTracking()
-            .Where(mapping => mapping.XtreamSourceId == source.Id && mapping.ContentType == xtreamContext.ContentType)
+            .Where(mapping => mapping.XtreamSourceId == source.Id && mapping.ContentType == xtreamContext.ContentType);
+        if (streamId is not null)
+            mappingQuery = mappingQuery.Where(mapping => mapping.StreamId == streamId);
+
+        var mappings = await mappingQuery
             .Select(mapping => new { mapping.StreamId, mapping.TmdbId, mapping.NextLookupAtUtc })
             .ToListAsync(cancellationToken);
 

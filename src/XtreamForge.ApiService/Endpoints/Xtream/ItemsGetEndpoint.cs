@@ -121,8 +121,12 @@ public class ItemsGetEndpoint(
 
         foreach (var item in batch.Where(item => itemService.EnrichStreamItem(item, xtreamContext.ContentType, tmdbInfos, source)))
         {
-            if (virtualCategories is not null)
-                ItemService.ApplyVirtualCategory(virtualCategories, ItemService.ReadTmdbId(item), item);
+            // a TMDB ID takes its virtual category once: the next items with it keep their provider category,
+            // so they are not listed in a requested virtual category
+            if (virtualCategories is not null
+                && !ItemService.ApplyVirtualCategory(virtualCategories, ItemService.ReadTmdbId(item), item)
+                && virtualCategories.IsCategoryRequested)
+                continue;
 
             item.WriteTo(writer);
         }

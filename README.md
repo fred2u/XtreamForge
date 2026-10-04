@@ -173,7 +173,8 @@ When `Recommendations:CategoryName` is set, the recommended movies are exposed t
 - `get_vod_categories` returns it first, with the ID `Recommendations:CategoryId`
 - `get_vod_streams` with all the categories (`category_id` missing, empty, or `ALL`): a recommended movie is returned in the recommendations category (`category_id` and `category_ids` rewritten) instead of its own category
 - `get_vod_streams` with the recommendations `category_id`: the provider is called once with `category_id=ALL` and only the recommended movies are returned, in the recommendations category
-- `get_vod_info`: a recommended movie is returned in the recommendations category (`movie_data` and `info`)
+- a TMDB ID appears only once in a virtual category: when several streams share it, the first one returned by the provider (after the rules and the TMDB filtering) takes the virtual category, the next ones keep their own category
+- `get_vod_info` / `get_series_info` always return the item in its own category, as they cannot know which stream of a TMDB ID is listed in the virtual category
 - `get_vod_streams` with another category keeps the category of the recommended movies
 - the TMDB IDs of the recommended movies are kept in memory for 6 hours (`TmdbIdCache`) and recomputed when the watch history changes (playback recorded, added, or deleted); when TMDB fails, the catalogue is returned without recommendation and the next request tries again
 
@@ -182,8 +183,9 @@ When `Recommendations:CategoryName` is set, the recommended movies are exposed t
 When `Popular:CategoryName` is set, the movies and TV shows currently popular on TMDB (`movie/popular` / `tv/popular`, first 5 pages, i.e. up to 100 titles per content type) are exposed in a virtual category, for VOD and series:
 
 - `get_vod_categories` / `get_series_categories` return it after the recommendations category, with the ID `Popular:CategoryId`
-- with all the categories (`get_vod_streams` / `get_series`), and in `get_vod_info` / `get_series_info`, a popular item is moved to the popular category, unless it is a recommended movie: the recommendations category wins
+- with all the categories (`get_vod_streams` / `get_series`), a popular item is moved to the popular category, unless it is a recommended movie: the recommendations category wins
 - `get_vod_streams` / `get_series` with the popular `category_id`: the provider is called once with `category_id=ALL` and only the popular items are returned, in the popular category (recommended movies included)
+- as for the recommendations, only the first stream of a TMDB ID is in the popular category, and `get_vod_info` / `get_series_info` keep the item in its own category
 - the popular TMDB IDs are kept in memory for 6 hours per content type (`TmdbIdCache`); without `Tmdb:ApiKey` the category is empty; when TMDB fails, the catalogue is returned without popular item and the next request tries again
 
 ## Sources

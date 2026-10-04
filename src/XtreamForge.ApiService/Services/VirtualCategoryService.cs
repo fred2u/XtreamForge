@@ -14,19 +14,32 @@ public sealed record VirtualCategory(int CategoryId, IReadOnlySet<long> TmdbIds)
 }
 
 /// <summary>
-/// Virtual categories applied to the returned items. When a virtual category is <see cref="Requested"/>, only its items are returned,
-/// in that category; otherwise an item is moved to the first of <see cref="Categories"/> (by priority) that contains it.
+/// Virtual categories applied to the items of one list response. When a virtual category is requested, only its items are returned,
+/// in that category; otherwise an item is moved to the first of the categories (by priority) that contains it.
+/// A TMDB ID is assigned once per response: the first item with it takes the virtual category, the next ones keep their provider
+/// category (and are therefore not listed when the virtual category is requested).
 /// </summary>
-public sealed record VirtualCategoryAssignment(IReadOnlyList<VirtualCategory> Categories, VirtualCategory? Requested = null)
+public sealed class VirtualCategoryAssignment(IReadOnlyList<VirtualCategory> categories, VirtualCategory? requested = null)
 {
-    public bool Includes(long? tmdbId) => Requested is null || Requested.Contains(tmdbId);
+    private readonly HashSet<long> _assignedTmdbIds = [];
 
-    public VirtualCategory? CategoryOf(long? tmdbId)
+    public bool IsCategoryRequested => requested is not null;
+
+    public bool Includes(long? tmdbId) => requested is null || requested.Contains(tmdbId);
+
+    /// <summary>
+    /// Returns the virtual category of an item and reserves its TMDB ID for it; null when the item keeps its provider category,
+    /// including when an earlier item of the response already took the TMDB ID.
+    /// </summary>
+    public VirtualCategory? Assign(long? tmdbId)
     {
-        if (Requested is not null)
-            return Requested.Contains(tmdbId) ? Requested : null;
+        VirtualCategory? virtualCategory;
+        if (requested is not null)
+            virtualCategory = requested.Contains(tmdbId) ? requested : null;
+        else
+            virtualCategory = categories.FirstOrDefault(category => category.Contains(tmdbId));
 
-        return Categories.FirstOrDefault(category => category.Contains(tmdbId));
+        return tmdbId is { } id && virtualCategory is not null && _assignedTmdbIds.Add(id) ? virtualCategory : null;
     }
 }
 
@@ -57,12 +70,12 @@ public class VirtualCategoryService(
             return new VirtualCategoryAssignment([], await LoadAsync(requested, xtreamContext.ContentType, cancellationToken));
 
         return CategoryService.IsGetAll(xtreamContext)
-            ? await GetItemAssignmentAsync(xtreamContext.ContentType, cancellationToken)
+            ? await GetAllAssignmentAsync(xtreamContext.ContentType, cancellationToken)
             : null;
     }
 
-    /// <summary>Returns every virtual category of the content type, to move an item (<c>get_vod_info</c> / <c>get_series_info</c>) to its virtual category.</summary>
-    public async Task<VirtualCategoryAssignment?> GetItemAssignmentAsync(ContentType contentType, CancellationToken cancellationToken)
+    // every virtual category of the content type, to move the items of the list of all the categories to their virtual category
+    private async Task<VirtualCategoryAssignment?> GetAllAssignmentAsync(ContentType contentType, CancellationToken cancellationToken)
     {
         var definitions = GetDefinitions(contentType);
         if (definitions.Count == 0)

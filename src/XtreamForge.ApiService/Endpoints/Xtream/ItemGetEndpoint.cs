@@ -8,7 +8,8 @@ namespace XtreamForge.ApiService.Endpoints.Xtream;
 
 /// <summary>
 /// Handles <c>get_vod_info</c> / <c>get_series_info</c>: the upstream payload is returned with the same category, TMDB ID, and TMDB metadata rewriting
-/// as the item lists, or as an empty Xtream payload when the item would not be listed.
+/// as the item lists, or as an empty Xtream payload when the item would not be listed. The item keeps its provider category: only one stream
+/// of a TMDB ID is listed in a virtual category, which a single item cannot know.
 /// </summary>
 public class ItemGetEndpoint(
     IHttpClientFactory httpClientFactory,
@@ -16,7 +17,6 @@ public class ItemGetEndpoint(
     CategoryService categoryService,
     ItemService itemService,
     TmdbInfoService tmdbInfoService,
-    VirtualCategoryService virtualCategoryService,
     ILogger<ItemGetEndpoint> logger)
 {
     public async Task<IResult> GetAsync(XtreamContext xtreamContext, CancellationToken cancellationToken)
@@ -70,8 +70,6 @@ public class ItemGetEndpoint(
 
                 if (!itemService.EnrichInfo(transformedPayload, xtreamContext.ContentType, tmdbId, tmdbInfos, source))
                     transformedPayload = null;
-                else
-                    await ApplyVirtualCategoryAsync(transformedPayload, xtreamContext.ContentType, tmdbId, cancellationToken);
             }
 
             await XtreamHttpResponseMessageWriter.WriteAsJsonAsync(transformedPayload ?? CreateEmptyInfo(xtreamContext.ContentType), xtreamContext.Response, cancellationToken);
@@ -82,17 +80,6 @@ public class ItemGetEndpoint(
         {
             return XtreamUpstreamFailure.Handle(exception, xtreamContext, logger);
         }
-    }
-
-    // an item is in its virtual category (recommendations, popular), as in the list of all the categories
-    private async Task ApplyVirtualCategoryAsync(JsonObject payload, ContentType contentType, long? tmdbId, CancellationToken cancellationToken)
-    {
-        if (await virtualCategoryService.GetItemAssignmentAsync(contentType, cancellationToken) is not { } virtualCategories)
-            return;
-
-        // the categories are read from movie_data and info for VOD, from info for series
-        JsonObject[] sections = [.. new[] { payload["movie_data"], payload["info"] }.OfType<JsonObject>()];
-        ItemService.ApplyVirtualCategory(virtualCategories, tmdbId, sections);
     }
 
     // the payload returned by Xtream panels for an unknown item

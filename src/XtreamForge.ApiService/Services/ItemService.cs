@@ -49,23 +49,22 @@ public class ItemService(TmdbIdRetrieverQueue tmdbIdRetrieverQueue, TmdbInfoQueu
     }
 
     /// <summary>
-    /// Replaces the category of the given sections (list item, or <c>movie_data</c> and <c>info</c>) by the virtual category of the item
-    /// (recommendations, popular), if any; only the category keys already present are rewritten.
+    /// Replaces the category of a list item by its virtual category (recommendations, popular), if any; only the category keys already
+    /// present are rewritten. Returns false when the item keeps its provider category (see <see cref="VirtualCategoryAssignment.Assign"/>).
     /// </summary>
-    public static void ApplyVirtualCategory(VirtualCategoryAssignment assignment, long? tmdbId, params JsonObject[] sections)
+    public static bool ApplyVirtualCategory(VirtualCategoryAssignment assignment, long? tmdbId, JsonObject item)
     {
-        if (assignment.CategoryOf(tmdbId) is not { } virtualCategory)
-            return;
+        if (assignment.Assign(tmdbId) is not { } virtualCategory)
+            return false;
 
         var categoryId = virtualCategory.CategoryId.ToString(CultureInfo.InvariantCulture);
-        foreach (var section in sections)
-        {
-            if (section.ContainsKey("category_id"))
-                section["category_id"] = categoryId;
+        if (item.ContainsKey("category_id"))
+            item["category_id"] = categoryId;
 
-            if (section.ContainsKey("category_ids"))
-                section["category_ids"] = new JsonArray(categoryId);
-        }
+        if (item.ContainsKey("category_ids"))
+            item["category_ids"] = new JsonArray(categoryId);
+
+        return true;
     }
 
     /// <summary>

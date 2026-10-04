@@ -29,6 +29,16 @@ public class ItemsGetEndpointTests : IAsyncDisposable
         ]
         """;
 
+    // two streams per TMDB ID, in different upstream categories
+    private const string UpstreamDuplicatedItems = """
+        [
+          { "stream_id": 1, "name": "Comedy movie", "category_id": "11", "tmdb_id": "102" },
+          { "stream_id": 2, "name": "Comedy movie 4K", "category_id": "12", "tmdb_id": "102" },
+          { "stream_id": 3, "name": "Action movie", "category_id": "10", "tmdb_id": "101" },
+          { "stream_id": 4, "name": "Action movie FR", "category_id": "12", "tmdb_id": "101" }
+        ]
+        """;
+
     private readonly XtreamForgeDbContext _dbContext;
     private readonly TmdbInfoQueue _tmdbInfoQueue = new();
     private readonly Dictionary<string, string> _tmdbResponses = [];
@@ -152,6 +162,38 @@ public class ItemsGetEndpointTests : IAsyncDisposable
             [("Show A", drama.Id.ToString()), ("Show B", PopularCategoryId)],
             ReadResponseItems(context).Select(item => (item["name"]?.GetValue<string>(), item["category_id"]?.GetValue<string>())));
         Assert.DoesNotContain(_tmdb.RequestedUris, uri => StubTmdbHttpClientFactory.GetRelativePath(uri).EndsWith("/recommendations", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetAsync_WhenAllCategoriesAreRequested_MovesOnlyTheFirstStreamOfATmdbIdToItsVirtualCategory()
+    {
+        var (_, drama) = await SeedAsync();
+        await AddLoadedTmdbInfosAsync((101, "Action movie"), (102, "Comedy movie"));
+        await RecommendAsync(102);
+        SetPopular("movie/popular", 101, 102);
+        var context = CreateContext("?action=get_vod_streams&category_id=ALL");
+
+        await CreateEndpoint(CreateHttpClientFactory(HttpStatusCode.OK, UpstreamDuplicatedItems)).GetAsync(context, TestContext.Current.CancellationToken);
+
+        // the next streams keep their provider category, even when the TMDB ID is in another virtual category
+        Assert.Equal(
+            [("1", RecommendationCategoryId), ("2", drama.Id.ToString()), ("3", PopularCategoryId), ("4", drama.Id.ToString())],
+            ReadResponseItems(context).Select(item => (item["stream_id"]?.ToString(), item["category_id"]?.GetValue<string>())));
+    }
+
+    [Fact]
+    public async Task GetAsync_WhenAVirtualCategoryIsRequested_ListsOnlyTheFirstStreamOfATmdbId()
+    {
+        await SeedAsync();
+        await AddLoadedTmdbInfosAsync((101, "Action movie"), (102, "Comedy movie"));
+        SetPopular("movie/popular", 101, 102);
+        var context = CreateContext($"?action=get_vod_streams&category_id={PopularCategoryId}");
+
+        await CreateEndpoint(CreateHttpClientFactory(HttpStatusCode.OK, UpstreamDuplicatedItems)).GetAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [("1", PopularCategoryId), ("3", PopularCategoryId)],
+            ReadResponseItems(context).Select(item => (item["stream_id"]?.ToString(), item["category_id"]?.GetValue<string>())));
     }
 
     [Fact]
@@ -369,8 +411,8 @@ public class ItemsGetEndpointTests : IAsyncDisposable
             _tmdb.CreateVirtualCategoryService(_dbContext, _recommendationCache),
             NullLogger<ItemsGetEndpoint>.Instance);
 
-    private static StubXtreamHttpClientFactory CreateHttpClientFactory(HttpStatusCode statusCode)
-        => new(new Dictionary<string, (HttpStatusCode, string)> { ["get_vod_streams"] = (statusCode, UpstreamItems) });
+    private static StubXtreamHttpClientFactory CreateHttpClientFactory(HttpStatusCode statusCode, string upstreamItems = UpstreamItems)
+        => new(new Dictionary<string, (HttpStatusCode, string)> { ["get_vod_streams"] = (statusCode, upstreamItems) });
 
     private static string? GetRequestedCategoryId(Uri uri) => HttpUtility.ParseQueryString(uri.Query)["category_id"];
 

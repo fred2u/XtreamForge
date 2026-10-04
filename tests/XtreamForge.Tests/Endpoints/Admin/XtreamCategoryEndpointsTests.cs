@@ -28,9 +28,7 @@ public class XtreamCategoryEndpointsTests : IAsyncDisposable
     [Fact]
     public async Task GetAsync_WhenSourceDoesNotExist_ReturnsNotFound()
     {
-        var endpoint = new XtreamCategoriesGetEndpoint(_xtreamCategoryAdminService, new SourceAdminService(_dbContext));
-
-        var result = await endpoint.GetAsync(999, ContentType.Vod, TestContext.Current.CancellationToken);
+        var result = await XtreamCategoryEndpoints.GetAsync(999, ContentType.Vod, _xtreamCategoryAdminService, new SourceAdminService(_dbContext), TestContext.Current.CancellationToken);
 
         Assert.IsType<NotFound>(result);
     }
@@ -41,9 +39,8 @@ public class XtreamCategoryEndpointsTests : IAsyncDisposable
         var source = await AddSourceAsync();
         var customCategory = await AddCustomCategoryAsync("Movies");
         var category = await AddCategoryAsync(source.Id, "10", "Action", customCategory.Id);
-        var endpoint = new XtreamCategoriesGetEndpoint(_xtreamCategoryAdminService, new SourceAdminService(_dbContext));
 
-        var result = await endpoint.GetAsync(source.Id, ContentType.Vod, TestContext.Current.CancellationToken);
+        var result = await XtreamCategoryEndpoints.GetAsync(source.Id, ContentType.Vod, _xtreamCategoryAdminService, new SourceAdminService(_dbContext), TestContext.Current.CancellationToken);
 
         var ok = Assert.IsType<Ok<IEnumerable<AdminXtreamCategoryDto>>>(result);
         Assert.NotNull(ok.Value);
@@ -116,9 +113,7 @@ public class XtreamCategoryEndpointsTests : IAsyncDisposable
     [Fact]
     public async Task PatchAsync_WhenCategoryDoesNotExist_ReturnsNotFound()
     {
-        var endpoint = new XtreamCategoryPatchEndpoint(_xtreamCategoryAdminService);
-
-        var result = await endpoint.PatchAsync(999, new AdminXtreamCategoryPatchRequest(true, null), TestContext.Current.CancellationToken);
+        var result = await XtreamCategoryEndpoints.PatchAsync(999, new AdminXtreamCategoryPatchRequest(true, null), _xtreamCategoryAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<NotFound>(result);
     }
@@ -128,9 +123,8 @@ public class XtreamCategoryEndpointsTests : IAsyncDisposable
     {
         var source = await AddSourceAsync();
         var category = await AddCategoryAsync(source.Id, "10", "Action");
-        var endpoint = new XtreamCategoryPatchEndpoint(_xtreamCategoryAdminService);
 
-        var result = await endpoint.PatchAsync(category.Id, new AdminXtreamCategoryPatchRequest(true, 999), TestContext.Current.CancellationToken);
+        var result = await XtreamCategoryEndpoints.PatchAsync(category.Id, new AdminXtreamCategoryPatchRequest(true, 999), _xtreamCategoryAdminService, TestContext.Current.CancellationToken);
 
         var problem = Assert.IsType<ValidationProblem>(result);
         Assert.Contains(nameof(AdminXtreamCategoryPatchRequest.CustomCategoryId), problem.ProblemDetails.Errors.Keys);
@@ -144,9 +138,8 @@ public class XtreamCategoryEndpointsTests : IAsyncDisposable
         var source = await AddSourceAsync();
         var customCategory = await AddCustomCategoryAsync("Movies");
         var category = await AddCategoryAsync(source.Id, "10", "Action");
-        var endpoint = new XtreamCategoryPatchEndpoint(_xtreamCategoryAdminService);
 
-        var result = await endpoint.PatchAsync(category.Id, new AdminXtreamCategoryPatchRequest(true, customCategory.Id), TestContext.Current.CancellationToken);
+        var result = await XtreamCategoryEndpoints.PatchAsync(category.Id, new AdminXtreamCategoryPatchRequest(true, customCategory.Id), _xtreamCategoryAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<NoContent>(result);
         var updated = await _dbContext.XtreamCategories.AsNoTracking().SingleAsync(c => c.Id == category.Id, TestContext.Current.CancellationToken);
@@ -160,9 +153,8 @@ public class XtreamCategoryEndpointsTests : IAsyncDisposable
         var source = await AddSourceAsync();
         var customCategory = await AddCustomCategoryAsync("Movies");
         var category = await AddCategoryAsync(source.Id, "10", "Action", customCategory.Id);
-        var endpoint = new XtreamCategoryPatchEndpoint(_xtreamCategoryAdminService);
 
-        var result = await endpoint.PatchAsync(category.Id, new AdminXtreamCategoryPatchRequest(null, null, UnassignCustomCategory: true), TestContext.Current.CancellationToken);
+        var result = await XtreamCategoryEndpoints.PatchAsync(category.Id, new AdminXtreamCategoryPatchRequest(null, null, UnassignCustomCategory: true), _xtreamCategoryAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<NoContent>(result);
         var updated = await _dbContext.XtreamCategories.AsNoTracking().SingleAsync(c => c.Id == category.Id, TestContext.Current.CancellationToken);
@@ -176,9 +168,8 @@ public class XtreamCategoryEndpointsTests : IAsyncDisposable
         var source = await AddSourceAsync();
         var customCategory = await AddCustomCategoryAsync("Movies");
         var category = await AddCategoryAsync(source.Id, "10", "Action", customCategory.Id);
-        var endpoint = new XtreamCategoryPatchEndpoint(_xtreamCategoryAdminService);
 
-        var result = await endpoint.PatchAsync(category.Id, new AdminXtreamCategoryPatchRequest(true, null), TestContext.Current.CancellationToken);
+        var result = await XtreamCategoryEndpoints.PatchAsync(category.Id, new AdminXtreamCategoryPatchRequest(true, null), _xtreamCategoryAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<NoContent>(result);
         var updated = await _dbContext.XtreamCategories.AsNoTracking().SingleAsync(c => c.Id == category.Id, TestContext.Current.CancellationToken);
@@ -194,9 +185,8 @@ public class XtreamCategoryEndpointsTests : IAsyncDisposable
         var source = await AddSourceAsync();
         var customCategory = await AddCustomCategoryAsync("Movies");
         var category = await AddCategoryAsync(source.Id, "10", "Action", customCategory.Id);
-        var endpoint = new XtreamCategoryPatchEndpoint(_xtreamCategoryAdminService);
 
-        var result = await endpoint.PatchAsync(category.Id, new AdminXtreamCategoryPatchRequest(null, customCategoryId), TestContext.Current.CancellationToken);
+        var result = await XtreamCategoryEndpoints.PatchAsync(category.Id, new AdminXtreamCategoryPatchRequest(null, customCategoryId), _xtreamCategoryAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<ValidationProblem>(result);
         var unchanged = await _dbContext.XtreamCategories.AsNoTracking().SingleAsync(c => c.Id == category.Id, TestContext.Current.CancellationToken);
@@ -209,9 +199,8 @@ public class XtreamCategoryEndpointsTests : IAsyncDisposable
         var source = await AddSourceAsync();
         var customCategory = await AddCustomCategoryAsync("Movies");
         var category = await AddCategoryAsync(source.Id, "10", "Action");
-        var endpoint = new XtreamCategoryPatchEndpoint(_xtreamCategoryAdminService);
 
-        var result = await endpoint.PatchAsync(category.Id, new AdminXtreamCategoryPatchRequest(null, customCategory.Id, UnassignCustomCategory: true), TestContext.Current.CancellationToken);
+        var result = await XtreamCategoryEndpoints.PatchAsync(category.Id, new AdminXtreamCategoryPatchRequest(null, customCategory.Id, UnassignCustomCategory: true), _xtreamCategoryAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<ValidationProblem>(result);
         var unchanged = await _dbContext.XtreamCategories.AsNoTracking().SingleAsync(c => c.Id == category.Id, TestContext.Current.CancellationToken);
@@ -220,8 +209,7 @@ public class XtreamCategoryEndpointsTests : IAsyncDisposable
 
     private async Task<AdminXtreamCategoryDto> GetSingleAsync(int sourceId)
     {
-        var endpoint = new XtreamCategoriesGetEndpoint(_xtreamCategoryAdminService, new SourceAdminService(_dbContext));
-        var result = await endpoint.GetAsync(sourceId, ContentType.Vod, TestContext.Current.CancellationToken);
+        var result = await XtreamCategoryEndpoints.GetAsync(sourceId, ContentType.Vod, _xtreamCategoryAdminService, new SourceAdminService(_dbContext), TestContext.Current.CancellationToken);
         var ok = Assert.IsType<Ok<IEnumerable<AdminXtreamCategoryDto>>>(result);
         Assert.NotNull(ok.Value);
         return Assert.Single(ok.Value);

@@ -1,15 +1,3 @@
-using XtreamForge.ApiService.Endpoints.Admin.CategoryRules;
-using XtreamForge.ApiService.Endpoints.Admin.CustomCategories;
-using XtreamForge.ApiService.Endpoints.Admin.Dashboard;
-using XtreamForge.ApiService.Endpoints.Admin.ItemRules;
-using XtreamForge.ApiService.Endpoints.Admin.Monitoring;
-using XtreamForge.ApiService.Endpoints.Admin.Recommendations;
-using XtreamForge.ApiService.Endpoints.Admin.Sources;
-using XtreamForge.ApiService.Endpoints.Admin.StreamTmdbMappings;
-using XtreamForge.ApiService.Endpoints.Admin.TmdbInfos;
-using XtreamForge.ApiService.Endpoints.Admin.TmdbRules;
-using XtreamForge.ApiService.Endpoints.Admin.WatchHistory;
-using XtreamForge.ApiService.Endpoints.Admin.XtreamCategories;
 using XtreamForge.ApiService.Endpoints.Xtream;
 using XtreamForge.ApiService.Services;
 using XtreamForge.ApiService.Services.Admin;
@@ -82,7 +70,7 @@ public static class DependenciesExtensions
 
     private static void AddAdminServices(IServiceCollection services)
     {
-        // services
+        // the admin endpoints are static handlers (Endpoints/Admin): they receive these services as parameters
         services.AddScoped<SourceAdminService>();
         services.AddScoped<XtreamCategoryDiscoveryAdminService>();
         services.AddScoped<XtreamCategoryAdminService>();
@@ -93,44 +81,6 @@ public static class DependenciesExtensions
         services.AddScoped<TmdbInfoAdminService>();
         services.AddScoped<StreamTmdbMappingAdminService>();
         services.AddScoped<WatchHistoryAdminService>();
-
-        // endpoints
-        services.AddScoped<DashboardStatusGetEndpoint>();
-        services.AddScoped<QueuesGetEndpoint>();
-        services.AddScoped<SourcesGetEndpoint>();
-        services.AddScoped<SourcesPostEndpoint>();
-        services.AddScoped<SourcesDeleteEndpoint>();
-        services.AddScoped<XtreamCategoriesGetEndpoint>();
-        services.AddScoped<XtreamCategoryPatchEndpoint>();
-        services.AddScoped<CustomCategoriesGetEndpoint>();
-        services.AddScoped<CustomCategoryPostEndpoint>();
-        services.AddScoped<CustomCategoryPutEndpoint>();
-        services.AddScoped<CustomCategoryDeleteEndpoint>();
-        services.AddScoped<CategoryRulesGetEndpoint>();
-        services.AddScoped<CategoryRulePostEndpoint>();
-        services.AddScoped<CategoryRulePutEndpoint>();
-        services.AddScoped<CategoryRulesOrderPutEndpoint>();
-        services.AddScoped<CategoryRuleDeleteEndpoint>();
-        services.AddScoped<ItemRulesGetEndpoint>();
-        services.AddScoped<ItemRulePostEndpoint>();
-        services.AddScoped<ItemRulePutEndpoint>();
-        services.AddScoped<ItemRulesOrderPutEndpoint>();
-        services.AddScoped<ItemRuleDeleteEndpoint>();
-        services.AddScoped<TmdbInfosGetEndpoint>();
-        services.AddScoped<TmdbInfoGetEndpoint>();
-        services.AddScoped<TmdbInfoPatchEndpoint>();
-        services.AddScoped<StreamTmdbMappingsGetEndpoint>();
-        services.AddScoped<StreamTmdbMappingPatchEndpoint>();
-        services.AddScoped<TmdbRulesGetEndpoint>();
-        services.AddScoped<TmdbRulePostEndpoint>();
-        services.AddScoped<TmdbRulePutEndpoint>();
-        services.AddScoped<TmdbRulesOrderPutEndpoint>();
-        services.AddScoped<TmdbRuleDeleteEndpoint>();
-        services.AddScoped<WatchHistoryGetEndpoint>();
-        services.AddScoped<WatchHistoryPostEndpoint>();
-        services.AddScoped<WatchHistoryDeleteEndpoint>();
-        services.AddScoped<WatchHistoryActivityGetEndpoint>();
-        services.AddScoped<RecommendationsGetEndpoint>();
     }
 
     private static void AddHostedServices(IServiceCollection services)

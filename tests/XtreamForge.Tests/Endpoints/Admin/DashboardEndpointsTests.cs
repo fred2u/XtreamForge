@@ -12,23 +12,21 @@ using XtreamForge.Tests.Infrastructure;
 
 namespace XtreamForge.Tests.Endpoints.Admin;
 
-public class DashboardStatusGetEndpointTests : IAsyncDisposable
+public class DashboardEndpointsTests : IAsyncDisposable
 {
     private readonly XtreamForgeDbContext _dbContext;
-    private readonly DashboardStatusGetEndpoint _endpoint;
 
-    public DashboardStatusGetEndpointTests()
+    public DashboardEndpointsTests()
     {
         _dbContext = SqliteDbContextFactory.Create();
-        _endpoint = new DashboardStatusGetEndpoint(_dbContext, NullLogger<DashboardStatusGetEndpoint>.Instance);
     }
 
     [Fact]
-    public async Task GetAsync_WhenDatabaseQueryFails_ReturnsUnavailableStatus()
+    public async Task GetStatusAsync_WhenDatabaseQueryFails_ReturnsUnavailableStatus()
     {
         await _dbContext.Database.ExecuteSqlRawAsync("DROP TABLE stream_tmdb_mappings", TestContext.Current.CancellationToken);
 
-        var result = await _endpoint.GetAsync(TestContext.Current.CancellationToken);
+        var result = await DashboardEndpoints.GetStatusAsync(_dbContext, NullLoggerFactory.Instance, TestContext.Current.CancellationToken);
 
         var ok = Assert.IsType<Ok<DashboardStatusDto>>(result);
         Assert.NotNull(ok.Value);
@@ -37,7 +35,7 @@ public class DashboardStatusGetEndpointTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task GetAsync_CountsKnownAndUnresolvedTmdbMappings()
+    public async Task GetStatusAsync_CountsKnownAndUnresolvedTmdbMappings()
     {
         var source = new XtreamSource { Protocol = "http", Host = "provider.example.com", Port = 8080 };
         source.StreamTmdbMappings.AddRange(
@@ -49,7 +47,7 @@ public class DashboardStatusGetEndpointTests : IAsyncDisposable
         _dbContext.XtreamSources.Add(source);
         await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var result = await _endpoint.GetAsync(TestContext.Current.CancellationToken);
+        var result = await DashboardEndpoints.GetStatusAsync(_dbContext, NullLoggerFactory.Instance, TestContext.Current.CancellationToken);
 
         var ok = Assert.IsType<Ok<DashboardStatusDto>>(result);
         Assert.NotNull(ok.Value);
@@ -58,7 +56,7 @@ public class DashboardStatusGetEndpointTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task GetAsync_CountsTmdbInfosAndRules()
+    public async Task GetStatusAsync_CountsTmdbInfosAndRules()
     {
         var now = DateTimeOffset.UtcNow;
         _dbContext.TmdbInfos.AddRange(
@@ -68,7 +66,7 @@ public class DashboardStatusGetEndpointTests : IAsyncDisposable
         _dbContext.TmdbRules.Add(new TmdbRule { ContentType = ContentType.Vod, Sequence = 10, Pattern = "Horror" });
         await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var result = await _endpoint.GetAsync(TestContext.Current.CancellationToken);
+        var result = await DashboardEndpoints.GetStatusAsync(_dbContext, NullLoggerFactory.Instance, TestContext.Current.CancellationToken);
 
         var ok = Assert.IsType<Ok<DashboardStatusDto>>(result);
         Assert.NotNull(ok.Value);
@@ -78,9 +76,9 @@ public class DashboardStatusGetEndpointTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task GetAsync_WhenNoTmdbDataExists_ReturnsZero()
+    public async Task GetStatusAsync_WhenNoTmdbDataExists_ReturnsZero()
     {
-        var result = await _endpoint.GetAsync(TestContext.Current.CancellationToken);
+        var result = await DashboardEndpoints.GetStatusAsync(_dbContext, NullLoggerFactory.Instance, TestContext.Current.CancellationToken);
 
         var ok = Assert.IsType<Ok<DashboardStatusDto>>(result);
         Assert.NotNull(ok.Value);

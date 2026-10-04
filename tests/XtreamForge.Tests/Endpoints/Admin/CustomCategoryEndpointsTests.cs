@@ -27,9 +27,8 @@ public class CustomCategoryEndpointsTests : IAsyncDisposable
     {
         var vod = await AddCustomCategoryAsync("Movies", ContentType.Vod);
         await AddCustomCategoryAsync("Shows", ContentType.Series);
-        var endpoint = new CustomCategoriesGetEndpoint(_customCategoryAdminService);
 
-        var result = await endpoint.GetAsync(ContentType.Vod, TestContext.Current.CancellationToken);
+        var result = await CustomCategoryEndpoints.GetAsync(ContentType.Vod, _customCategoryAdminService, TestContext.Current.CancellationToken);
 
         var ok = Assert.IsType<Ok<IEnumerable<AdminCustomCategoryDto>>>(result);
         Assert.NotNull(ok.Value);
@@ -41,9 +40,7 @@ public class CustomCategoryEndpointsTests : IAsyncDisposable
     [Fact]
     public async Task PostAsync_WhenNameIsUnique_ReturnsCreatedWithLocationAndDto()
     {
-        var endpoint = new CustomCategoryPostEndpoint(_customCategoryAdminService);
-
-        var result = await endpoint.PostAsync(new AdminCustomCategoryRequest("Movies", ContentType.Vod), TestContext.Current.CancellationToken);
+        var result = await CustomCategoryEndpoints.PostAsync(new AdminCustomCategoryRequest("Movies", ContentType.Vod), _customCategoryAdminService, TestContext.Current.CancellationToken);
 
         var created = Assert.IsType<Created<AdminCustomCategoryDto>>(result);
         Assert.NotNull(created.Value);
@@ -56,9 +53,8 @@ public class CustomCategoryEndpointsTests : IAsyncDisposable
     public async Task PostAsync_WhenNameAlreadyExists_ReturnsConflict()
     {
         await AddCustomCategoryAsync("Movies", ContentType.Vod);
-        var endpoint = new CustomCategoryPostEndpoint(_customCategoryAdminService);
 
-        var result = await endpoint.PostAsync(new AdminCustomCategoryRequest("Movies", ContentType.Vod), TestContext.Current.CancellationToken);
+        var result = await CustomCategoryEndpoints.PostAsync(new AdminCustomCategoryRequest("Movies", ContentType.Vod), _customCategoryAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<Conflict>(result);
     }
@@ -69,9 +65,8 @@ public class CustomCategoryEndpointsTests : IAsyncDisposable
     public async Task PutAsync_WhenValid_ReturnsNoContent()
     {
         var category = await AddCustomCategoryAsync("Movies", ContentType.Vod);
-        var endpoint = new CustomCategoryPutEndpoint(_customCategoryAdminService);
 
-        var result = await endpoint.PutAsync(category.Id, new AdminCustomCategoryRequest("Films", ContentType.Vod), TestContext.Current.CancellationToken);
+        var result = await CustomCategoryEndpoints.PutAsync(category.Id, new AdminCustomCategoryRequest("Films", ContentType.Vod), _customCategoryAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<NoContent>(result);
     }
@@ -79,9 +74,7 @@ public class CustomCategoryEndpointsTests : IAsyncDisposable
     [Fact]
     public async Task PutAsync_WhenCategoryDoesNotExist_ReturnsNotFound()
     {
-        var endpoint = new CustomCategoryPutEndpoint(_customCategoryAdminService);
-
-        var result = await endpoint.PutAsync(999, new AdminCustomCategoryRequest("Films", ContentType.Vod), TestContext.Current.CancellationToken);
+        var result = await CustomCategoryEndpoints.PutAsync(999, new AdminCustomCategoryRequest("Films", ContentType.Vod), _customCategoryAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<NotFound>(result);
     }
@@ -91,9 +84,8 @@ public class CustomCategoryEndpointsTests : IAsyncDisposable
     {
         await AddCustomCategoryAsync("Movies", ContentType.Vod);
         var category = await AddCustomCategoryAsync("Films", ContentType.Vod);
-        var endpoint = new CustomCategoryPutEndpoint(_customCategoryAdminService);
 
-        var result = await endpoint.PutAsync(category.Id, new AdminCustomCategoryRequest("Movies", ContentType.Vod), TestContext.Current.CancellationToken);
+        var result = await CustomCategoryEndpoints.PutAsync(category.Id, new AdminCustomCategoryRequest("Movies", ContentType.Vod), _customCategoryAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<Conflict>(result);
     }
@@ -104,9 +96,8 @@ public class CustomCategoryEndpointsTests : IAsyncDisposable
     public async Task DeleteAsync_WhenCategoryExists_ReturnsNoContent()
     {
         var category = await AddCustomCategoryAsync("Movies", ContentType.Vod);
-        var endpoint = new CustomCategoryDeleteEndpoint(_customCategoryAdminService);
 
-        var result = await endpoint.DeleteAsync(category.Id, TestContext.Current.CancellationToken);
+        var result = await CustomCategoryEndpoints.DeleteAsync(category.Id, _customCategoryAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<NoContent>(result);
     }
@@ -114,9 +105,7 @@ public class CustomCategoryEndpointsTests : IAsyncDisposable
     [Fact]
     public async Task DeleteAsync_WhenCategoryDoesNotExist_ReturnsNotFound()
     {
-        var endpoint = new CustomCategoryDeleteEndpoint(_customCategoryAdminService);
-
-        var result = await endpoint.DeleteAsync(999, TestContext.Current.CancellationToken);
+        var result = await CustomCategoryEndpoints.DeleteAsync(999, _customCategoryAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<NotFound>(result);
     }

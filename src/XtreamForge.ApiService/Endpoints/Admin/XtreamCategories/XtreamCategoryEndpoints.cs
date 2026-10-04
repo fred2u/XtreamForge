@@ -1,13 +1,45 @@
 using Microsoft.AspNetCore.Http.HttpResults;
+using XtreamForge.ApiService.Endpoints.Admin.CategoryRules.Dto;
 using XtreamForge.ApiService.Endpoints.Admin.XtreamCategories.Dto;
 using XtreamForge.ApiService.Services.Admin;
 using XtreamForge.Domain.Enums;
 
 namespace XtreamForge.ApiService.Endpoints.Admin.XtreamCategories;
 
-public class XtreamCategoryPatchEndpoint(XtreamCategoryAdminService categoryAdminService)
+public static class XtreamCategoryEndpoints
 {
-    public async Task<IResult> PatchAsync(int id, AdminXtreamCategoryPatchRequest request, CancellationToken cancellationToken = default)
+    public static async Task<IResult> GetAsync(
+        int sourceId,
+        ContentType contentType,
+        XtreamCategoryAdminService categoryAdminService,
+        SourceAdminService sourceAdminService,
+        CancellationToken cancellationToken = default)
+    {
+        var source = await sourceAdminService.FindAsync(sourceId, cancellationToken);
+        if (source is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var evaluations = await categoryAdminService.GetBySourceAsync(sourceId, contentType, cancellationToken);
+
+        var dtos = evaluations.Select(e => new AdminXtreamCategoryDto(
+            e.Category.Id,
+            e.Category.XtreamId,
+            e.Category.Name,
+            e.Category.ContentType,
+            e.Category.IsEnabled,
+            e.Category.IsExcluded,
+            e.Category.CustomCategoryId,
+            e.Category.CustomCategory?.Name,
+            e.Decision,
+            e.ExclusionReason,
+            e.DecidingRule is null ? null : AdminCategoryRuleDto.FromRule(e.DecidingRule)));
+
+        return TypedResults.Ok(dtos);
+    }
+
+    public static async Task<IResult> PatchAsync(int id, AdminXtreamCategoryPatchRequest request, XtreamCategoryAdminService categoryAdminService, CancellationToken cancellationToken = default)
     {
         if (request.UnassignCustomCategory && request.CustomCategoryId is not null)
         {

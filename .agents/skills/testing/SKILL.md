@@ -29,7 +29,8 @@ Aspire.Hosting.Testing is available for distributed application testing.
 
 Test folders mirror the `XtreamForge.ApiService` structure, and namespaces match folders (`XtreamForge.Tests.<Folder>`):
 
-- `Endpoints/Admin/` — admin endpoint classes: HTTP result mapping (`Ok`, `Created` + location, `NotFound`, `Conflict`, `NoContent`). One file per admin resource (for example `ItemRuleEndpointsTests.cs` covers the Get/Post/Put/Delete endpoints of item rules).
+- `Endpoints/Admin/` — static admin handlers (`<Resource>Endpoints`): HTTP result mapping (`Ok`, `Created` + location, `NotFound`, `Conflict`, `NoContent`), calling the handler directly with its services (for example `ItemRuleEndpoints.PostAsync(sourceId, request, itemRuleAdminService, cancellationToken)`). One file per admin resource (for example `ItemRuleEndpointsTests.cs` covers the Get/Post/Put/PutOrder/Delete handlers of item rules).
+- `Endpoints/AdminRoutesTests.cs` — admin routes on `TestServer` with the application services: parameter binding (services, route, query, `[AsParameters]`, body). Extend it when adding an admin route with a new parameter shape.
 - `Services/` — core services (`CategoryRuleService`, `ItemRuleService`, `ItemService`, `CategoryService`).
 - `Services/Admin/` — admin services (`*AdminServiceTests.cs`).
 - `Xtream/` — Xtream request pipeline (`XtreamProviderValidator`, `XtreamContextBuilder`, `XtreamContext`, `XtreamHttpRequestMessageFactory`, `XtreamStreamPath`).

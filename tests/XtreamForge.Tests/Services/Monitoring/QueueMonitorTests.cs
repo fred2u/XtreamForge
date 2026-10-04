@@ -93,15 +93,14 @@ public sealed class QueueMonitorTests : IDisposable
     }
 
     [Fact]
-    public void QueuesGetEndpoint_ReturnsTheQueuesAndTheRateLimitedHosts()
+    public void GetQueuesEndpoint_ReturnsTheQueuesAndTheRateLimitedHosts()
     {
         _queue.Count = 7;
         _monitor.Sample();
         var rateLimiter = new UpstreamRateLimiter(_time, NullLogger<UpstreamRateLimiter>.Instance, _meterFactory);
         rateLimiter.OnRateLimited("https://api.themoviedb.org", null);
-        var endpoint = new QueuesGetEndpoint(_monitor, rateLimiter);
 
-        var result = endpoint.Get();
+        var result = MonitoringEndpoints.GetQueues(_monitor, rateLimiter);
 
         var ok = Assert.IsType<Ok<QueuesStatusDto>>(result);
         Assert.NotNull(ok.Value);

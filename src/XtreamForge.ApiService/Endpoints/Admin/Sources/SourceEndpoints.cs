@@ -4,11 +4,31 @@ using XtreamForge.ApiService.Xtream;
 
 namespace XtreamForge.ApiService.Endpoints.Admin.Sources;
 
-public class SourcesPostEndpoint(SourceAdminService sourceAdminService, XtreamCategoryDiscoveryAdminService xtreamCategoryDiscoveryAdminService, XtreamProviderValidator xtreamProviderValidator)
+public static class SourceEndpoints
 {
-    public async Task<IResult> PostAsync(XtreamSourceCreateRequest request, CancellationToken cancellationToken = default)
+    public static async Task<IResult> GetAsync(SourceAdminService sourceAdminService, CancellationToken cancellationToken = default)
     {
-        var errors = Validate(request, out var uri);
+        var summaries = await sourceAdminService.GetSummariesAsync(cancellationToken);
+
+        var dtos = summaries.Select(s => new XtreamSourceSummaryDto(
+            s.Source.Id,
+            s.Source.Protocol,
+            s.Source.Host,
+            s.Source.Port,
+            ToDto(s.Vod),
+            ToDto(s.Series)));
+
+        return TypedResults.Ok(dtos);
+    }
+
+    public static async Task<IResult> PostAsync(
+        XtreamSourceCreateRequest request,
+        SourceAdminService sourceAdminService,
+        XtreamCategoryDiscoveryAdminService xtreamCategoryDiscoveryAdminService,
+        XtreamProviderValidator xtreamProviderValidator,
+        CancellationToken cancellationToken = default)
+    {
+        var errors = Validate(request, xtreamProviderValidator, out var uri);
         if (errors.Count > 0 || uri is null)
         {
             return TypedResults.ValidationProblem(errors);
@@ -34,7 +54,27 @@ public class SourcesPostEndpoint(SourceAdminService sourceAdminService, XtreamCa
         return TypedResults.Created($"/api/admin/sources/{source.Id}", dto);
     }
 
-    private Dictionary<string, string[]> Validate(XtreamSourceCreateRequest request, out Uri? uri)
+    public static async Task<IResult> DeleteAsync(int id, SourceAdminService sourceAdminService, CancellationToken cancellationToken = default)
+    {
+        var deleted = await sourceAdminService.DeleteAsync(id, cancellationToken);
+
+        return deleted
+            ? TypedResults.NoContent()
+            : TypedResults.NotFound();
+    }
+
+    private static XtreamSourceContentSummaryDto ToDto(SourceContentSummary summary) => new(
+        summary.Categories,
+        summary.EffectiveCategories,
+        summary.ManuallyExcludedCategories,
+        summary.ProviderDisabledCategories,
+        summary.RuleExcludedCategories,
+        summary.MappedCategories,
+        summary.CategoryRules,
+        summary.ItemRules,
+        summary.TmdbMappings);
+
+    private static Dictionary<string, string[]> Validate(XtreamSourceCreateRequest request, XtreamProviderValidator xtreamProviderValidator, out Uri? uri)
     {
         var errors = new Dictionary<string, string[]>();
 

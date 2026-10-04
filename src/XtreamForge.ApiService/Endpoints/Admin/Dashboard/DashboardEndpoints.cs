@@ -5,9 +5,9 @@ using XtreamForge.Database;
 
 namespace XtreamForge.ApiService.Endpoints.Admin.Dashboard;
 
-public class DashboardStatusGetEndpoint(XtreamForgeDbContext dbContext, ILogger<DashboardStatusGetEndpoint> logger)
+public static class DashboardEndpoints
 {
-    public async Task<IResult> GetAsync(CancellationToken cancellationToken = default)
+    public static async Task<IResult> GetStatusAsync(XtreamForgeDbContext dbContext, ILoggerFactory loggerFactory, CancellationToken cancellationToken = default)
     {
         string databaseStatus;
         string databaseDetails;
@@ -58,7 +58,7 @@ public class DashboardStatusGetEndpoint(XtreamForgeDbContext dbContext, ILogger<
         catch (Exception exception) when (exception is DbException or InvalidOperationException)
         {
             // the dashboard stays available and reports the database as unavailable
-            logger.LogWarning(exception, "Dashboard status could not be read from the database");
+            loggerFactory.CreateLogger(typeof(DashboardEndpoints)).LogWarning(exception, "Dashboard status could not be read from the database");
             databaseStatus = "Unavailable";
             databaseDetails = "The database status could not be read.";
         }

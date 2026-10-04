@@ -202,6 +202,8 @@ Business logic that is significant or reusable belongs outside endpoint definiti
 
 Do not introduce controllers unless there is a concrete benefit over the existing Minimal API approach.
 
+Admin endpoints (`Endpoints/Admin`) are static handlers grouped in one `<Resource>Endpoints` class per resource (for example `CategoryRuleEndpoints.GetAsync / PostAsync / PutAsync / PutOrderAsync / DeleteAsync`). Their services are injected as handler parameters, so they are not registered in DI, and all the routes are listed in `Endpoints/Admin/RouteExtensions.cs` as method groups: a route parameter must keep the name of the handler parameter it binds to, and every service parameter must be registered (otherwise Minimal APIs infer it as the body or the query). Add a new admin route as a static method of its resource class, not as a new endpoint class.
+
 Use endpoint DTOs when the HTTP contract differs from domain or persistence models.
 
 Do not expose EF Core entities automatically as public API contracts when doing so creates unwanted coupling.
@@ -728,7 +730,7 @@ Upstream Xtream and TMDB HTTP calls are replaced by the stub `IHttpClientFactory
 
 The test project references `Aspire.Hosting.Testing`, but no Aspire integration test exists yet.
 
-Routing behavior is tested in-process with a minimal `WebApplication` on `TestServer` (`Microsoft.AspNetCore.Mvc.Testing`), registering only the services the mapped routes need (see `Endpoints/XtreamRoutesTests`).
+Routing behavior is tested in-process with a minimal `WebApplication` on `TestServer` (`Microsoft.AspNetCore.Mvc.Testing`), registering only the services the mapped routes need (see `Endpoints/XtreamRoutesTests`). `Endpoints/AdminRoutesTests` maps the admin routes with the application services (`AddServices`) to check the parameter binding of the static admin handlers.
 
 Write tests around observable behavior.
 

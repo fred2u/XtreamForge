@@ -19,24 +19,18 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
 
     private readonly XtreamForgeDbContext _dbContext;
     private readonly TmdbIdCache _recommendationCache = new(TimeProvider.System);
-    private readonly WatchHistoryGetEndpoint _endpoint;
-    private readonly WatchHistoryPostEndpoint _postEndpoint;
-    private readonly WatchHistoryDeleteEndpoint _deleteEndpoint;
+    private readonly WatchHistoryAdminService _service;
 
     public WatchHistoryEndpointsTests()
     {
         _dbContext = SqliteDbContextFactory.Create();
-        var service = new WatchHistoryAdminService(_dbContext, _recommendationCache, TimeProvider.System);
-        _endpoint = new WatchHistoryGetEndpoint(service, TmdbOptions);
-        _postEndpoint = new WatchHistoryPostEndpoint(service, TmdbOptions);
-        _deleteEndpoint = new WatchHistoryDeleteEndpoint(service);
+        _service = new WatchHistoryAdminService(_dbContext, _recommendationCache, TimeProvider.System);
     }
 
     [Fact]
     public async Task GetActivity_WithUnknownTimeZone_ReturnsValidationProblem()
     {
-        var result = await new WatchHistoryActivityGetEndpoint(new WatchHistoryAdminService(_dbContext, _recommendationCache, TimeProvider.System))
-            .GetAsync("Mars/Olympus_Mons", TestContext.Current.CancellationToken);
+        var result = await WatchHistoryEndpoints.GetActivityAsync("Mars/Olympus_Mons", _service, TestContext.Current.CancellationToken);
 
         Assert.Contains("timeZone", Assert.IsType<ValidationProblem>(result).ProblemDetails.Errors.Keys);
     }
@@ -45,8 +39,7 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
     public async Task GetActivity_WithoutTimeZone_UsesUtc()
     {
         var before = DateOnly.FromDateTime(DateTime.UtcNow);
-        var result = await new WatchHistoryActivityGetEndpoint(new WatchHistoryAdminService(_dbContext, _recommendationCache, TimeProvider.System))
-            .GetAsync(null, TestContext.Current.CancellationToken);
+        var result = await WatchHistoryEndpoints.GetActivityAsync(null, _service, TestContext.Current.CancellationToken);
         var after = DateOnly.FromDateTime(DateTime.UtcNow);
 
         var activity = Assert.IsType<Ok<WatchHistoryActivity>>(result).Value;
@@ -61,7 +54,7 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
         _dbContext.TmdbInfos.Add(info);
         await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var result = await _postEndpoint.PostAsync(info.Id, TestContext.Current.CancellationToken);
+        var result = await WatchHistoryEndpoints.PostAsync(info.Id, _service, TmdbOptions, TestContext.Current.CancellationToken);
 
         var entry = Assert.IsType<Ok<AdminWatchHistoryEntryDto>>(result).Value;
         Assert.NotNull(entry);
@@ -71,7 +64,7 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
     [Fact]
     public async Task Post_WithUnknownTmdbInfo_ReturnsNotFound()
     {
-        Assert.IsType<NotFound>(await _postEndpoint.PostAsync(42, TestContext.Current.CancellationToken));
+        Assert.IsType<NotFound>(await WatchHistoryEndpoints.PostAsync(42, _service, TmdbOptions, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -81,8 +74,8 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
         _dbContext.WatchHistory.Add(entry);
         await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        Assert.IsType<NoContent>(await _deleteEndpoint.DeleteAsync(entry.Id, TestContext.Current.CancellationToken));
-        Assert.IsType<NotFound>(await _deleteEndpoint.DeleteAsync(entry.Id, TestContext.Current.CancellationToken));
+        Assert.IsType<NoContent>(await WatchHistoryEndpoints.DeleteAsync(entry.Id, _service, TestContext.Current.CancellationToken));
+        Assert.IsType<NotFound>(await WatchHistoryEndpoints.DeleteAsync(entry.Id, _service, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -93,7 +86,7 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
         _dbContext.WatchHistory.Add(new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 603, StartedAtUtc = startedAtUtc });
         await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var result = await _endpoint.GetAsync(new WatchHistoryListQuery(), TestContext.Current.CancellationToken);
+        var result = await WatchHistoryEndpoints.GetListAsync(new WatchHistoryListQuery(), _service, TmdbOptions, TestContext.Current.CancellationToken);
 
         var page = Assert.IsType<Ok<AdminWatchHistoryPageDto>>(result).Value;
         Assert.NotNull(page);
@@ -109,7 +102,7 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
     [InlineData((ContentType)99)]
     public async Task Get_WithInvalidContentType_ReturnsValidationProblem(ContentType contentType)
     {
-        var result = await _endpoint.GetAsync(new WatchHistoryListQuery(contentType), TestContext.Current.CancellationToken);
+        var result = await WatchHistoryEndpoints.GetListAsync(new WatchHistoryListQuery(contentType), _service, TmdbOptions, TestContext.Current.CancellationToken);
 
         Assert.Contains(nameof(WatchHistoryListQuery.ContentType), Assert.IsType<ValidationProblem>(result).ProblemDetails.Errors.Keys);
     }

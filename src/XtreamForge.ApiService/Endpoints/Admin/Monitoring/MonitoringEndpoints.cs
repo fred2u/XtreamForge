@@ -4,9 +4,9 @@ using XtreamForge.ApiService.Services.Monitoring;
 
 namespace XtreamForge.ApiService.Endpoints.Admin.Monitoring;
 
-public class QueuesGetEndpoint(QueueMonitor queueMonitor, UpstreamRateLimiter rateLimiter)
+public static class MonitoringEndpoints
 {
-    public IResult Get()
+    public static IResult GetQueues(QueueMonitor queueMonitor, UpstreamRateLimiter rateLimiter)
     {
         var queues = queueMonitor.GetSnapshots()
             .Select(queue => new QueueStatusDto(

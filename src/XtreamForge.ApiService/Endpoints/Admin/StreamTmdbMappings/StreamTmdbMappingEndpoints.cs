@@ -6,9 +6,14 @@ using XtreamForge.Domain.Enums;
 
 namespace XtreamForge.ApiService.Endpoints.Admin.StreamTmdbMappings;
 
-public class StreamTmdbMappingsGetEndpoint(StreamTmdbMappingAdminService streamTmdbMappingAdminService, IOptions<TmdbOptions> tmdbOptions)
+public static class StreamTmdbMappingEndpoints
 {
-    public async Task<IResult> GetAsync(int sourceId, StreamTmdbMappingListQuery query, CancellationToken cancellationToken = default)
+    public static async Task<IResult> GetListAsync(
+        int sourceId,
+        [AsParameters] StreamTmdbMappingListQuery query,
+        StreamTmdbMappingAdminService streamTmdbMappingAdminService,
+        IOptions<TmdbOptions> tmdbOptions,
+        CancellationToken cancellationToken = default)
     {
         if (query.ContentType == ContentType.Undefined || !Enum.IsDefined(query.ContentType))
         {
@@ -31,5 +36,22 @@ public class StreamTmdbMappingsGetEndpoint(StreamTmdbMappingAdminService streamT
             page.MatchingCount,
             page.TotalCount,
             page.MappedCount));
+    }
+
+    public static async Task<IResult> PatchAsync(int id, AdminStreamTmdbMappingPatchRequest request, StreamTmdbMappingAdminService streamTmdbMappingAdminService, CancellationToken cancellationToken = default)
+    {
+        if (request.TmdbId <= 0)
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                [nameof(AdminStreamTmdbMappingPatchRequest.TmdbId)] = ["The TMDB ID must be a positive number."]
+            });
+        }
+
+        var found = await streamTmdbMappingAdminService.SetTmdbIdAsync(id, request.TmdbId, cancellationToken);
+
+        return found
+            ? TypedResults.NoContent()
+            : TypedResults.NotFound();
     }
 }

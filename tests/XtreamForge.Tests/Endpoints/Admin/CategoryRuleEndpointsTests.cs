@@ -27,9 +27,7 @@ public class CategoryRuleEndpointsTests : IAsyncDisposable
     [Fact]
     public async Task GetAsync_WhenSourceDoesNotExist_ReturnsNotFound()
     {
-        var endpoint = new CategoryRulesGetEndpoint(_categoryRuleAdminService, new SourceAdminService(_dbContext));
-
-        var result = await endpoint.GetAsync(999, ContentType.Vod, TestContext.Current.CancellationToken);
+        var result = await CategoryRuleEndpoints.GetAsync(999, ContentType.Vod, _categoryRuleAdminService, new SourceAdminService(_dbContext), TestContext.Current.CancellationToken);
 
         Assert.IsType<NotFound>(result);
     }
@@ -40,9 +38,8 @@ public class CategoryRuleEndpointsTests : IAsyncDisposable
         var source = await AddSourceAsync();
         var rule = await AddRuleAsync(source.Id, ContentType.Vod, 1, "vod");
         await AddRuleAsync(source.Id, ContentType.Series, 1, "series");
-        var endpoint = new CategoryRulesGetEndpoint(_categoryRuleAdminService, new SourceAdminService(_dbContext));
 
-        var result = await endpoint.GetAsync(source.Id, ContentType.Vod, TestContext.Current.CancellationToken);
+        var result = await CategoryRuleEndpoints.GetAsync(source.Id, ContentType.Vod, _categoryRuleAdminService, new SourceAdminService(_dbContext), TestContext.Current.CancellationToken);
 
         var ok = Assert.IsType<Ok<IEnumerable<AdminCategoryRuleDto>>>(result);
         Assert.NotNull(ok.Value);
@@ -58,10 +55,9 @@ public class CategoryRuleEndpointsTests : IAsyncDisposable
     public async Task PostAsync_WhenValid_ReturnsCreatedWithLocationAndDto()
     {
         var source = await AddSourceAsync();
-        var endpoint = new CategoryRulePostEndpoint(_categoryRuleAdminService);
         var request = new AdminCategoryRuleRequest(ContentType.Series, 3, RuleAction.Exclude, RuleOperator.StartsWith, "Kids", true, false);
 
-        var result = await endpoint.PostAsync(source.Id, request, TestContext.Current.CancellationToken);
+        var result = await CategoryRuleEndpoints.PostAsync(source.Id, request, _categoryRuleAdminService, TestContext.Current.CancellationToken);
 
         var created = Assert.IsType<Created<AdminCategoryRuleDto>>(result);
         Assert.NotNull(created.Value);
@@ -74,10 +70,9 @@ public class CategoryRuleEndpointsTests : IAsyncDisposable
     [Fact]
     public async Task PostAsync_WhenSourceDoesNotExist_ReturnsNotFound()
     {
-        var endpoint = new CategoryRulePostEndpoint(_categoryRuleAdminService);
         var request = new AdminCategoryRuleRequest(ContentType.Vod, 1, RuleAction.Include, RuleOperator.Contains, "x", false, true);
 
-        var result = await endpoint.PostAsync(999, request, TestContext.Current.CancellationToken);
+        var result = await CategoryRuleEndpoints.PostAsync(999, request, _categoryRuleAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<NotFound>(result);
     }
@@ -87,10 +82,9 @@ public class CategoryRuleEndpointsTests : IAsyncDisposable
     {
         var source = await AddSourceAsync();
         await AddRuleAsync(source.Id, ContentType.Vod, 1, "existing");
-        var endpoint = new CategoryRulePostEndpoint(_categoryRuleAdminService);
         var request = new AdminCategoryRuleRequest(ContentType.Vod, 1, RuleAction.Include, RuleOperator.Contains, "x", false, true);
 
-        var result = await endpoint.PostAsync(source.Id, request, TestContext.Current.CancellationToken);
+        var result = await CategoryRuleEndpoints.PostAsync(source.Id, request, _categoryRuleAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<Conflict>(result);
     }
@@ -102,10 +96,9 @@ public class CategoryRuleEndpointsTests : IAsyncDisposable
     {
         var source = await AddSourceAsync();
         var rule = await AddRuleAsync(source.Id, ContentType.Vod, 1, "old");
-        var endpoint = new CategoryRulePutEndpoint(_categoryRuleAdminService);
         var request = new AdminCategoryRuleRequest(ContentType.Vod, 2, RuleAction.Exclude, RuleOperator.Contains, "new", false, true);
 
-        var result = await endpoint.PutAsync(rule.Id, request, TestContext.Current.CancellationToken);
+        var result = await CategoryRuleEndpoints.PutAsync(rule.Id, request, _categoryRuleAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<NoContent>(result);
     }
@@ -113,10 +106,9 @@ public class CategoryRuleEndpointsTests : IAsyncDisposable
     [Fact]
     public async Task PutAsync_WhenRuleDoesNotExist_ReturnsNotFound()
     {
-        var endpoint = new CategoryRulePutEndpoint(_categoryRuleAdminService);
         var request = new AdminCategoryRuleRequest(ContentType.Vod, 1, RuleAction.Include, RuleOperator.Contains, "x", false, true);
 
-        var result = await endpoint.PutAsync(999, request, TestContext.Current.CancellationToken);
+        var result = await CategoryRuleEndpoints.PutAsync(999, request, _categoryRuleAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<NotFound>(result);
     }
@@ -127,10 +119,9 @@ public class CategoryRuleEndpointsTests : IAsyncDisposable
         var source = await AddSourceAsync();
         await AddRuleAsync(source.Id, ContentType.Vod, 1, "a");
         var rule = await AddRuleAsync(source.Id, ContentType.Vod, 2, "b");
-        var endpoint = new CategoryRulePutEndpoint(_categoryRuleAdminService);
         var request = new AdminCategoryRuleRequest(ContentType.Vod, 1, RuleAction.Include, RuleOperator.Contains, "b", false, true);
 
-        var result = await endpoint.PutAsync(rule.Id, request, TestContext.Current.CancellationToken);
+        var result = await CategoryRuleEndpoints.PutAsync(rule.Id, request, _categoryRuleAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<Conflict>(result);
     }
@@ -142,9 +133,8 @@ public class CategoryRuleEndpointsTests : IAsyncDisposable
     {
         var source = await AddSourceAsync();
         var rule = await AddRuleAsync(source.Id, ContentType.Vod, 1, "x");
-        var endpoint = new CategoryRuleDeleteEndpoint(_categoryRuleAdminService);
 
-        var result = await endpoint.DeleteAsync(rule.Id, TestContext.Current.CancellationToken);
+        var result = await CategoryRuleEndpoints.DeleteAsync(rule.Id, _categoryRuleAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<NoContent>(result);
     }
@@ -152,9 +142,7 @@ public class CategoryRuleEndpointsTests : IAsyncDisposable
     [Fact]
     public async Task DeleteAsync_WhenRuleDoesNotExist_ReturnsNotFound()
     {
-        var endpoint = new CategoryRuleDeleteEndpoint(_categoryRuleAdminService);
-
-        var result = await endpoint.DeleteAsync(999, TestContext.Current.CancellationToken);
+        var result = await CategoryRuleEndpoints.DeleteAsync(999, _categoryRuleAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<NotFound>(result);
     }
@@ -164,9 +152,7 @@ public class CategoryRuleEndpointsTests : IAsyncDisposable
     [Fact]
     public async Task PutOrderAsync_WhenSourceDoesNotExist_ReturnsNotFound()
     {
-        var endpoint = new CategoryRulesOrderPutEndpoint(_categoryRuleAdminService);
-
-        var result = await endpoint.PutAsync(999, new AdminCategoryRuleOrderRequest(ContentType.Vod, []), TestContext.Current.CancellationToken);
+        var result = await CategoryRuleEndpoints.PutOrderAsync(999, new AdminCategoryRuleOrderRequest(ContentType.Vod, []), _categoryRuleAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<NotFound>(result);
     }
@@ -175,9 +161,8 @@ public class CategoryRuleEndpointsTests : IAsyncDisposable
     public async Task PutOrderAsync_WhenContentTypeIsUndefined_ReturnsValidationProblem()
     {
         var source = await AddSourceAsync();
-        var endpoint = new CategoryRulesOrderPutEndpoint(_categoryRuleAdminService);
 
-        var result = await endpoint.PutAsync(source.Id, new AdminCategoryRuleOrderRequest(ContentType.Undefined, []), TestContext.Current.CancellationToken);
+        var result = await CategoryRuleEndpoints.PutOrderAsync(source.Id, new AdminCategoryRuleOrderRequest(ContentType.Undefined, []), _categoryRuleAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<ValidationProblem>(result);
     }
@@ -189,9 +174,8 @@ public class CategoryRuleEndpointsTests : IAsyncDisposable
         var first = await AddRuleAsync(source.Id, ContentType.Vod, 1, "a");
         var second = await AddRuleAsync(source.Id, ContentType.Vod, 2, "b");
         var third = await AddRuleAsync(source.Id, ContentType.Vod, 3, "c");
-        var endpoint = new CategoryRulesOrderPutEndpoint(_categoryRuleAdminService);
 
-        var result = await endpoint.PutAsync(source.Id, new AdminCategoryRuleOrderRequest(ContentType.Vod, [third.Id, first.Id, second.Id]), TestContext.Current.CancellationToken);
+        var result = await CategoryRuleEndpoints.PutOrderAsync(source.Id, new AdminCategoryRuleOrderRequest(ContentType.Vod, [third.Id, first.Id, second.Id]), _categoryRuleAdminService, TestContext.Current.CancellationToken);
 
         var ok = Assert.IsType<Ok<IEnumerable<AdminCategoryRuleDto>>>(result);
         Assert.NotNull(ok.Value);
@@ -205,9 +189,8 @@ public class CategoryRuleEndpointsTests : IAsyncDisposable
         var source = await AddSourceAsync();
         var first = await AddRuleAsync(source.Id, ContentType.Vod, 10, "a");
         var second = await AddRuleAsync(source.Id, ContentType.Vod, 20, "b");
-        var endpoint = new CategoryRulesOrderPutEndpoint(_categoryRuleAdminService);
 
-        var result = await endpoint.PutAsync(source.Id, new AdminCategoryRuleOrderRequest(ContentType.Vod, [second.Id, first.Id]), TestContext.Current.CancellationToken);
+        var result = await CategoryRuleEndpoints.PutOrderAsync(source.Id, new AdminCategoryRuleOrderRequest(ContentType.Vod, [second.Id, first.Id]), _categoryRuleAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<Ok<IEnumerable<AdminCategoryRuleDto>>>(result);
         Assert.Equal([(second.Id, 10), (first.Id, 20)], await GetStoredOrderAsync(source.Id, ContentType.Vod));
@@ -222,9 +205,8 @@ public class CategoryRuleEndpointsTests : IAsyncDisposable
         var second = await AddRuleAsync(source.Id, ContentType.Vod, 2, "b");
         var series = await AddRuleAsync(source.Id, ContentType.Series, 1, "s");
         var other = await AddRuleAsync(otherSource.Id, ContentType.Vod, 1, "o");
-        var endpoint = new CategoryRulesOrderPutEndpoint(_categoryRuleAdminService);
 
-        await endpoint.PutAsync(source.Id, new AdminCategoryRuleOrderRequest(ContentType.Vod, [second.Id, first.Id]), TestContext.Current.CancellationToken);
+        await CategoryRuleEndpoints.PutOrderAsync(source.Id, new AdminCategoryRuleOrderRequest(ContentType.Vod, [second.Id, first.Id]), _categoryRuleAdminService, TestContext.Current.CancellationToken);
 
         Assert.Equal([(series.Id, 1)], await GetStoredOrderAsync(source.Id, ContentType.Series));
         Assert.Equal([(other.Id, 1)], await GetStoredOrderAsync(otherSource.Id, ContentType.Vod));
@@ -277,9 +259,8 @@ public class CategoryRuleEndpointsTests : IAsyncDisposable
     {
         var source = await AddSourceAsync();
         await AddRuleAsync(source.Id, ContentType.Vod, 1, "a");
-        var endpoint = new CategoryRulesOrderPutEndpoint(_categoryRuleAdminService);
 
-        var result = await endpoint.PutAsync(source.Id, new AdminCategoryRuleOrderRequest(ContentType.Vod, null), TestContext.Current.CancellationToken);
+        var result = await CategoryRuleEndpoints.PutOrderAsync(source.Id, new AdminCategoryRuleOrderRequest(ContentType.Vod, null), _categoryRuleAdminService, TestContext.Current.CancellationToken);
 
         Assert.IsType<ValidationProblem>(result);
     }
@@ -287,9 +268,8 @@ public class CategoryRuleEndpointsTests : IAsyncDisposable
     private async Task AssertOrderRejectedAsync(int sourceId, IReadOnlyList<int> ruleIds)
     {
         var before = await GetStoredOrderAsync(sourceId, ContentType.Vod);
-        var endpoint = new CategoryRulesOrderPutEndpoint(_categoryRuleAdminService);
 
-        var result = await endpoint.PutAsync(sourceId, new AdminCategoryRuleOrderRequest(ContentType.Vod, ruleIds), TestContext.Current.CancellationToken);
+        var result = await CategoryRuleEndpoints.PutOrderAsync(sourceId, new AdminCategoryRuleOrderRequest(ContentType.Vod, ruleIds), _categoryRuleAdminService, TestContext.Current.CancellationToken);
 
         var problem = Assert.IsType<ValidationProblem>(result);
         Assert.Contains(nameof(AdminCategoryRuleOrderRequest.RuleIds), problem.ProblemDetails.Errors.Keys);

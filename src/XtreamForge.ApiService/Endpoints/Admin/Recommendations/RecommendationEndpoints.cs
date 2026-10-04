@@ -5,9 +5,9 @@ using XtreamForge.ApiService.Services;
 
 namespace XtreamForge.ApiService.Endpoints.Admin.Recommendations;
 
-public class RecommendationsGetEndpoint(RecommendationService recommendationService, IOptions<TmdbOptions> tmdbOptions)
+public static class RecommendationEndpoints
 {
-    public async Task<IResult> GetAsync(CancellationToken cancellationToken = default)
+    public static async Task<IResult> GetAsync(RecommendationService recommendationService, IOptions<TmdbOptions> tmdbOptions, CancellationToken cancellationToken = default)
     {
         var recommendations = await recommendationService.GetAsync(cancellationToken);
         var imageBaseUrl = tmdbOptions.Value.ImageBaseUrl;

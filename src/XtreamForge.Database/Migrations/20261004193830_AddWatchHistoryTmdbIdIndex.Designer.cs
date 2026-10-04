@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using XtreamForge.Database;
@@ -12,9 +13,11 @@ using XtreamForge.Database;
 namespace XtreamForge.Database.Migrations
 {
     [DbContext(typeof(XtreamForgeDbContext))]
-    partial class XtreamForgeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261004193830_AddWatchHistoryTmdbIdIndex")]
+    partial class AddWatchHistoryTmdbIdIndex
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

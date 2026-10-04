@@ -259,6 +259,8 @@ For `get_vod_info` and `get_series_info`, the item is returned only if it would 
 
 When the item would not be listed, the empty payload of Xtream panels is returned with `200 OK`: `{"info":[],"movie_data":[]}` for VOD, `{"seasons":[],"info":[],"episodes":[]}` for series. Other fields (seasons, episodes, metadata) are returned unchanged; an upstream error status is forwarded.
 
+Unlike the lists, only the TMDB mapping of the requested stream is read, not every mapping of the source.
+
 ## TMDB enrichment
 
 An item is returned only when a usable TMDB ID is known and its TMDB metadata is loaded (see [TMDB metadata](#tmdb-metadata)). The TMDB ID comes from either:

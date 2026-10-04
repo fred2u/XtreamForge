@@ -37,7 +37,7 @@ public class ItemGetEndpoint(
 
         try
         {
-            var source = await sourceService.GetSnapshotAsync(xtreamContext, cancellationToken);
+            var source = await sourceService.GetItemSnapshotAsync(xtreamContext, streamId, cancellationToken);
             if (source is null)
             {
                 return Results.BadRequest("Unknown source: request the categories first.");

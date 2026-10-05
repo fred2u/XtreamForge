@@ -1,5 +1,5 @@
-# XtreamForge sur Synology (Container Manager > Projet)
-# Tous les réglages se font dans le fichier .env placé dans le même dossier que ce fichier.
+# XtreamForge on Synology (Container Manager > Project)
+# All settings live in the .env file next to this file (template: .env.example).
 services:
   postgres:
     image: postgres:17
@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_DB: xtreamforge
       POSTGRES_USER: xtreamforge
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant dans .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is missing from .env}
     volumes:
       - ./postgres:/var/lib/postgresql/data
     healthcheck:
@@ -26,10 +26,10 @@ services:
         condition: service_healthy
     environment:
       ConnectionStrings__database: "Host=postgres;Port=5432;Database=xtreamforge;Username=xtreamforge;Password=${POSTGRES_PASSWORD}"
-      Tmdb__ApiKey: ${TMDB_API_KEY:?TMDB_API_KEY manquant dans .env}
-      XtreamProxy__AllowedHosts__0: ${XTREAM_HOST:?XTREAM_HOST manquant dans .env}
+      Tmdb__ApiKey: ${TMDB_API_KEY:?TMDB_API_KEY is missing from .env}
+      XtreamProxy__AllowedHosts__0: ${XTREAM_HOST:?XTREAM_HOST is missing from .env}
     ports:
-      - "${API_PORT:-8080}:8080"   # proxy Xtream (+ API d'admin, sans authentification)
+      - "${API_PORT:-8080}:8080"   # Xtream proxy (+ admin API, not authenticated)
 
   web:
     image: ghcr.io/fred2u/xtreamforge-web:latest
@@ -40,4 +40,4 @@ services:
     environment:
       Backend__BaseUrl: "http://api:8080"
     ports:
-      - "${ADMIN_PORT:-8081}:8080"   # interface d'administration
+      - "${ADMIN_PORT:-8081}:8080"   # administration UI

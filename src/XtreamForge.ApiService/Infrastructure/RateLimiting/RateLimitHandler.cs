@@ -6,6 +6,8 @@ namespace XtreamForge.ApiService.Infrastructure.RateLimiting;
 /// Outermost handler of the upstream HTTP clients: waits for <see cref="UpstreamRateLimiter"/> before each request and,
 /// on HTTP 429, slows the host down and sends a GET/HEAD request again, up to <see cref="MaximumAttempts"/> times in total.
 /// The last 429 response is returned unchanged, so callers keep their usual behavior (the proxy forwards it).
+/// A media stream request (<see cref="StreamRequest"/>) is sent at once and only once, and its response does not change the pacing of the host:
+/// providers also answer 429 to a stream when the connections of the account are all in use.
 /// </summary>
 public sealed class RateLimitHandler(UpstreamRateLimiter rateLimiter, TimeProvider timeProvider) : DelegatingHandler
 {
@@ -13,6 +15,9 @@ public sealed class RateLimitHandler(UpstreamRateLimiter rateLimiter, TimeProvid
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
+        if (StreamRequest.IsMarked(request))
+            return await base.SendAsync(request, cancellationToken);
+
         var host = GetHost(request);
         // Requests without a body can be sent again; the Xtream proxy and the TMDB client only send GET and HEAD.
         var canRetry = request.Method == HttpMethod.Get || request.Method == HttpMethod.Head;

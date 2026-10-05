@@ -51,7 +51,7 @@ The literal `player_api.php` route takes precedence over the catch-all route. Ke
 
 Supported HTTP methods: GET, HEAD only. `XtreamHttpForwarder` therefore forwards no request body and drops content headers.
 
-Every upstream Xtream call of the endpoints goes through `XtreamHttpForwarder.SendAsync` (upstream request built from the incoming one, sent with the Xtream HTTP client, response returned once its headers are read); a response forwarded unchanged (transparent forward, or a non-success status of a transformed action) is copied with `XtreamHttpForwarder.WriteResponseAsync`. This single class drops the hop-by-hop headers in both directions.
+Every upstream Xtream call of the endpoints goes through `XtreamHttpForwarder.SendAsync` (upstream request built from the incoming one, sent with the Xtream HTTP client, response returned once its headers are read); a response forwarded unchanged (transparent forward, or a non-success status of a transformed action) is copied with `XtreamHttpForwarder.WriteResponseAsync`. This single class drops the hop-by-hop headers in both directions. It also marks the media stream requests (`XtreamStreamPath.IsStream`: `movie|series|live|timeshift/{username}/{password}/...` and the short live form) with `Infrastructure/StreamRequest`, so that they are sent at once and only once: neither paced nor retried by `RateLimitHandler`, nor retried by the standard resilience pipeline. A new stream path shape must be recognized by `XtreamStreamPath.IsStream`.
 
 The proxy routes are excluded from OpenAPI (`ExcludeFromDescription`).
 

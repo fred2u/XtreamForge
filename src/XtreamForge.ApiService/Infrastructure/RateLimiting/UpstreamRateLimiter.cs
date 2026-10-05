@@ -59,13 +59,28 @@ public sealed class UpstreamRateLimiter
         }
     }
 
-    /// <summary>Waits until a request may be sent to <paramref name="host"/>, and reserves its slot.</summary>
+    /// <summary>
+    /// Waits until a request may be sent to <paramref name="host"/>, and reserves its slot. A wait that is cancelled gives its slot back
+    /// when no later request has reserved one since, so that a request abandoned by its client does not delay the following ones.
+    /// </summary>
     public async Task WaitAsync(string host, CancellationToken cancellationToken)
     {
-        var delay = Reserve(host);
-        if (delay > TimeSpan.Zero)
+        // Hosts that never rate limited have no state and are never delayed.
+        if (!_hosts.TryGetValue(host, out var state))
+            return;
+
+        var slot = Reserve(state);
+        if (slot.Delay <= TimeSpan.Zero)
+            return;
+
+        try
         {
-            await Task.Delay(delay, _timeProvider, cancellationToken);
+            await Task.Delay(slot.Delay, _timeProvider, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            Release(state, slot);
+            throw;
         }
     }
 
@@ -73,16 +88,30 @@ public sealed class UpstreamRateLimiter
     public TimeSpan Reserve(string host)
     {
         // Hosts that never rate limited have no state and are never delayed.
-        if (!_hosts.TryGetValue(host, out var state))
-            return TimeSpan.Zero;
+        return _hosts.TryGetValue(host, out var state) ? Reserve(state).Delay : TimeSpan.Zero;
+    }
 
+    private Slot Reserve(HostState state)
+    {
         lock (state.Gate)
         {
             var now = _timeProvider.GetUtcNow();
             var start = state.NextRequestAt > now ? state.NextRequestAt : now;
             state.NextRequestAt = start + state.Interval;
 
-            return start - now;
+            return new Slot(start, state.NextRequestAt, start - now);
+        }
+    }
+
+    // the slots reserved later cannot move, as their requests already wait for them: only the last slot is given back
+    private static void Release(HostState state, Slot slot)
+    {
+        lock (state.Gate)
+        {
+            if (state.NextRequestAt == slot.End)
+            {
+                state.NextRequestAt = slot.Start;
+            }
         }
     }
 
@@ -123,6 +152,9 @@ public sealed class UpstreamRateLimiter
     }
 
     private static TimeSpan Min(TimeSpan left, TimeSpan right) => left < right ? left : right;
+
+    // a reserved request slot: the request may be sent at Start, after waiting Delay; the next slot starts at End
+    private readonly record struct Slot(DateTimeOffset Start, DateTimeOffset End, TimeSpan Delay);
 
     private sealed class HostState
     {

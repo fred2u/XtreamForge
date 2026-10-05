@@ -114,9 +114,57 @@ public sealed class UpstreamRateLimiterTests : IDisposable
         Assert.Equal(TimeSpan.Zero, _limiter.GetInterval(OtherHost));
     }
 
+    [Fact]
+    public async Task WaitAsync_WhenCancelled_GivesItsSlotBack()
+    {
+        _limiter.OnRateLimited(Host, TimeSpan.FromSeconds(10));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _limiter.WaitAsync(Host, new CancellationToken(canceled: true)));
+
+        Assert.Equal(TimeSpan.FromSeconds(10), _limiter.Reserve(Host));
+    }
+
+    [Fact]
+    public async Task WaitAsync_WhenCancelledBeforeALaterReservation_KeepsTheLaterSlot()
+    {
+        // the wait only ends when cancelled
+        var limiter = new UpstreamRateLimiter(new FrozenTimeProvider(), NullLogger<UpstreamRateLimiter>.Instance, _meterFactory);
+        limiter.OnRateLimited(Host, TimeSpan.FromSeconds(10));
+        using var cancellation = new CancellationTokenSource();
+
+        var cancelledWait = limiter.WaitAsync(Host, cancellation.Token);
+        var laterDelay = limiter.Reserve(Host);
+        await cancellation.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelledWait);
+
+        Assert.Equal(TimeSpan.FromSeconds(11), laterDelay);
+        Assert.Equal(TimeSpan.FromSeconds(12), limiter.Reserve(Host));
+    }
+
     public void Dispose()
     {
         _meterFactory.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Time provider whose clock does not move and whose timers never fire.</summary>
+    private sealed class FrozenTimeProvider : TimeProvider
+    {
+        private static readonly DateTimeOffset Now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        public override DateTimeOffset GetUtcNow() => Now;
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) => new PendingTimer();
+
+        private sealed class PendingTimer : ITimer
+        {
+            public bool Change(TimeSpan dueTime, TimeSpan period) => true;
+
+            public void Dispose()
+            {
+            }
+
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        }
     }
 }

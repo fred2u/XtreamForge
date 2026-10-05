@@ -40,4 +40,30 @@ public class XtreamStreamPathTests
         Assert.DoesNotContain("secret", text, StringComparison.Ordinal);
         Assert.Contains("42", text, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData("movie/user/secret/42.mkv")]
+    [InlineData("series/user/secret/1001.mp4")]
+    [InlineData("LIVE/user/secret/7.ts")]
+    [InlineData("live/user/secret/7.m3u8")]
+    [InlineData("timeshift/user/secret/60/2026-01-01:20-00/7.ts")]
+    [InlineData("user/secret/7")]
+    [InlineData("user/secret/7.ts")]
+    public void IsStream_ForAMediaStreamPath_ReturnsTrue(string path)
+    {
+        Assert.True(XtreamStreamPath.IsStream(path));
+    }
+
+    [Theory]
+    [InlineData("player_api.php")]
+    [InlineData("xmltv.php")]
+    [InlineData("movie/user/secret")]
+    [InlineData("movie//secret/42.mkv")]
+    [InlineData("images/posters/cover.jpg")]
+    [InlineData("user/secret/abc")]
+    [InlineData("user//7")]
+    public void IsStream_ForAnyOtherPath_ReturnsFalse(string path)
+    {
+        Assert.False(XtreamStreamPath.IsStream(path));
+    }
 }

@@ -1,4 +1,5 @@
 using Microsoft.Net.Http.Headers;
+using XtreamForge.ApiService.Infrastructure;
 using XtreamForge.ApiService.Options;
 using XtreamForge.ServiceDefaults;
 
@@ -26,11 +27,15 @@ public static class XtreamHttpForwarder
 
     /// <summary>
     /// Sends the incoming request of <paramref name="xtreamContext"/> to <paramref name="targetUri"/> through the Xtream HTTP client;
-    /// the response is returned once its headers are read, so that its body can be streamed.
+    /// the response is returned once its headers are read, so that its body can be streamed. A media stream request is sent
+    /// at once and only once (see <see cref="StreamRequest"/>).
     /// </summary>
     public static async Task<HttpResponseMessage> SendAsync(IHttpClientFactory httpClientFactory, XtreamContext xtreamContext, Uri targetUri, CancellationToken cancellationToken)
     {
         using var requestMessage = CreateRequestMessage(targetUri, xtreamContext.Request);
+        if (XtreamStreamPath.IsStream(xtreamContext.Path))
+            StreamRequest.Mark(requestMessage);
+
         var httpClient = httpClientFactory.CreateClient(XtreamProxyOptions.HttpClientName);
 
         return await httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);

@@ -1,6 +1,8 @@
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Http;
+using XtreamForge.ApiService.Infrastructure;
 using XtreamForge.ApiService.Xtream;
+using XtreamForge.Domain.Enums;
 
 namespace XtreamForge.Tests.Xtream;
 
@@ -92,11 +94,40 @@ public class XtreamHttpForwarderTests
         Assert.False(httpContext.Response.Headers.ContainsKey("X-Custom-Hop"));
     }
 
+    [Theory]
+    [InlineData("movie/user/secret/42.mkv", true)]
+    [InlineData("user/secret/7.ts", true)]
+    [InlineData("player_api.php", false)]
+    public async Task SendAsync_MarksOnlyTheMediaStreamRequests(string path, bool isStream)
+    {
+        var httpClientFactory = new RecordingHttpClientFactory();
+        var httpContext = CreateHttpContext(HttpMethods.Get);
+        var xtreamContext = new XtreamContext("http", "provider.example.com", 8080, path, httpContext, RequestAction.Undefined, ContentType.Undefined);
+
+        using var responseMessage = await XtreamHttpForwarder.SendAsync(httpClientFactory, xtreamContext, xtreamContext.BuildTargetUri(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(isStream, httpClientFactory.IsStreamRequest);
+    }
+
     private static DefaultHttpContext CreateHttpContext(string method)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Method = method;
         httpContext.Response.Body = new MemoryStream();
         return httpContext;
+    }
+
+    // answers 200 and records whether the sent request was marked as a stream request
+    private sealed class RecordingHttpClientFactory : HttpMessageHandler, IHttpClientFactory
+    {
+        public bool? IsStreamRequest { get; private set; }
+
+        public HttpClient CreateClient(string name) => new(this, disposeHandler: false);
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            IsStreamRequest = StreamRequest.IsMarked(request);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+        }
     }
 }

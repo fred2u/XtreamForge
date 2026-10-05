@@ -25,9 +25,11 @@ public static class HttpClientsExtensions
 
             // HTTP 429 is handled by RateLimitHandler (per-host adaptive spacing, Retry-After): the standard resilience
             // pipeline of the service defaults must neither retry it immediately nor count it for its circuit breaker.
+            // The media stream requests are never retried (see StreamRequest).
             services.ConfigureAll<HttpStandardResilienceOptions>(resilience =>
             {
-                resilience.Retry.ShouldHandle = args => ValueTask.FromResult(IsTransientButNotRateLimited(args.Outcome));
+                resilience.Retry.ShouldHandle = args => ValueTask.FromResult(
+                    !StreamRequest.IsMarked(args.Context.GetRequestMessage()) && IsTransientButNotRateLimited(args.Outcome));
                 resilience.CircuitBreaker.ShouldHandle = args => ValueTask.FromResult(IsTransientButNotRateLimited(args.Outcome));
             });
 

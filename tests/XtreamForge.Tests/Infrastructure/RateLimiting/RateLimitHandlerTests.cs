@@ -121,6 +121,45 @@ public sealed class RateLimitHandlerTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task SendAsync_ForAStreamRequest_NeitherWaitsNorRetriesNorSlowsTheHostDown()
+    {
+        _limiter.OnRateLimited(ProviderHost, TimeSpan.FromSeconds(10));
+        var upstream = new SequenceHandler(_ => new HttpResponseMessage(HttpStatusCode.TooManyRequests));
+        using var invoker = CreateInvoker(upstream);
+        using var request = new HttpRequestMessage(HttpMethod.Get, ProviderUri);
+        StreamRequest.Mark(request);
+
+        using var response = await invoker.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
+        Assert.Equal(1, upstream.CallCount);
+        Assert.Empty(_time.Delays);
+        Assert.Equal(TimeSpan.FromSeconds(1), _limiter.GetInterval(ProviderHost));
+    }
+
+    [Fact]
+    public async Task XtreamHttpClient_DoesNotRetryAFailedStreamRequest()
+    {
+        var upstream = new SequenceHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
+        services.AddHttpClients();
+        services.AddSingleton(new UpstreamRateLimiter(_time, NullLogger<UpstreamRateLimiter>.Instance, _meterFactory));
+        services.AddHttpClient(XtreamProxyOptions.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => upstream);
+        await using var provider = services.BuildServiceProvider();
+
+        using var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient(XtreamProxyOptions.HttpClientName);
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri("http://provider.example.com:8080/movie/user/secret/42.mkv"));
+        StreamRequest.Mark(request);
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        // the standard resilience pipeline retries a 503 of any other request
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal(1, upstream.CallCount);
+    }
+
     public void Dispose()
     {
         _meterFactory.Dispose();

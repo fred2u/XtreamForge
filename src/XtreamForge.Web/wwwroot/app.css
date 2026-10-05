@@ -846,8 +846,13 @@ div.decision-details-reason {
     color: var(--xf-accent);
 }
 
-.source-card-name {
+.source-card-title {
+    display: grid;
     flex: 1;
+    min-width: 0;
+}
+
+.source-card-name {
     min-width: 0;
     font-size: 1rem;
     font-weight: 600;

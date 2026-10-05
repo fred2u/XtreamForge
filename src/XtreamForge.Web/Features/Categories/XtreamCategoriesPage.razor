@@ -736,7 +736,9 @@ else
         }
 
         _newCustomCategoryTarget = target;
-        _newCustomCategoryName = null;
+        // pre-filled with the name of the Xtream category to map, which is the likely name of the custom category
+        var targetName = target?.Name.Trim();
+        _newCustomCategoryName = targetName is { Length: > CustomCategoryNameMaxLength } ? targetName[..CustomCategoryNameMaxLength] : targetName;
         _newCustomCategoryError = null;
         _isNewCustomCategoryOpen = true;
         await _newCustomCategoryDialog.ShowAsync();

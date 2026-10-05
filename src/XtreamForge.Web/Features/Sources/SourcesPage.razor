@@ -82,7 +82,10 @@ else
                 <FluentCard Class="surface source-card">
                     <div class="source-card-header">
                         <span class="source-card-icon" aria-hidden="true"><FluentIcon Value="@(new Icons.Regular.Size20.PlugConnected())" /></span>
-                        <span class="source-card-name cell-truncate" title="@source.DisplayName">@source.DisplayName</span>
+                        <div class="source-card-title">
+                            <span class="source-card-name cell-truncate" title="@source.DisplayName">@source.DisplayName</span>
+                            <span class="cell-secondary">ID @source.Id</span>
+                        </div>
                         <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" IconOnly="true"
                                       IconStart="@(new Icons.Regular.Size16.Delete())"
                                       aria-label="@($"Delete {source.DisplayName}")" Tooltip="Delete"

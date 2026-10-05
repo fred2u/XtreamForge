@@ -111,11 +111,11 @@ public sealed record XtreamCategoryPatchRequest(
     bool UnassignCustomCategory = false);
 
 /// <summary>
-/// A category, item, or TMDB rule. TMDB rules have no source (<see cref="XtreamSourceId"/> is 0) and a <see cref="Field"/>.
+/// A category, item, or TMDB rule. TMDB rules have no source (<see cref="XtreamSourceId"/> is null) and a <see cref="Field"/>.
 /// </summary>
 public sealed record RuleDto(
     int Id,
-    int XtreamSourceId,
+    int? XtreamSourceId,
     ContentType ContentType,
     int Sequence,
     RuleAction Action,

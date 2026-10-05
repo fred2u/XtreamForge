@@ -1,4 +1,4 @@
-using XtreamForge.ApiService.Endpoints.Admin.TmdbRules.Dto;
+using XtreamForge.ApiService.Endpoints.Admin.Rules.Dto;
 using XtreamForge.ApiService.Services.Tmdb;
 using XtreamForge.Domain.Enums;
 using XtreamForge.Domain.Tmdb;
@@ -27,7 +27,7 @@ public sealed record AdminTmdbInfoDto(
     DateTimeOffset NextLoadAtUtc,
     InclusionDecision Decision,
     TmdbExclusionReason? ExclusionReason,
-    AdminTmdbRuleDto? DecidingRule)
+    AdminRuleDto? DecidingRule)
 {
     public const string PosterThumbnailSize = "w92";
 
@@ -53,7 +53,7 @@ public sealed record AdminTmdbInfoDto(
             info.NextLoadAtUtc,
             evaluation.Decision,
             evaluation.ExclusionReason,
-            evaluation.DecidingRule is { } rule ? AdminTmdbRuleDto.FromRule(rule) : null);
+            evaluation.DecidingRule is { } rule ? AdminRuleDto.FromRule(rule) : null);
     }
 }
 

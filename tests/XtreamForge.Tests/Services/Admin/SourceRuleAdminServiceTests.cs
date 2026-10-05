@@ -1,22 +1,29 @@
 using Microsoft.EntityFrameworkCore;
 using XtreamForge.ApiService.Services.Admin;
 using XtreamForge.Database;
+using XtreamForge.Domain.Categories;
 using XtreamForge.Domain.Enums;
 using XtreamForge.Domain.Items;
+using XtreamForge.Domain.Rules;
 using XtreamForge.Domain.Sources;
 using XtreamForge.Tests.Infrastructure;
 
 namespace XtreamForge.Tests.Services.Admin;
 
-public class ItemRuleAdminServiceTests : IAsyncDisposable
+public sealed class CategoryRuleAdminServiceTests : SourceRuleAdminServiceTests<CategoryRule>;
+
+public sealed class ItemRuleAdminServiceTests : SourceRuleAdminServiceTests<ItemRule>;
+
+/// <summary>Tests of <see cref="SourceRuleAdminService{TRule}"/>, run for the category rules and for the item rules.</summary>
+public abstract class SourceRuleAdminServiceTests<TRule> : IAsyncDisposable where TRule : class, ISourceRule, new()
 {
     private readonly XtreamForgeDbContext _dbContext;
-    private readonly ItemRuleAdminService _service;
+    private readonly SourceRuleAdminService<TRule> _service;
 
-    public ItemRuleAdminServiceTests()
+    protected SourceRuleAdminServiceTests()
     {
         _dbContext = SqliteDbContextFactory.Create();
-        _service = new ItemRuleAdminService(_dbContext);
+        _service = new SourceRuleAdminService<TRule>(_dbContext);
     }
 
     // ─── GetBySourceAsync ───────────────────────────────────────────────────
@@ -54,8 +61,7 @@ public class ItemRuleAdminServiceTests : IAsyncDisposable
     [Fact]
     public async Task CreateAsync_WhenSourceNotFound_ReturnsNullAndNoConflict()
     {
-        var (rule, sequenceConflict) = await _service.CreateAsync(
-            sourceId: 999, ContentType.Vod, sequence: 1, RuleAction.Include, RuleOperator.Contains, "x", caseSensitive: false, isEnabled: true, TestContext.Current.CancellationToken);
+        var (rule, sequenceConflict) = await _service.CreateAsync(999, ContentType.Vod, Values(1, "x"), TestContext.Current.CancellationToken);
 
         Assert.Null(rule);
         Assert.False(sequenceConflict);
@@ -67,12 +73,15 @@ public class ItemRuleAdminServiceTests : IAsyncDisposable
         var source = await AddSourceAsync();
 
         var (rule, sequenceConflict) = await _service.CreateAsync(
-            source.Id, ContentType.Series, sequence: 3, RuleAction.Exclude, RuleOperator.StartsWith, "[XXX]", caseSensitive: true, isEnabled: false, TestContext.Current.CancellationToken);
+            source.Id,
+            ContentType.Series,
+            new RuleValues(3, RuleAction.Exclude, RuleOperator.StartsWith, "[XXX]", CaseSensitive: true, IsEnabled: false),
+            TestContext.Current.CancellationToken);
 
         Assert.False(sequenceConflict);
         Assert.NotNull(rule);
 
-        var persisted = await _dbContext.ItemRules.AsNoTracking().SingleAsync(r => r.Id == rule.Id, TestContext.Current.CancellationToken);
+        var persisted = await _dbContext.Set<TRule>().AsNoTracking().SingleAsync(r => r.Id == rule.Id, TestContext.Current.CancellationToken);
         Assert.Equal(source.Id, persisted.XtreamSourceId);
         Assert.Equal(ContentType.Series, persisted.ContentType);
         Assert.Equal(3, persisted.Sequence);
@@ -89,12 +98,11 @@ public class ItemRuleAdminServiceTests : IAsyncDisposable
         var source = await AddSourceAsync();
         await AddRuleAsync(source.Id, ContentType.Vod, 1, "existing");
 
-        var (rule, sequenceConflict) = await _service.CreateAsync(
-            source.Id, ContentType.Vod, sequence: 1, RuleAction.Exclude, RuleOperator.Contains, "dup", false, true, TestContext.Current.CancellationToken);
+        var (rule, sequenceConflict) = await _service.CreateAsync(source.Id, ContentType.Vod, Values(1, "dup"), TestContext.Current.CancellationToken);
 
         Assert.True(sequenceConflict);
         Assert.Null(rule);
-        Assert.Equal(1, await _dbContext.ItemRules.CountAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await _dbContext.Set<TRule>().CountAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -103,8 +111,7 @@ public class ItemRuleAdminServiceTests : IAsyncDisposable
         var source = await AddSourceAsync();
         await AddRuleAsync(source.Id, ContentType.Vod, 1, "existing");
 
-        var (rule, sequenceConflict) = await _service.CreateAsync(
-            source.Id, ContentType.Series, sequence: 1, RuleAction.Include, RuleOperator.Contains, "other", false, true, TestContext.Current.CancellationToken);
+        var (rule, sequenceConflict) = await _service.CreateAsync(source.Id, ContentType.Series, Values(1, "other"), TestContext.Current.CancellationToken);
 
         Assert.False(sequenceConflict);
         Assert.NotNull(rule);
@@ -117,8 +124,7 @@ public class ItemRuleAdminServiceTests : IAsyncDisposable
         var source2 = await AddSourceAsync("s2.example.com");
         await AddRuleAsync(source1.Id, ContentType.Vod, 1, "existing");
 
-        var (rule, sequenceConflict) = await _service.CreateAsync(
-            source2.Id, ContentType.Vod, sequence: 1, RuleAction.Include, RuleOperator.Contains, "other", false, true, TestContext.Current.CancellationToken);
+        var (rule, sequenceConflict) = await _service.CreateAsync(source2.Id, ContentType.Vod, Values(1, "other"), TestContext.Current.CancellationToken);
 
         Assert.False(sequenceConflict);
         Assert.NotNull(rule);
@@ -129,8 +135,7 @@ public class ItemRuleAdminServiceTests : IAsyncDisposable
     [Fact]
     public async Task UpdateAsync_WhenNotFound_ReturnsNotFound()
     {
-        var (found, sequenceConflict) = await _service.UpdateAsync(
-            999, 1, RuleAction.Include, RuleOperator.Contains, "x", false, true, TestContext.Current.CancellationToken);
+        var (found, sequenceConflict) = await _service.UpdateAsync(999, Values(1, "x"), TestContext.Current.CancellationToken);
 
         Assert.False(found);
         Assert.False(sequenceConflict);
@@ -143,12 +148,14 @@ public class ItemRuleAdminServiceTests : IAsyncDisposable
         var rule = await AddRuleAsync(source.Id, ContentType.Vod, 1, "old");
 
         var (found, sequenceConflict) = await _service.UpdateAsync(
-            rule.Id, sequence: 5, RuleAction.Exclude, RuleOperator.StartsWith, "new", caseSensitive: true, isEnabled: false, TestContext.Current.CancellationToken);
+            rule.Id,
+            new RuleValues(5, RuleAction.Exclude, RuleOperator.StartsWith, "new", CaseSensitive: true, IsEnabled: false),
+            TestContext.Current.CancellationToken);
 
         Assert.True(found);
         Assert.False(sequenceConflict);
 
-        var updated = await _dbContext.ItemRules.AsNoTracking().SingleAsync(r => r.Id == rule.Id, TestContext.Current.CancellationToken);
+        var updated = await _dbContext.Set<TRule>().AsNoTracking().SingleAsync(r => r.Id == rule.Id, TestContext.Current.CancellationToken);
         Assert.Equal(5, updated.Sequence);
         Assert.Equal(RuleAction.Exclude, updated.Action);
         Assert.Equal(RuleOperator.StartsWith, updated.Operator);
@@ -165,13 +172,12 @@ public class ItemRuleAdminServiceTests : IAsyncDisposable
         await AddRuleAsync(source.Id, ContentType.Vod, 1, "a");
         var rule = await AddRuleAsync(source.Id, ContentType.Vod, 2, "b");
 
-        var (found, sequenceConflict) = await _service.UpdateAsync(
-            rule.Id, sequence: 1, RuleAction.Include, RuleOperator.Contains, "changed", false, true, TestContext.Current.CancellationToken);
+        var (found, sequenceConflict) = await _service.UpdateAsync(rule.Id, Values(1, "changed"), TestContext.Current.CancellationToken);
 
         Assert.True(found);
         Assert.True(sequenceConflict);
 
-        var unchanged = await _dbContext.ItemRules.AsNoTracking().SingleAsync(r => r.Id == rule.Id, TestContext.Current.CancellationToken);
+        var unchanged = await _dbContext.Set<TRule>().AsNoTracking().SingleAsync(r => r.Id == rule.Id, TestContext.Current.CancellationToken);
         Assert.Equal(2, unchanged.Sequence);
         Assert.Equal("b", unchanged.Pattern);
     }
@@ -182,8 +188,7 @@ public class ItemRuleAdminServiceTests : IAsyncDisposable
         var source = await AddSourceAsync();
         var rule = await AddRuleAsync(source.Id, ContentType.Vod, 1, "x");
 
-        var (found, sequenceConflict) = await _service.UpdateAsync(
-            rule.Id, sequence: 1, RuleAction.Exclude, RuleOperator.Contains, "x", false, true, TestContext.Current.CancellationToken);
+        var (found, sequenceConflict) = await _service.UpdateAsync(rule.Id, Values(1, "x"), TestContext.Current.CancellationToken);
 
         Assert.True(found);
         Assert.False(sequenceConflict);
@@ -200,7 +205,7 @@ public class ItemRuleAdminServiceTests : IAsyncDisposable
         var deleted = await _service.DeleteAsync(rule.Id, TestContext.Current.CancellationToken);
 
         Assert.True(deleted);
-        Assert.False(await _dbContext.ItemRules.AnyAsync(r => r.Id == rule.Id, TestContext.Current.CancellationToken));
+        Assert.False(await _dbContext.Set<TRule>().AnyAsync(r => r.Id == rule.Id, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -211,17 +216,46 @@ public class ItemRuleAdminServiceTests : IAsyncDisposable
         Assert.False(deleted);
     }
 
+    // ─── ReorderAsync ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ReorderAsync_WhenSourceNotFound_ReturnsSourceNotFound()
+    {
+        var (result, rules) = await _service.ReorderAsync(999, ContentType.Vod, [], TestContext.Current.CancellationToken);
+
+        Assert.Equal(RuleReorderResult.SourceNotFound, result);
+        Assert.Empty(rules);
+    }
+
+    [Fact]
+    public async Task ReorderAsync_RenumbersTheRulesOfTheSourceAndContentTypeInTheGivenOrder()
+    {
+        var source = await AddSourceAsync();
+        var first = await AddRuleAsync(source.Id, ContentType.Vod, 1, "a");
+        var second = await AddRuleAsync(source.Id, ContentType.Vod, 2, "b");
+        var series = await AddRuleAsync(source.Id, ContentType.Series, 1, "s");
+
+        var (result, rules) = await _service.ReorderAsync(source.Id, ContentType.Vod, [second.Id, first.Id], TestContext.Current.CancellationToken);
+
+        Assert.Equal(RuleReorderResult.Reordered, result);
+        Assert.Equal([(second.Id, RuleSequences.Step), (first.Id, 2 * RuleSequences.Step)], rules.Select(rule => (rule.Id, rule.Sequence)));
+        Assert.Equal(1, (await _dbContext.Set<TRule>().AsNoTracking().SingleAsync(r => r.Id == series.Id, TestContext.Current.CancellationToken)).Sequence);
+    }
+
+    private static RuleValues Values(int sequence, string pattern) =>
+        new(sequence, RuleAction.Include, RuleOperator.Contains, pattern, CaseSensitive: false, IsEnabled: true);
+
     private async Task<XtreamSource> AddSourceAsync(string host = "s.example.com")
     {
         var source = new XtreamSource { Protocol = "http", Host = host, Port = 80 };
         _dbContext.XtreamSources.Add(source);
-        await _dbContext.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
         return source;
     }
 
-    private async Task<ItemRule> AddRuleAsync(int sourceId, ContentType contentType, int sequence, string pattern)
+    private async Task<TRule> AddRuleAsync(int sourceId, ContentType contentType, int sequence, string pattern)
     {
-        var rule = new ItemRule
+        var rule = new TRule
         {
             XtreamSourceId = sourceId,
             ContentType = contentType,
@@ -231,8 +265,8 @@ public class ItemRuleAdminServiceTests : IAsyncDisposable
             Pattern = pattern,
             IsEnabled = true
         };
-        _dbContext.ItemRules.Add(rule);
-        await _dbContext.SaveChangesAsync();
+        _dbContext.Set<TRule>().Add(rule);
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
         return rule;
     }
 

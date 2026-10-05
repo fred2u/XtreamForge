@@ -1,8 +1,8 @@
-using XtreamForge.ApiService.Endpoints.Admin.TmdbRules.Dto;
+using XtreamForge.ApiService.Endpoints.Admin.Rules.Dto;
 using XtreamForge.ApiService.Services.Admin;
 using XtreamForge.Domain.Enums;
 
-namespace XtreamForge.ApiService.Endpoints.Admin.TmdbRules;
+namespace XtreamForge.ApiService.Endpoints.Admin.Rules;
 
 public static class TmdbRuleEndpoints
 {
@@ -10,33 +10,33 @@ public static class TmdbRuleEndpoints
     {
         var rules = await tmdbRuleAdminService.GetAsync(contentType, cancellationToken);
 
-        return TypedResults.Ok(rules.Select(AdminTmdbRuleDto.FromRule));
+        return TypedResults.Ok(rules.Select(AdminRuleDto.FromRule));
     }
 
-    public static async Task<IResult> PostAsync(AdminTmdbRuleRequest request, TmdbRuleAdminService tmdbRuleAdminService, CancellationToken cancellationToken = default)
+    public static async Task<IResult> PostAsync(AdminRuleRequest request, TmdbRuleAdminService tmdbRuleAdminService, CancellationToken cancellationToken = default)
     {
-        if (request.Validate() is { } errors)
+        if (request.Validate(requiresField: true) is { } errors)
         {
             return TypedResults.ValidationProblem(errors);
         }
 
-        var (rule, sequenceConflict) = await tmdbRuleAdminService.CreateAsync(request.ContentType, request.ToValues(), cancellationToken);
+        var (rule, sequenceConflict) = await tmdbRuleAdminService.CreateAsync(request.ContentType, request.Field.GetValueOrDefault(), request.ToValues(), cancellationToken);
         if (sequenceConflict || rule is null)
         {
             return TypedResults.Conflict();
         }
 
-        return TypedResults.Created($"/api/admin/tmdb-rules/{rule.Id}", AdminTmdbRuleDto.FromRule(rule));
+        return TypedResults.Created($"/api/admin/tmdb-rules/{rule.Id}", AdminRuleDto.FromRule(rule));
     }
 
-    public static async Task<IResult> PutAsync(int id, AdminTmdbRuleRequest request, TmdbRuleAdminService tmdbRuleAdminService, CancellationToken cancellationToken = default)
+    public static async Task<IResult> PutAsync(int id, AdminRuleRequest request, TmdbRuleAdminService tmdbRuleAdminService, CancellationToken cancellationToken = default)
     {
-        if (request.Validate() is { } errors)
+        if (request.Validate(requiresField: true) is { } errors)
         {
             return TypedResults.ValidationProblem(errors);
         }
 
-        var (found, sequenceConflict) = await tmdbRuleAdminService.UpdateAsync(id, request.ToValues(), cancellationToken);
+        var (found, sequenceConflict) = await tmdbRuleAdminService.UpdateAsync(id, request.Field.GetValueOrDefault(), request.ToValues(), cancellationToken);
 
         if (!found)
         {
@@ -46,23 +46,23 @@ public static class TmdbRuleEndpoints
         return sequenceConflict ? TypedResults.Conflict() : TypedResults.NoContent();
     }
 
-    public static async Task<IResult> PutOrderAsync(AdminTmdbRuleOrderRequest request, TmdbRuleAdminService tmdbRuleAdminService, CancellationToken cancellationToken = default)
+    public static async Task<IResult> PutOrderAsync(AdminRuleOrderRequest request, TmdbRuleAdminService tmdbRuleAdminService, CancellationToken cancellationToken = default)
     {
         if (request.ContentType == ContentType.Undefined || !Enum.IsDefined(request.ContentType))
         {
             return TypedResults.ValidationProblem(new Dictionary<string, string[]>
             {
-                [nameof(AdminTmdbRuleOrderRequest.ContentType)] = ["The content type is not valid."]
+                [nameof(AdminRuleOrderRequest.ContentType)] = ["The content type is not valid."]
             });
         }
 
         var (result, rules) = await tmdbRuleAdminService.ReorderAsync(request.ContentType, request.RuleIds ?? [], cancellationToken);
 
         return result == RuleReorderResult.Reordered
-            ? TypedResults.Ok(rules.Select(AdminTmdbRuleDto.FromRule))
+            ? TypedResults.Ok(rules.Select(AdminRuleDto.FromRule))
             : TypedResults.ValidationProblem(new Dictionary<string, string[]>
             {
-                [nameof(AdminTmdbRuleOrderRequest.RuleIds)] = ["The rule ids must list every rule of the content type exactly once."]
+                [nameof(AdminRuleOrderRequest.RuleIds)] = ["The rule ids must list every rule of the content type exactly once."]
             });
     }
 

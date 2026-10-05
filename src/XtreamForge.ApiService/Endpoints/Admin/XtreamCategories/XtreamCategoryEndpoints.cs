@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Http.HttpResults;
-using XtreamForge.ApiService.Endpoints.Admin.CategoryRules.Dto;
+using XtreamForge.ApiService.Endpoints.Admin.Rules.Dto;
 using XtreamForge.ApiService.Endpoints.Admin.XtreamCategories.Dto;
 using XtreamForge.ApiService.Services.Admin;
 using XtreamForge.Domain.Enums;
@@ -34,7 +34,7 @@ public static class XtreamCategoryEndpoints
             e.Category.CustomCategory?.Name,
             e.Decision,
             e.ExclusionReason,
-            e.DecidingRule is null ? null : AdminCategoryRuleDto.FromRule(e.DecidingRule)));
+            e.DecidingRule is null ? null : AdminRuleDto.FromRule(e.DecidingRule)));
 
         return TypedResults.Ok(dtos);
     }

@@ -1,9 +1,10 @@
 using XtreamForge.Domain.Enums;
+using XtreamForge.Domain.Rules;
 using XtreamForge.Domain.Sources;
 
 namespace XtreamForge.Domain.Categories;
 
-public sealed class CategoryRule
+public sealed class CategoryRule : ISourceRule
 {
     public int Id { get; set; }
 
@@ -18,7 +19,7 @@ public sealed class CategoryRule
 
     public RuleOperator Operator { get; set; }
 
-    public required string Pattern { get; set; }
+    public string Pattern { get; set; } = string.Empty;
 
     public bool CaseSensitive { get; set; }
 

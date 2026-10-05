@@ -5,44 +5,37 @@ using XtreamForge.Domain.Tmdb;
 
 namespace XtreamForge.ApiService.Services.Admin;
 
-/// <summary>Values of a TMDB rule set by the administrator.</summary>
-public sealed record TmdbRuleValues(
-    int Sequence,
-    TmdbRuleField Field,
-    RuleAction Action,
-    RuleOperator Operator,
-    string Pattern,
-    bool CaseSensitive,
-    bool IsEnabled);
-
-/// <summary>Administration of the TMDB rules, which are global per content type (same contracts as the item rules, without source).</summary>
+/// <summary>
+/// Administration of the TMDB rules, which are global per content type (same contracts as the source rules, without source,
+/// with the TMDB <see cref="TmdbRuleField"/> the rule matches).
+/// </summary>
 public class TmdbRuleAdminService(XtreamForgeDbContext dbContext)
 {
-    /// <summary>Gap between the sequences assigned by <see cref="ReorderAsync"/>, which leaves room to add rules in between.</summary>
-    public const int SequenceStep = 10;
-
     public async Task<IReadOnlyList<TmdbRule>> GetAsync(ContentType contentType, CancellationToken cancellationToken = default)
     {
-        return await dbContext.TmdbRules
+        return await InScope(contentType)
             .AsNoTracking()
-            .Where(rule => rule.ContentType == contentType)
             .OrderBy(rule => rule.Sequence)
             .ToListAsync(cancellationToken);
     }
 
     /// <summary>Returns null with <c>SequenceConflict</c> when another rule of the content type already uses the sequence.</summary>
-    public async Task<(TmdbRule? Rule, bool SequenceConflict)> CreateAsync(ContentType contentType, TmdbRuleValues values, CancellationToken cancellationToken = default)
+    public async Task<(TmdbRule? Rule, bool SequenceConflict)> CreateAsync(
+        ContentType contentType,
+        TmdbRuleField field,
+        RuleValues values,
+        CancellationToken cancellationToken = default)
     {
-        var sequenceConflict = await dbContext.TmdbRules
-            .AnyAsync(rule => rule.ContentType == contentType && rule.Sequence == values.Sequence, cancellationToken);
+        var sequenceConflict = await InScope(contentType)
+            .AnyAsync(rule => rule.Sequence == values.Sequence, cancellationToken);
 
         if (sequenceConflict)
         {
             return (null, true);
         }
 
-        var rule = new TmdbRule { ContentType = contentType, Pattern = values.Pattern };
-        Apply(rule, values);
+        var rule = new TmdbRule { ContentType = contentType, Field = field, Pattern = values.Pattern };
+        values.ApplyTo(rule);
 
         dbContext.TmdbRules.Add(rule);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -51,7 +44,11 @@ public class TmdbRuleAdminService(XtreamForgeDbContext dbContext)
     }
 
     /// <summary>Updates a rule; its content type cannot change.</summary>
-    public async Task<(bool Found, bool SequenceConflict)> UpdateAsync(int id, TmdbRuleValues values, CancellationToken cancellationToken = default)
+    public async Task<(bool Found, bool SequenceConflict)> UpdateAsync(
+        int id,
+        TmdbRuleField field,
+        RuleValues values,
+        CancellationToken cancellationToken = default)
     {
         var rule = await dbContext.TmdbRules
             .FirstOrDefaultAsync(rule => rule.Id == id, cancellationToken);
@@ -61,15 +58,16 @@ public class TmdbRuleAdminService(XtreamForgeDbContext dbContext)
             return (false, false);
         }
 
-        var sequenceConflict = await dbContext.TmdbRules
-            .AnyAsync(other => other.ContentType == rule.ContentType && other.Sequence == values.Sequence && other.Id != id, cancellationToken);
+        var sequenceConflict = await InScope(rule.ContentType)
+            .AnyAsync(other => other.Sequence == values.Sequence && other.Id != id, cancellationToken);
 
         if (sequenceConflict)
         {
             return (true, true);
         }
 
-        Apply(rule, values);
+        rule.Field = field;
+        values.ApplyTo(rule);
         rule.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -94,67 +92,21 @@ public class TmdbRuleAdminService(XtreamForgeDbContext dbContext)
     }
 
     /// <summary>
-    /// Renumbers the rules of a content type in the given order (first = lowest sequence = highest priority),
-    /// using sequences <see cref="SequenceStep"/>, 2 x <see cref="SequenceStep"/>, ...
-    /// <paramref name="ruleIds"/> must contain every rule of the content type exactly once; otherwise nothing changes.
-    /// All rules are updated in a single transaction.
+    /// Renumbers the rules of a content type in the given order (see <see cref="RuleSequences.ReorderAsync"/>);
+    /// <paramref name="ruleIds"/> must contain every rule of the content type exactly once, otherwise nothing changes.
     /// </summary>
     public async Task<(RuleReorderResult Result, IReadOnlyList<TmdbRule> Rules)> ReorderAsync(
         ContentType contentType,
         IReadOnlyList<int> ruleIds,
         CancellationToken cancellationToken = default)
     {
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var rules = await RuleSequences.ReorderAsync(dbContext, InScope(contentType), ruleIds, cancellationToken);
 
-        var rules = await dbContext.TmdbRules
-            .Where(rule => rule.ContentType == contentType)
-            .ToDictionaryAsync(rule => rule.Id, cancellationToken);
-
-        var requestedIds = ruleIds.ToHashSet();
-        if (requestedIds.Count != ruleIds.Count || !requestedIds.SetEquals(rules.Keys))
-        {
-            return (RuleReorderResult.InvalidOrder, []);
-        }
-
-        // The unique (content type, sequence) index is checked for every statement, so the rules first move
-        // to temporary negative sequences that no rule uses, then to their final positive sequence.
-        var usedSequences = rules.Values.Select(rule => rule.Sequence).ToHashSet();
-        var temporarySequence = 0;
-        foreach (var rule in rules.Values)
-        {
-            do
-            {
-                temporarySequence--;
-            }
-            while (usedSequences.Contains(temporarySequence));
-
-            rule.Sequence = temporarySequence;
-        }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        var now = DateTimeOffset.UtcNow;
-        for (var index = 0; index < ruleIds.Count; index++)
-        {
-            var rule = rules[ruleIds[index]];
-            rule.Sequence = (index + 1) * SequenceStep;
-            rule.UpdatedAtUtc = now;
-        }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        return (RuleReorderResult.Reordered, [.. ruleIds.Select(id => rules[id])]);
+        return rules is null
+            ? (RuleReorderResult.InvalidOrder, [])
+            : (RuleReorderResult.Reordered, rules);
     }
 
-    private static void Apply(TmdbRule rule, TmdbRuleValues values)
-    {
-        rule.Sequence = values.Sequence;
-        rule.Field = values.Field;
-        rule.Action = values.Action;
-        rule.Operator = values.Operator;
-        rule.Pattern = values.Pattern;
-        rule.CaseSensitive = values.CaseSensitive;
-        rule.IsEnabled = values.IsEnabled;
-    }
+    private IQueryable<TmdbRule> InScope(ContentType contentType) =>
+        dbContext.TmdbRules.Where(rule => rule.ContentType == contentType);
 }

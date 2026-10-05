@@ -1,15 +1,16 @@
-using XtreamForge.ApiService.Endpoints.Admin.CategoryRules;
 using XtreamForge.ApiService.Endpoints.Admin.CustomCategories;
 using XtreamForge.ApiService.Endpoints.Admin.Dashboard;
-using XtreamForge.ApiService.Endpoints.Admin.ItemRules;
 using XtreamForge.ApiService.Endpoints.Admin.Monitoring;
 using XtreamForge.ApiService.Endpoints.Admin.Recommendations;
+using XtreamForge.ApiService.Endpoints.Admin.Rules;
 using XtreamForge.ApiService.Endpoints.Admin.Sources;
 using XtreamForge.ApiService.Endpoints.Admin.StreamTmdbMappings;
 using XtreamForge.ApiService.Endpoints.Admin.TmdbInfos;
-using XtreamForge.ApiService.Endpoints.Admin.TmdbRules;
 using XtreamForge.ApiService.Endpoints.Admin.WatchHistory;
 using XtreamForge.ApiService.Endpoints.Admin.XtreamCategories;
+using XtreamForge.Domain.Categories;
+using XtreamForge.Domain.Items;
+using XtreamForge.Domain.Rules;
 
 namespace XtreamForge.ApiService.Endpoints.Admin;
 
@@ -45,18 +46,10 @@ public static class RouteExtensions
             endpoints.MapPatch("/api/admin/xtream-categories/{id:int}", XtreamCategoryEndpoints.PatchAsync);
 
             // api/admin/sources/{sourceId}/category-rules?contentType=
-            endpoints.MapGet("/api/admin/sources/{sourceId:int}/category-rules", CategoryRuleEndpoints.GetAsync);
-            endpoints.MapPost("/api/admin/sources/{sourceId:int}/category-rules", CategoryRuleEndpoints.PostAsync);
-            endpoints.MapPut("/api/admin/sources/{sourceId:int}/category-rules/order", CategoryRuleEndpoints.PutOrderAsync);
-            endpoints.MapPut("/api/admin/category-rules/{id:int}", CategoryRuleEndpoints.PutAsync);
-            endpoints.MapDelete("/api/admin/category-rules/{id:int}", CategoryRuleEndpoints.DeleteAsync);
+            MapSourceRules<CategoryRule>(endpoints, "category-rules");
 
             // api/admin/sources/{sourceId}/item-rules?contentType=
-            endpoints.MapGet("/api/admin/sources/{sourceId:int}/item-rules", ItemRuleEndpoints.GetAsync);
-            endpoints.MapPost("/api/admin/sources/{sourceId:int}/item-rules", ItemRuleEndpoints.PostAsync);
-            endpoints.MapPut("/api/admin/sources/{sourceId:int}/item-rules/order", ItemRuleEndpoints.PutOrderAsync);
-            endpoints.MapPut("/api/admin/item-rules/{id:int}", ItemRuleEndpoints.PutAsync);
-            endpoints.MapDelete("/api/admin/item-rules/{id:int}", ItemRuleEndpoints.DeleteAsync);
+            MapSourceRules<ItemRule>(endpoints, "item-rules");
 
             // api/admin/tmdb-infos?contentType=&search=&genre=&decision=&isExcluded=&isLoaded=&skip=&take=
             endpoints.MapGet("/api/admin/tmdb-infos", TmdbInfoEndpoints.GetListAsync);
@@ -89,5 +82,16 @@ public static class RouteExtensions
 
             return endpoints;
         }
+    }
+
+    // the routes of the rules defined per source: /api/admin/sources/{sourceId}/{segment} and /api/admin/{segment}/{id}
+    private static void MapSourceRules<TRule>(IEndpointRouteBuilder endpoints, string segment)
+        where TRule : class, ISourceRule, new()
+    {
+        endpoints.MapGet($"/api/admin/sources/{{sourceId:int}}/{segment}", SourceRuleEndpoints.GetAsync<TRule>);
+        endpoints.MapPost($"/api/admin/sources/{{sourceId:int}}/{segment}", SourceRuleEndpoints.PostAsync<TRule>);
+        endpoints.MapPut($"/api/admin/sources/{{sourceId:int}}/{segment}/order", SourceRuleEndpoints.PutOrderAsync<TRule>);
+        endpoints.MapPut($"/api/admin/{segment}/{{id:int}}", SourceRuleEndpoints.PutAsync<TRule>);
+        endpoints.MapDelete($"/api/admin/{segment}/{{id:int}}", SourceRuleEndpoints.DeleteAsync<TRule>);
     }
 }

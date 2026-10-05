@@ -1,12 +1,12 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using XtreamForge.ApiService.Endpoints.Admin.Rules;
+using XtreamForge.ApiService.Endpoints.Admin.Rules.Dto;
 using XtreamForge.ApiService.Endpoints.Admin.StreamTmdbMappings;
 using XtreamForge.ApiService.Endpoints.Admin.StreamTmdbMappings.Dto;
 using XtreamForge.ApiService.Endpoints.Admin.TmdbInfos;
 using XtreamForge.ApiService.Endpoints.Admin.TmdbInfos.Dto;
-using XtreamForge.ApiService.Endpoints.Admin.TmdbRules;
-using XtreamForge.ApiService.Endpoints.Admin.TmdbRules.Dto;
 using XtreamForge.ApiService.Options;
 using XtreamForge.ApiService.Services;
 using XtreamForge.ApiService.Services.Admin;
@@ -37,17 +37,20 @@ public class TmdbEndpointsTests : IAsyncDisposable
     {
         var result = await TmdbRuleEndpoints.PostAsync(Request(ContentType.Vod, "Horror"), new TmdbRuleAdminService(_dbContext), TestContext.Current.CancellationToken);
 
-        var created = Assert.IsType<Created<AdminTmdbRuleDto>>(result);
+        var created = Assert.IsType<Created<AdminRuleDto>>(result);
         Assert.NotNull(created.Value);
         Assert.Equal($"/api/admin/tmdb-rules/{created.Value.Id}", created.Location);
-        Assert.Equal((ContentType.Vod, TmdbRuleField.Genre, "Horror"), (created.Value.ContentType, created.Value.Field, created.Value.Pattern));
+        Assert.Equal(
+            ((int?)null, ContentType.Vod, (TmdbRuleField?)TmdbRuleField.Genre, "Horror"),
+            (created.Value.XtreamSourceId, created.Value.ContentType, created.Value.Field, created.Value.Pattern));
     }
 
     [Theory]
     [InlineData(ContentType.Undefined, TmdbRuleField.Genre, "Horror", "ContentType")]
     [InlineData(ContentType.Vod, (TmdbRuleField)99, "Horror", "Field")]
+    [InlineData(ContentType.Vod, null, "Horror", "Field")]
     [InlineData(ContentType.Vod, TmdbRuleField.Genre, " ", "Pattern")]
-    public async Task PostAndPutRule_WhenInvalid_ReturnValidationProblem(ContentType contentType, TmdbRuleField field, string pattern, string invalidField)
+    public async Task PostAndPutRule_WhenInvalid_ReturnValidationProblem(ContentType contentType, TmdbRuleField? field, string pattern, string invalidField)
     {
         var service = new TmdbRuleAdminService(_dbContext);
         var request = Request(contentType, pattern) with { Field = field };
@@ -86,7 +89,7 @@ public class TmdbEndpointsTests : IAsyncDisposable
         var service = new TmdbRuleAdminService(_dbContext);
         await TmdbRuleEndpoints.PostAsync(Request(ContentType.Vod, "Horror"), service, TestContext.Current.CancellationToken);
 
-        var result = await TmdbRuleEndpoints.PutOrderAsync(new AdminTmdbRuleOrderRequest(ContentType.Vod, []), service, TestContext.Current.CancellationToken);
+        var result = await TmdbRuleEndpoints.PutOrderAsync(new AdminRuleOrderRequest(ContentType.Vod, []), service, TestContext.Current.CancellationToken);
 
         Assert.IsType<ValidationProblem>(result);
     }
@@ -204,8 +207,8 @@ public class TmdbEndpointsTests : IAsyncDisposable
         return mapping;
     }
 
-    private static AdminTmdbRuleRequest Request(ContentType contentType, string pattern) =>
-        new(contentType, 10, TmdbRuleField.Genre, RuleAction.Exclude, RuleOperator.Contains, pattern, CaseSensitive: false, IsEnabled: true);
+    private static AdminRuleRequest Request(ContentType contentType, string pattern) =>
+        new(contentType, 10, RuleAction.Exclude, RuleOperator.Contains, pattern, CaseSensitive: false, IsEnabled: true, TmdbRuleField.Genre);
 
     public async ValueTask DisposeAsync()
     {

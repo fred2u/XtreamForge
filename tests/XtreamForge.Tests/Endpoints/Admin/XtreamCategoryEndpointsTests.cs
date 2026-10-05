@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
-using XtreamForge.ApiService.Endpoints.Admin.CategoryRules.Dto;
+using XtreamForge.ApiService.Endpoints.Admin.Rules.Dto;
 using XtreamForge.ApiService.Endpoints.Admin.XtreamCategories;
 using XtreamForge.ApiService.Endpoints.Admin.XtreamCategories.Dto;
 using XtreamForge.ApiService.Services.Admin;
@@ -61,7 +61,7 @@ public class XtreamCategoryEndpointsTests : IAsyncDisposable
         Assert.Equal(InclusionDecision.Exclude, dto.Decision);
         Assert.Equal(CategoryExclusionReason.Rule, dto.ExclusionReason);
         Assert.Equal(
-            new AdminCategoryRuleDto(rule.Id, source.Id, ContentType.Vod, 3, RuleAction.Exclude, RuleOperator.Contains, "kids", false, true),
+            new AdminRuleDto(rule.Id, source.Id, ContentType.Vod, 3, RuleAction.Exclude, RuleOperator.Contains, "kids", false, true, null),
             dto.DecidingRule);
     }
 

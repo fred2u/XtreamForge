@@ -5,6 +5,8 @@ using XtreamForge.ApiService.Services.Monitoring;
 using XtreamForge.ApiService.Services.Tmdb;
 using XtreamForge.ApiService.Services.Tmdb.Scoring;
 using XtreamForge.ApiService.Xtream;
+using XtreamForge.Domain.Categories;
+using XtreamForge.Domain.Items;
 
 namespace XtreamForge.ApiService.Infrastructure;
 
@@ -75,8 +77,8 @@ public static class DependenciesExtensions
         services.AddScoped<XtreamCategoryDiscoveryAdminService>();
         services.AddScoped<XtreamCategoryAdminService>();
         services.AddScoped<CustomCategoryAdminService>();
-        services.AddScoped<CategoryRuleAdminService>();
-        services.AddScoped<ItemRuleAdminService>();
+        services.AddScoped<SourceRuleAdminService<CategoryRule>>();
+        services.AddScoped<SourceRuleAdminService<ItemRule>>();
         services.AddScoped<TmdbRuleAdminService>();
         services.AddScoped<TmdbInfoAdminService>();
         services.AddScoped<StreamTmdbMappingAdminService>();

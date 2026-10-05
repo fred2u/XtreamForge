@@ -234,6 +234,7 @@ Category, item, and TMDB rules share the same model:
 - case-sensitive or case-insensitive matching
 - actions: `Include` / `Exclude`; no matching rule means `Include`
 - the admin UI can create, edit, reorder, enable/disable, and delete rules; a new order is saved atomically (`PUT .../category-rules/order`, `.../item-rules/order`, or `/api/admin/tmdb-rules/order`)
+- the admin API validates a created or updated rule (defined content type, action, and operator, a pattern of 1 to 255 characters, and the `field` of a TMDB rule) and returns `400` otherwise; the three kinds of rules are returned with the same representation (`xtreamSourceId` is null and `field` is set for a TMDB rule)
 
 Category rules match the category name. Item rules match the item `name` sent by the provider; items without a name are always excluded. TMDB rules match the TMDB title or genres of the item, see [TMDB rules](#tmdb-rules).
 

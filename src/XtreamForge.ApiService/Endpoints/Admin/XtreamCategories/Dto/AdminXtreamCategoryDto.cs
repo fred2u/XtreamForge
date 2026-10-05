@@ -1,4 +1,4 @@
-using XtreamForge.ApiService.Endpoints.Admin.CategoryRules.Dto;
+using XtreamForge.ApiService.Endpoints.Admin.Rules.Dto;
 using XtreamForge.ApiService.Services;
 using XtreamForge.Domain.Enums;
 
@@ -21,4 +21,4 @@ public sealed record AdminXtreamCategoryDto(
     string? CustomCategoryName,
     InclusionDecision Decision,
     CategoryExclusionReason? ExclusionReason,
-    AdminCategoryRuleDto? DecidingRule);
+    AdminRuleDto? DecidingRule);

@@ -202,9 +202,11 @@ Business logic that is significant or reusable belongs outside endpoint definiti
 
 Do not introduce controllers unless there is a concrete benefit over the existing Minimal API approach.
 
-Admin endpoints (`Endpoints/Admin`) are static handlers grouped in one `<Resource>Endpoints` class per resource (for example `CategoryRuleEndpoints.GetAsync / PostAsync / PutAsync / PutOrderAsync / DeleteAsync`). Their services are injected as handler parameters, so they are not registered in DI, and all the routes are listed in `Endpoints/Admin/RouteExtensions.cs` as method groups: a route parameter must keep the name of the handler parameter it binds to, and every service parameter must be registered (otherwise Minimal APIs infer it as the body or the query). Add a new admin route as a static method of its resource class, not as a new endpoint class.
+Admin endpoints (`Endpoints/Admin`) are static handlers grouped in one `<Resource>Endpoints` class per resource (for example `TmdbRuleEndpoints.GetAsync / PostAsync / PutAsync / PutOrderAsync / DeleteAsync`). Their services are injected as handler parameters, so they are not registered in DI, and all the routes are listed in `Endpoints/Admin/RouteExtensions.cs` as method groups: a route parameter must keep the name of the handler parameter it binds to, and every service parameter must be registered (otherwise Minimal APIs infer it as the body or the query). Add a new admin route as a static method of its resource class, not as a new endpoint class.
 
 Use endpoint DTOs when the HTTP contract differs from domain or persistence models.
+
+Category, item, and TMDB rules share one admin contract (`Endpoints/Admin/Rules`: `AdminRuleDto`, `AdminRuleRequest` with its validation, `AdminRuleOrderRequest`) and the `Domain/Rules/IRule` interface. The rules defined per source (`ISourceRule`: category and item rules) use the generic `SourceRuleAdminService<TRule>` and `SourceRuleEndpoints`, mapped once per rule type by `MapSourceRules<TRule>` in `RouteExtensions`; the TMDB rules (no source, a `Field`) keep `TmdbRuleAdminService` and `TmdbRuleEndpoints`. Values and renumbering are shared (`RuleValues`, `RuleSequences`). A new rule kind reuses these pieces instead of copying a service.
 
 Do not expose EF Core entities automatically as public API contracts when doing so creates unwanted coupling.
 

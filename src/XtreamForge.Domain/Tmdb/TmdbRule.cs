@@ -1,4 +1,5 @@
 using XtreamForge.Domain.Enums;
+using XtreamForge.Domain.Rules;
 
 namespace XtreamForge.Domain.Tmdb;
 
@@ -6,7 +7,7 @@ namespace XtreamForge.Domain.Tmdb;
 /// Rule evaluated on the TMDB metadata of the returned items, after the enrichment. Unlike the item rules, TMDB rules are global
 /// per content type, because the TMDB metadata does not depend on the source.
 /// </summary>
-public sealed class TmdbRule
+public sealed class TmdbRule : IRule
 {
     public int Id { get; set; }
 

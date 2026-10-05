@@ -33,7 +33,7 @@ public class TmdbRuleAdminServiceTests : IAsyncDisposable
     [Fact]
     public async Task CreateAsync_StoresEveryValue()
     {
-        var (rule, sequenceConflict) = await _service.CreateAsync(ContentType.Series, Values(10, "Horror", TmdbRuleField.Genre), TestContext.Current.CancellationToken);
+        var (rule, sequenceConflict) = await _service.CreateAsync(ContentType.Series, TmdbRuleField.Genre, Values(10, "Horror"), TestContext.Current.CancellationToken);
 
         Assert.False(sequenceConflict);
         Assert.NotNull(rule);
@@ -48,8 +48,8 @@ public class TmdbRuleAdminServiceTests : IAsyncDisposable
     {
         await AddRuleAsync(ContentType.Vod, 10, "a");
 
-        var (rule, sequenceConflict) = await _service.CreateAsync(ContentType.Vod, Values(10, "b"), TestContext.Current.CancellationToken);
-        var (otherTypeRule, otherTypeConflict) = await _service.CreateAsync(ContentType.Series, Values(10, "c"), TestContext.Current.CancellationToken);
+        var (rule, sequenceConflict) = await _service.CreateAsync(ContentType.Vod, TmdbRuleField.Title, Values(10, "b"), TestContext.Current.CancellationToken);
+        var (otherTypeRule, otherTypeConflict) = await _service.CreateAsync(ContentType.Series, TmdbRuleField.Title, Values(10, "c"), TestContext.Current.CancellationToken);
 
         Assert.Null(rule);
         Assert.True(sequenceConflict);
@@ -62,7 +62,7 @@ public class TmdbRuleAdminServiceTests : IAsyncDisposable
     {
         var rule = await AddRuleAsync(ContentType.Vod, 10, "a");
 
-        var result = await _service.UpdateAsync(rule.Id, Values(30, "Horror", TmdbRuleField.Genre), TestContext.Current.CancellationToken);
+        var result = await _service.UpdateAsync(rule.Id, TmdbRuleField.Genre, Values(30, "Horror"), TestContext.Current.CancellationToken);
 
         Assert.Equal((true, false), result);
         var stored = await _dbContext.TmdbRules.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
@@ -75,8 +75,8 @@ public class TmdbRuleAdminServiceTests : IAsyncDisposable
         var rule = await AddRuleAsync(ContentType.Vod, 10, "a");
         await AddRuleAsync(ContentType.Vod, 20, "b");
 
-        Assert.Equal((false, false), await _service.UpdateAsync(999, Values(30, "x"), TestContext.Current.CancellationToken));
-        Assert.Equal((true, true), await _service.UpdateAsync(rule.Id, Values(20, "x"), TestContext.Current.CancellationToken));
+        Assert.Equal((false, false), await _service.UpdateAsync(999, TmdbRuleField.Title, Values(30, "x"), TestContext.Current.CancellationToken));
+        Assert.Equal((true, true), await _service.UpdateAsync(rule.Id, TmdbRuleField.Title, Values(20, "x"), TestContext.Current.CancellationToken));
         Assert.Equal("a", (await _dbContext.TmdbRules.AsNoTracking().SingleAsync(r => r.Id == rule.Id, TestContext.Current.CancellationToken)).Pattern);
     }
 
@@ -117,8 +117,8 @@ public class TmdbRuleAdminServiceTests : IAsyncDisposable
         Assert.Empty(rules);
     }
 
-    private static TmdbRuleValues Values(int sequence, string pattern, TmdbRuleField field = TmdbRuleField.Title) =>
-        new(sequence, field, RuleAction.Exclude, RuleOperator.Contains, pattern, CaseSensitive: true, IsEnabled: false);
+    private static RuleValues Values(int sequence, string pattern) =>
+        new(sequence, RuleAction.Exclude, RuleOperator.Contains, pattern, CaseSensitive: true, IsEnabled: false);
 
     private async Task<TmdbRule> AddRuleAsync(ContentType contentType, int sequence, string pattern)
     {

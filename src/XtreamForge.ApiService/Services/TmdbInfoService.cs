@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using XtreamForge.ApiService.Options;
+using XtreamForge.ApiService.Services.Queues;
 using XtreamForge.ApiService.Services.Tmdb;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;
@@ -14,6 +15,7 @@ namespace XtreamForge.ApiService.Services;
 /// doubling from <see cref="FirstRetryDelay"/> up to <see cref="MaximumRetryDelay"/>.
 /// </summary>
 public class TmdbInfoService(XtreamForgeDbContext dbContext, TmdbClient tmdbClient, IOptions<TmdbOptions> options, TimeProvider timeProvider)
+    : IQueueProcessor<TmdbInfoRequest>
 {
     public static readonly TimeSpan RefreshDelay = TimeSpan.FromDays(60);
     public static readonly TimeSpan FirstRetryDelay = TimeSpan.FromDays(1);
@@ -26,6 +28,9 @@ public class TmdbInfoService(XtreamForgeDbContext dbContext, TmdbClient tmdbClie
 
     // longer than any movie or episode: a larger value is a TMDB data error
     private const int MaximumDurationMinutes = 1440;
+
+    Task<bool> IQueueProcessor<TmdbInfoRequest>.ProcessAsync(TmdbInfoRequest request, CancellationToken cancellationToken)
+        => LoadAsync(request, cancellationToken);
 
     /// <summary>
     /// Returns the stored metadata (loaded or not) of the given TMDB IDs that are not excluded manually, and the IDs of the excluded ones;

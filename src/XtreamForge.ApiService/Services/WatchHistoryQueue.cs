@@ -1,15 +1,14 @@
-using System.Threading.Channels;
-using XtreamForge.ApiService.Services.Monitoring;
+using XtreamForge.ApiService.Services.Queues;
 using XtreamForge.ApiService.Xtream;
 
 namespace XtreamForge.ApiService.Services;
 
 /// <summary>
-/// Bounded in-memory queue of the playbacks to record in the watch history.
+/// Queue of the playbacks to record in the watch history, fed by <see cref="TrackPlayback"/>.
 /// A player sends several requests for one playback (range requests, seeks, reconnections): a request only starts a new playback
 /// when no request of the same stream and account is running and the last one ended more than <see cref="PlaybackIdleTimeout"/> ago.
 /// </summary>
-public sealed class WatchHistoryQueue : IMonitoredQueue
+public sealed class WatchHistoryQueue(TimeProvider timeProvider) : BackgroundQueue<WatchHistoryRequest>(QueueName, Capacity)
 {
     public const string QueueName = "Watch history";
 
@@ -19,24 +18,6 @@ public sealed class WatchHistoryQueue : IMonitoredQueue
 
     private readonly Lock _gate = new();
     private readonly Dictionary<PlaybackKey, PlaybackState> _playbacks = [];
-    private readonly Channel<WatchHistoryRequest> _channel;
-    private readonly TimeProvider _timeProvider;
-
-    public WatchHistoryQueue(TimeProvider timeProvider)
-    {
-        _timeProvider = timeProvider;
-        _channel = Channel.CreateBounded<WatchHistoryRequest>(
-            new BoundedChannelOptions(Capacity)
-            {
-                FullMode = BoundedChannelFullMode.DropOldest,
-                SingleReader = true,
-                SingleWriter = false
-            });
-    }
-
-    public string Name => QueueName;
-
-    public int Count => _channel.Reader.Count;
 
     /// <summary>
     /// Registers a running stream request until the returned handle is disposed, and enqueues a playback when the request starts a new one.
@@ -44,7 +25,7 @@ public sealed class WatchHistoryQueue : IMonitoredQueue
     public IDisposable TrackPlayback(string protocol, string host, int port, XtreamMovieStream movie)
     {
         var key = new PlaybackKey(protocol, host, port, movie);
-        var now = _timeProvider.GetUtcNow();
+        var now = timeProvider.GetUtcNow();
 
         bool isNewPlayback;
         lock (_gate)
@@ -62,17 +43,17 @@ public sealed class WatchHistoryQueue : IMonitoredQueue
         }
 
         if (isNewPlayback)
-            _channel.Writer.TryWrite(new WatchHistoryRequest(protocol, host, port, movie, now));
+            TryEnqueue(new WatchHistoryRequest(protocol, host, port, movie, now));
 
         return new PlaybackRequest(this, key);
     }
 
-    public IAsyncEnumerable<WatchHistoryRequest> ReadAllAsync(CancellationToken cancellationToken)
-        => _channel.Reader.ReadAllAsync(cancellationToken);
+    // the playbacks are already grouped by TrackPlayback: each request is a distinct playback
+    protected override object GetKey(WatchHistoryRequest request) => request;
 
     private void EndRequest(PlaybackKey key)
     {
-        var now = _timeProvider.GetUtcNow();
+        var now = timeProvider.GetUtcNow();
 
         lock (_gate)
         {

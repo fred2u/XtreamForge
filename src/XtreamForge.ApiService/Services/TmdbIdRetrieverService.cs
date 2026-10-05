@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using System.Text.Json;
 using XtreamForge.ApiService.Options;
+using XtreamForge.ApiService.Services.Queues;
 using XtreamForge.ApiService.Services.Tmdb;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;
@@ -10,9 +11,13 @@ using XtreamForge.Domain.Items;
 namespace XtreamForge.ApiService.Services;
 
 public class TmdbIdRetrieverService(IHttpClientFactory httpClientFactory, XtreamForgeDbContext dbContext, TmdbIdMatcher tmdbIdMatcher, TmdbInfoQueue tmdbInfoQueue, TimeProvider timeProvider)
+    : IQueueProcessor<TmdbIdRetrieverRequest>
 {
     public static readonly TimeSpan FirstLookupRetryDelay = TimeSpan.FromDays(1);
     public static readonly TimeSpan MaximumLookupRetryDelay = TimeSpan.FromDays(30);
+
+    Task<bool> IQueueProcessor<TmdbIdRetrieverRequest>.ProcessAsync(TmdbIdRetrieverRequest request, CancellationToken cancellationToken)
+        => RetrieveAsync(request, cancellationToken);
 
     /// <summary>
     /// Returns true when a TMDB ID was found and persisted; false when the stream was already mapped, its next lookup is not due yet, or nothing was found.

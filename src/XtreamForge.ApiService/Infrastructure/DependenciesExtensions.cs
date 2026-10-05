@@ -2,6 +2,7 @@ using XtreamForge.ApiService.Endpoints.Xtream;
 using XtreamForge.ApiService.Services;
 using XtreamForge.ApiService.Services.Admin;
 using XtreamForge.ApiService.Services.Monitoring;
+using XtreamForge.ApiService.Services.Queues;
 using XtreamForge.ApiService.Services.Tmdb;
 using XtreamForge.ApiService.Services.Tmdb.Scoring;
 using XtreamForge.ApiService.Xtream;
@@ -34,21 +35,15 @@ public static class DependenciesExtensions
         services.AddScoped<CategoryService>();
         services.AddScoped<ItemService>();
         services.AddScoped<SourceService>();
-        services.AddScoped<TmdbIdRetrieverService>();
-        services.AddSingleton<TmdbIdRetrieverQueue>();
-        services.AddScoped<TmdbInfoService>();
-        services.AddSingleton<TmdbInfoQueue>();
-        services.AddScoped<WatchHistoryService>();
-        services.AddSingleton<WatchHistoryQueue>();
         services.AddScoped<RecommendationService>();
         services.AddScoped<PopularService>();
         services.AddScoped<VirtualCategoryService>();
         services.AddSingleton<TmdbIdCache>();
 
-        // monitoring: every background queue is also registered as IMonitoredQueue
-        services.AddSingleton<IMonitoredQueue>(serviceProvider => serviceProvider.GetRequiredService<TmdbIdRetrieverQueue>());
-        services.AddSingleton<IMonitoredQueue>(serviceProvider => serviceProvider.GetRequiredService<TmdbInfoQueue>());
-        services.AddSingleton<IMonitoredQueue>(serviceProvider => serviceProvider.GetRequiredService<WatchHistoryQueue>());
+        // background queues, in the order of the monitoring screen
+        AddBackgroundQueue<TmdbIdRetrieverQueue, TmdbIdRetrieverRequest, TmdbIdRetrieverService>(services, workerCount: 2);
+        AddBackgroundQueue<TmdbInfoQueue, TmdbInfoRequest, TmdbInfoService>(services);
+        AddBackgroundQueue<WatchHistoryQueue, WatchHistoryRequest, WatchHistoryService>(services);
         services.AddSingleton<QueueMonitor>();
 
         // tmdb
@@ -87,9 +82,24 @@ public static class DependenciesExtensions
 
     private static void AddHostedServices(IServiceCollection services)
     {
-        services.AddHostedService<TmdbIdRetrieverBackgroundService>();
-        services.AddHostedService<TmdbInfoBackgroundService>();
-        services.AddHostedService<WatchHistoryBackgroundService>();
         services.AddHostedService<QueueMonitorSamplingService>();
+    }
+
+    // a background queue: the queue singleton, also monitored, and its consumer, which processes each request in its own scope
+    // with TProcessor (also injectable as itself)
+    private static void AddBackgroundQueue<TQueue, TRequest, TProcessor>(IServiceCollection services, int workerCount = 1)
+        where TQueue : BackgroundQueue<TRequest>
+        where TRequest : notnull
+        where TProcessor : class, IQueueProcessor<TRequest>
+    {
+        services.AddSingleton<TQueue>();
+        services.AddSingleton<IMonitoredQueue>(serviceProvider => serviceProvider.GetRequiredService<TQueue>());
+        services.AddScoped<TProcessor>();
+        services.AddHostedService(serviceProvider => new QueueBackgroundService<TRequest, TProcessor>(
+            serviceProvider.GetRequiredService<TQueue>(),
+            workerCount,
+            serviceProvider.GetRequiredService<QueueMonitor>(),
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            serviceProvider.GetRequiredService<ILogger<QueueBackgroundService<TRequest, TProcessor>>>()));
     }
 }

@@ -150,7 +150,7 @@ Every movie played through the proxy is recorded with its TMDB ID, its content t
 
 - a playback starts with a `GET` of a movie stream, `movie/{username}/{password}/{streamId}.{extension}` with or without the upstream prefix, that the provider serves or redirects (redirects are forwarded to the client, which then calls the redirect target directly) (`HEAD` requests, series episodes, and live streams are not recorded)
 - a player sends several requests for one playback (range requests, seeks, reconnections): a request starts a new playback only when no request of the same movie and account is running and the last one ended more than 30 minutes ago; this state is kept in memory by the singleton `WatchHistoryQueue`, so the stream route does not access the database
-- the playbacks are recorded in the background by `WatchHistoryBackgroundService`: the TMDB ID is the persisted mapping of the stream when it exists, otherwise the `tmdb_id` of the provider `get_vod_info` payload (called with the credentials of the stream URL, kept in memory only); a playback of an unknown source or of a movie without TMDB ID is not recorded
+- the playbacks are recorded in the background by `WatchHistoryService`: the TMDB ID is the persisted mapping of the stream when it exists, otherwise the `tmdb_id` of the provider `get_vod_info` payload (called with the credentials of the stream URL, kept in memory only); a playback of an unknown source or of a movie without TMDB ID is not recorded
 - `GET /api/admin/watch-history?contentType=&skip=&take=` - page (most recent first, at most 200 entries) of the history, with the title, original title, release date, and `w92` poster of the loaded TMDB metadata, and the number of matching entries; an invalid content type returns `400`
 - `GET /api/admin/watch-history/activity?timeZone=` - number of movie playbacks per day (days without playback omitted) over the last 53 weeks, today included, the days being those of the given time zone (IANA or Windows ID, UTC when empty; an unknown time zone returns `400`)
 - `DELETE /api/admin/watch-history/{id}` - deletes one playback (`204`, or `404` when unknown); from the `Watch history` screen
@@ -274,7 +274,7 @@ An item is returned only when a usable TMDB ID is known and its TMDB metadata is
 - the upstream list item already exposing `tmdb_id`
 - a persisted `Source + ContentType + StreamId -> TmdbId` mapping (injected as `tmdb_id`)
 
-When no TMDB ID is known and no lookup is deferred for the stream, XtreamForge enqueues a background lookup (`TmdbIdRetrieverBackgroundService`):
+When no TMDB ID is known and no lookup is deferred for the stream, XtreamForge enqueues a background lookup (`TmdbIdRetrieverQueue`, processed by `TmdbIdRetrieverService`):
 
 - the queue is bounded and deduplicated per `Source + ContentType + StreamId`
 - the upstream credentials are kept in memory only while the lookup is pending
@@ -310,7 +310,7 @@ Admin API:
 
 The TMDB metadata of movies and TV shows is stored in `tmdb_infos`, one entry per `ContentType + TmdbId` (movie and TV IDs overlap): title, original title, release date, poster path, overview, vote average, vote count, genres, directors, cast, and duration, in the `Tmdb:PreferredLanguage` language. Genres are stored as TMDB genre IDs with their English names (`TmdbGenres`, unknown IDs have no name). Directors are the creators for a TV show, the cast is limited to the first 10 members in credit order, and the duration is in minutes (movie `runtime`, or TV `episode_run_time` falling back to the runtime of the last aired episode). Every value is optional; TMDB values are sanitized (blank texts dropped, long texts truncated, ratings outside 0-10 ignored).
 
-Entries are only filled from the TMDB details (`movie/{id}` / `tv/{id}` with `append_to_response=credits`), loaded in the background by `TmdbInfoBackgroundService` through the in-memory `TmdbInfoQueue`, deduplicated per `ContentType + TmdbId`. A load is enqueued when a TMDB ID lookup finds a TMDB ID (from the provider or from the TMDB search), and when a returned item needs it (see below). A request for an entry already loaded and not due for a refresh (or waiting for a retry) is ignored.
+Entries are only filled from the TMDB details (`movie/{id}` / `tv/{id}` with `append_to_response=credits`), loaded in the background by `TmdbInfoService` through the in-memory `TmdbInfoQueue`, deduplicated per `ContentType + TmdbId`. A load is enqueued when a TMDB ID lookup finds a TMDB ID (from the provider or from the TMDB search), and when a returned item needs it (see below). A request for an entry already loaded and not due for a refresh (or waiting for a retry) is ignored.
 
 When an item with a TMDB ID is returned (lists and item details) and its metadata is missing, or due for a refresh or a retry, a background load is enqueued (only when `Tmdb:ApiKey` is configured). An item is returned only once its metadata is loaded: without it, the item is removed from the current response and appears on a later request; while a refresh is pending, the stored metadata is used. Loaded metadata is refreshed after 60 days. When TMDB does not know the ID or the load fails, the next load is deferred by 1 day, doubling on each new attempt up to 30 days; already loaded metadata is kept.
 
@@ -343,7 +343,7 @@ Admin API:
 
 ## Background queue monitoring
 
-Background queues (the TMDB ID lookup queue, the TMDB metadata queue, and the watch history queue) implement `IMonitoredQueue` and are sampled by `QueueMonitor` (`Services/Monitoring`):
+Background queues (the TMDB ID lookup queue, the TMDB metadata queue, and the watch history queue) derive from `BackgroundQueue` (`Services/Queues`: bounded in-memory queue deduplicated per request key, whose oldest request is dropped when it is full), are consumed by `QueueBackgroundService` (each request in its own DI scope; a failed request is logged without its credentials and can be enqueued again), and are sampled by `QueueMonitor` (`Services/Monitoring`):
 
 - every 10 s, the size of each queue and the items processed since the previous sample (succeeded, no result, failed) are recorded; one hour of samples is kept in memory and lost on restart
 - `GET /api/admin/queues` returns the current size and the history of each queue, and the upstream hosts that answered HTTP 429 since the API started (current spacing, number of 429)

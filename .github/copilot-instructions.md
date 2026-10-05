@@ -249,9 +249,9 @@ Conversely, do not split small cohesive behavior across additional classes witho
 
 Items returned by `get_vod_streams` / `get_series` need a known TMDB ID. `get_vod_info` / `get_series_info` (`ItemGetEndpoint`) apply the same category, item rule, and TMDB conditions through `ItemService.TransformInfo`, return the empty Xtream payload otherwise, and never enqueue a TMDB ID lookup.
 
-Missing TMDB IDs are resolved asynchronously by `TmdbIdRetrieverBackgroundService`:
+Missing TMDB IDs are resolved asynchronously in the background:
 
-- requests are queued through the singleton `TmdbIdRetrieverQueue` (injected into `ItemService` and the background service) and deduplicated per `Source + ContentType + StreamId`;
+- requests are queued through the singleton `TmdbIdRetrieverQueue` (injected into `ItemService`) and deduplicated per `Source + ContentType + StreamId`;
 - each request is processed in its own DI scope by `TmdbIdRetrieverService`;
 - the provider `get_vod_info` / `get_series_info` payload is used first, the TMDB search (`TmdbIdMatcher`) is only a fallback;
 - only confident matches are persisted: avoiding false positives takes precedence over finding more matches;
@@ -260,7 +260,7 @@ Missing TMDB IDs are resolved asynchronously by `TmdbIdRetrieverBackgroundServic
 
 TMDB metadata (`Domain/Tmdb/TmdbInfo`, one entry per `ContentType + TmdbId`) enriches the returned items:
 
-- it is only loaded from the TMDB details, in the background by `TmdbInfoBackgroundService` through the singleton `TmdbInfoQueue` (refresh after 60 days, retry delay of 1 day doubling up to 30 days; a request for an entry that is not due is ignored); `TmdbIdRetrieverService` enqueues every TMDB ID it finds, whatever its source; TMDB search results are never stored; all writes go through `TmdbInfoService`;
+- it is only loaded from the TMDB details, in the background by `TmdbInfoService` through the singleton `TmdbInfoQueue` (refresh after 60 days, retry delay of 1 day doubling up to 30 days; a request for an entry that is not due is ignored); `TmdbIdRetrieverService` enqueues every TMDB ID it finds, whatever its source; TMDB search results are never stored; all writes go through `TmdbInfoService`;
 - list items are enriched by batches (`ItemsGetEndpoint` reads the metadata of each batch with one query): do not preload the metadata of a whole catalogue;
 - `TmdbItemEnricher` merges both sources: it only replaces keys already present in the provider item and only with available TMDB values (TMDB wins when both have a value, except `genre`, filled from the English TMDB genres only when the provider value is empty); TMDB and provider values are both untrusted;
 - an item that cannot be enriched (no positive TMDB ID, metadata not loaded) is excluded from the response and appears once its metadata is loaded;
@@ -280,7 +280,7 @@ Movie playbacks are recorded in `WatchHistory` (`Domain/History/WatchHistoryEntr
 
 - `XtreamRequestForwardEndpoint` reports each `GET` of a `movie/{username}/{password}/{streamId}.{ext}` path served (2xx) or redirected (3xx, redirects are not followed) by the provider (`XtreamStreamPath.ParseMovie`) to the singleton `WatchHistoryQueue` for as long as the stream is written; the stream route must keep not resolving a `DbContext`;
 - the queue groups the requests of one playback in memory (same source, account, and stream; running request or last one ended less than `PlaybackIdleTimeout` ago) and enqueues only new playbacks;
-- `WatchHistoryBackgroundService` resolves the TMDB ID through `WatchHistoryService`: the persisted `StreamTmdbMapping` first, then the provider `get_vod_info` payload; the credentials of the stream URL stay in memory only;
+- `WatchHistoryService`, the consumer of the queue, resolves the TMDB ID: the persisted `StreamTmdbMapping` first, then the provider `get_vod_info` payload; the credentials of the stream URL stay in memory only;
 - series episodes are not recorded: their stream URL only carries the episode ID, unknown to the `StreamTmdbMapping` keyed by series ID.
 - the admin can delete a playback and add one, started now, from a `TmdbInfo` entry (`WatchHistoryAdminService`).
 
@@ -308,7 +308,7 @@ Consider:
 - cancellation;
 - provider-specific payload fields.
 
-Background queues are monitored by `Services/Monitoring/QueueMonitor`: a new queue implements `IMonitoredQueue` (stable `Name`, waiting `Count`), is registered both as itself and as `IMonitoredQueue`, and its consumer reports each item with `QueueMonitor.RecordProcessed` (`Succeeded`, `NoResult`, `Failed`). The Monitoring page of the admin UI and the OpenTelemetry metrics then include it without further change.
+Background queues share `Services/Queues`: a queue derives from `BackgroundQueue<TRequest>` (stable `Name`, capacity, deduplication key `GetKey`, optional `Accepts` filter), its consumer implements `IQueueProcessor<TRequest>` (`true` when the request produced a result), and both are registered with `AddBackgroundQueue<TQueue, TRequest, TProcessor>` in `DependenciesExtensions`, which also registers the queue as `IMonitoredQueue` for `Services/Monitoring/QueueMonitor` and starts its `QueueBackgroundService` (one DI scope per request, outcome reported with `QueueMonitor.RecordProcessed`, request completed whatever the outcome, failure logged with the `ToString` of the request). A request carrying credentials must override `ToString` to hide them. Do not write another consumer loop. The Monitoring page of the admin UI and the OpenTelemetry metrics then include the queue without further change.
 
 HTTP 429 from TMDB or an Xtream provider is handled by `Infrastructure/RateLimiting`: `RateLimitHandler` is inserted as the outermost handler of both named clients (before the resilience handler, so its waits are not counted by the resilience timeouts) and paces each upstream host through the singleton `UpstreamRateLimiter` (`Retry-After`, doubling interval, gradual recovery, up to three GET/HEAD attempts). The standard resilience options are configured so that 429 is neither retried nor counted by the circuit breaker. Do not add 429 retry loops in callers.
 

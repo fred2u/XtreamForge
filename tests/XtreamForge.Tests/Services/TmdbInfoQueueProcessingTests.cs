@@ -2,13 +2,15 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using XtreamForge.ApiService.Services;
 using XtreamForge.ApiService.Services.Monitoring;
+using XtreamForge.ApiService.Services.Queues;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;
 using XtreamForge.Tests.Infrastructure;
 
 namespace XtreamForge.Tests.Services;
 
-public class TmdbInfoBackgroundServiceTests : IAsyncDisposable
+/// <summary>The TMDB metadata loads of <see cref="TmdbInfoQueue"/>, processed by <see cref="TmdbInfoService"/> in the background.</summary>
+public class TmdbInfoQueueProcessingTests : IAsyncDisposable
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
@@ -17,7 +19,7 @@ public class TmdbInfoBackgroundServiceTests : IAsyncDisposable
     private readonly TmdbInfoQueue _queue = new();
     private readonly QueueMonitor _monitor;
 
-    public TmdbInfoBackgroundServiceTests()
+    public TmdbInfoQueueProcessingTests()
     {
         _dbContext = SqliteDbContextFactory.Create();
         _monitor = new QueueMonitor([_queue], TimeProvider.System, _meterFactory);
@@ -31,7 +33,12 @@ public class TmdbInfoBackgroundServiceTests : IAsyncDisposable
     {
         var tmdbInfoService = new StubTmdbHttpClientFactory(_ => tmdbResponse).CreateTmdbInfoService(_dbContext, TimeProvider.System);
         await using var serviceProvider = new ServiceCollection().AddSingleton(tmdbInfoService).BuildServiceProvider();
-        using var backgroundService = new TmdbInfoBackgroundService(_queue, _monitor, serviceProvider.GetRequiredService<IServiceScopeFactory>(), NullLogger<TmdbInfoBackgroundService>.Instance);
+        using var backgroundService = new QueueBackgroundService<TmdbInfoRequest, TmdbInfoService>(
+            _queue,
+            workerCount: 1,
+            _monitor,
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<QueueBackgroundService<TmdbInfoRequest, TmdbInfoService>>.Instance);
         var request = new TmdbInfoRequest(ContentType.Vod, 603);
         var samples = new List<QueueSample>();
 

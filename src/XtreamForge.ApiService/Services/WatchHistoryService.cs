@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using XtreamForge.ApiService.Options;
+using XtreamForge.ApiService.Services.Queues;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;
 using XtreamForge.Domain.History;
@@ -8,7 +9,11 @@ using XtreamForge.Domain.History;
 namespace XtreamForge.ApiService.Services;
 
 public class WatchHistoryService(IHttpClientFactory httpClientFactory, XtreamForgeDbContext dbContext, TmdbIdCache recommendationCache)
+    : IQueueProcessor<WatchHistoryRequest>
 {
+    Task<bool> IQueueProcessor<WatchHistoryRequest>.ProcessAsync(WatchHistoryRequest request, CancellationToken cancellationToken)
+        => RecordAsync(request, cancellationToken);
+
     /// <summary>
     /// Records a movie playback with its TMDB ID; returns false when the source is unknown or the movie has no TMDB ID.
     /// The stored TMDB mapping wins, as in the item lists; otherwise the provider <c>get_vod_info</c> payload is read,

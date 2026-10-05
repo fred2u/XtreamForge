@@ -13,6 +13,7 @@ builder.AddServiceDefaults();
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.None);
 
 builder.Services.AddBindedOptions();
+builder.Services.AddForwardedHeaders();
 builder.Services.AddDatabase();
 builder.Services.AddHttpClients();
 builder.Services.AddServices();
@@ -26,6 +27,8 @@ builder.Services.AddResponseCompression(options =>
 
 var app = builder.Build();
 
+// first, so that the scheme, host, and client address of the original request are seen by every middleware and endpoint
+app.UseForwardedHeaders();
 app.UseResponseCompression();
 
 app.UseDatabase();

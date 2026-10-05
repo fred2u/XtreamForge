@@ -22,7 +22,8 @@ public class TmdbIdRetrieverService(IHttpClientFactory httpClientFactory, Xtream
 
     /// <summary>
     /// Returns true when a TMDB ID was found and persisted; false when the stream was already mapped, its next lookup is not due yet, or nothing was found.
-    /// A lookup without result or failing schedules the next one after a delay doubling from <see cref="FirstLookupRetryDelay"/> up to <see cref="MaximumLookupRetryDelay"/>.
+    /// A lookup without result or failing definitively schedules the next one after a delay doubling from <see cref="FirstLookupRetryDelay"/> up to
+    /// <see cref="MaximumLookupRetryDelay"/>; a transient failure (provider or TMDB outage, timeout, HTTP 429 or 5xx) after <see cref="RetryDelay.TransientFailureDelay"/>.
     /// A found TMDB ID, from the provider or from the TMDB search, is enqueued for the loading of its TMDB metadata.
     /// </summary>
     public async Task<bool> RetrieveAsync(TmdbIdRetrieverRequest request, CancellationToken cancellationToken)
@@ -45,10 +46,14 @@ public class TmdbIdRetrieverService(IHttpClientFactory httpClientFactory, Xtream
         {
             tmdbId = await FindTmdbIdAsync(request, cancellationToken);
         }
-        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
-            // a failing lookup is deferred like a lookup without result, so that a broken upstream is not called on every catalogue request
-            await DeferNextLookupAsync(mapping, cancellationToken);
+            // a failing lookup is deferred, so that a broken upstream is not called on every catalogue request
+            if (RetryDelay.IsTransient(exception))
+                await DeferNextLookupAfterTransientFailureAsync(mapping, cancellationToken);
+            else
+                await DeferNextLookupAsync(mapping, cancellationToken);
+
             throw;
         }
 
@@ -84,6 +89,16 @@ public class TmdbIdRetrieverService(IHttpClientFactory httpClientFactory, Xtream
 
         mapping.LookupAttemptCount++;
         mapping.NextLookupAtUtc = now + RetryDelay.Get(mapping.LookupAttemptCount, FirstLookupRetryDelay, MaximumLookupRetryDelay);
+        mapping.UpdatedAtUtc = now;
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    // an outage says nothing about the stream: the attempt is not counted, so that it does not lengthen the next delays
+    private async Task DeferNextLookupAfterTransientFailureAsync(StreamTmdbMapping mapping, CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+
+        mapping.NextLookupAtUtc = now + RetryDelay.TransientFailureDelay;
         mapping.UpdatedAtUtc = now;
         await dbContext.SaveChangesAsync(cancellationToken);
     }

@@ -81,7 +81,7 @@ public class XtreamCategoryDiscoveryAdminServiceTests : IAsyncDisposable
     }
 
     private XtreamCategoryDiscoveryAdminService CreateService(StubXtreamHttpClientFactory httpClientFactory) =>
-        new(httpClientFactory, new CategoryService(_dbContext), NullLogger<XtreamCategoryDiscoveryAdminService>.Instance);
+        new(httpClientFactory, new CategoryService(_dbContext, TimeProvider.System), NullLogger<XtreamCategoryDiscoveryAdminService>.Instance);
 
     public async ValueTask DisposeAsync()
     {

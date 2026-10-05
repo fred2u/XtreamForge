@@ -125,7 +125,28 @@ public class RecommendationServiceTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task GetRecommendedTmdbIds_WhenTmdbFails_ReturnsNoRecommendationAndRetriesNextTime()
+    public async Task GetRecommendedTmdbIds_WhenTmdbFails_ReturnsNoRecommendationAndRetriesAfterTheFailureDuration()
+    {
+        await WatchAsync(603);
+        var failing = true;
+        var tmdb = new StubTmdbHttpClientFactory(_ => failing ? throw new HttpRequestException("TMDB is down") : Recommendations(604));
+        var time = new SteppingTimeProvider();
+        using var cache = new TmdbIdCache(time);
+        var service = tmdb.CreateRecommendationService(_dbContext, cache);
+
+        Assert.Empty(await service.GetRecommendedTmdbIdsAsync(TestContext.Current.CancellationToken));
+
+        failing = false;
+
+        Assert.Empty(await service.GetRecommendedTmdbIdsAsync(TestContext.Current.CancellationToken));
+        Assert.Single(tmdb.RequestedUris);
+
+        time.Now += TmdbIdCache.FailureDuration;
+        Assert.Equal([604L], await service.GetRecommendedTmdbIdsAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task GetRecommendedTmdbIds_WhenTheWatchHistoryChangesDuringTheFailureDuration_RetriesAtOnce()
     {
         await WatchAsync(603);
         var failing = true;
@@ -133,8 +154,8 @@ public class RecommendationServiceTests : IAsyncDisposable
         var service = tmdb.CreateRecommendationService(_dbContext, _cache);
 
         Assert.Empty(await service.GetRecommendedTmdbIdsAsync(TestContext.Current.CancellationToken));
-
         failing = false;
+        _cache.Invalidate(TmdbIdCache.RecommendationsKey);
 
         Assert.Equal([604L], await service.GetRecommendedTmdbIdsAsync(TestContext.Current.CancellationToken));
     }

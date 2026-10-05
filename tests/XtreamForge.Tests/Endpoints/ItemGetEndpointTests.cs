@@ -205,7 +205,7 @@ public class ItemGetEndpointTests : IAsyncDisposable
         => new(
             httpClientFactory,
             new SourceService(_dbContext, TimeProvider.System),
-            new CategoryService(_dbContext),
+            new CategoryService(_dbContext, TimeProvider.System),
             new ItemService(new TmdbIdRetrieverQueue(), new TmdbInfoQueue(), Options.Create(new TmdbOptions { ApiKey = "token" }), TimeProvider.System),
             new StubTmdbHttpClientFactory(_ => null).CreateTmdbInfoService(_dbContext, TimeProvider.System),
             NullLogger<ItemGetEndpoint>.Instance);

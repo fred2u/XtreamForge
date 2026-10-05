@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.EntityFrameworkCore;
+using XtreamForge.ApiService.Services;
 using XtreamForge.ApiService.Services.TmdbIdRetriever;
 using XtreamForge.ApiService.Services.TmdbInfos;
 using XtreamForge.Database;
@@ -125,6 +126,24 @@ public class TmdbIdRetrieverServiceTests : IAsyncDisposable
         Assert.Null(mapping.TmdbId);
         Assert.Equal(1, mapping.LookupAttemptCount);
         Assert.Equal(_time.Now.AddDays(1), mapping.NextLookupAtUtc);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.RequestTimeout)]
+    public async Task RetrieveAsync_WhenProviderFailsTransiently_RetriesAfterAShortDelayWithoutCountingTheAttempt(HttpStatusCode statusCode)
+    {
+        var source = await CreateSourceAsync();
+        await AddPendingMappingAsync(source.Id, attemptCount: 2, _time.Now);
+        var service = CreateService(new StubXtreamHttpClientFactory(new Dictionary<string, (HttpStatusCode, string)> { ["get_vod_info"] = (statusCode, string.Empty) }));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => service.RetrieveAsync(CreateRequest(source.Id, ContentType.Vod, "42"), TestContext.Current.CancellationToken));
+
+        var mapping = await _dbContext.StreamTmdbMappings.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Null(mapping.TmdbId);
+        Assert.Equal(2, mapping.LookupAttemptCount);
+        Assert.Equal(_time.Now + RetryDelay.TransientFailureDelay, mapping.NextLookupAtUtc);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using XtreamForge.ApiService.Services;
 using XtreamForge.ApiService.Services.TmdbInfos;
 using XtreamForge.ApiService.Services.Tmdb;
 using XtreamForge.Database;
@@ -49,6 +50,23 @@ public class TmdbInfoServiceTests : IAsyncDisposable
         Assert.Equal(["Action", "Science Fiction"], info.Genres);
         Assert.Equal(_time.Now, info.LoadedAtUtc);
         Assert.Equal(_time.Now.AddDays(60), info.NextLoadAtUtc);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.BadGateway)]
+    public async Task LoadAsync_WhenTmdbFailsTransiently_KeepsLoadedMetadataAndRetriesAfterAShortDelay(HttpStatusCode? statusCode)
+    {
+        await AddInfoAsync(new TmdbInfo { TmdbId = 603, ContentType = ContentType.Vod, Title = "Matrix", LoadedAtUtc = _time.Now.AddDays(-60), LoadAttemptCount = 1, NextLoadAtUtc = _time.Now });
+        var factory = new StubTmdbHttpClientFactory(_ => throw new HttpRequestException("TMDB is unavailable.", null, statusCode));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => CreateService(factory).LoadAsync(new TmdbInfoRequest(ContentType.Vod, 603), TestContext.Current.CancellationToken));
+
+        var info = await _dbContext.TmdbInfos.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("Matrix", info.Title);
+        Assert.Equal(1, info.LoadAttemptCount);
+        Assert.Equal(_time.Now + RetryDelay.TransientFailureDelay, info.NextLoadAtUtc);
     }
 
     [Fact]

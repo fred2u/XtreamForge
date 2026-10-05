@@ -58,8 +58,10 @@ XtreamForge uses standard .NET configuration.
 
 Backend (`XtreamForge.ApiService`):
 
-- `XtreamProxy:AllowAnyDestination` - development convenience switch allowing any upstream host whose addresses are all publicly routable; leave `false` outside trusted local development
-- `XtreamProxy:AllowedHosts` - explicit upstream DNS/IP allowlist; a listed host is always allowed, even when it resolves to a private address
+- `XtreamProxy:AllowAnyDestination` - development convenience switch allowing any upstream host whose addresses are all publicly routable (`true` in `appsettings.Development.json`); leave `false` outside trusted local development
+- `XtreamProxy:AllowedHosts` - explicit upstream DNS/IP allowlist; a listed host is always allowed, even when it resolves to a private address. When `AllowAnyDestination` is `false`, at least one host is required, otherwise the backend fails at startup (the `appsettings.json` default lists none)
+- `ReverseProxy:KnownProxies` - IP addresses of the reverse proxies whose `X-Forwarded-For`, `X-Forwarded-Proto`, and `X-Forwarded-Host` headers are trusted, in addition to the loopback addresses (default none); must be IP addresses, validated at startup
+- `ReverseProxy:KnownNetworks` - networks of the trusted reverse proxies in CIDR notation, for example `172.18.0.0/16` (default none); validated at startup
 - `Tmdb:ApiKey` - TMDB API read access token (Bearer); when empty, the TMDB search is skipped
 - `Tmdb:BaseUrl` - TMDB API base URL (`https://api.themoviedb.org/3/` in `appsettings.json`); required and validated at startup
 - `Tmdb:ImageBaseUrl` - TMDB image base URL used for the posters (default `https://image.tmdb.org/t/p/`); must be an absolute HTTP(S) URL, validated at startup
@@ -68,7 +70,7 @@ Backend (`XtreamForge.ApiService`):
 - `Recommendations:CategoryName` - name of the VOD recommendations category (`RECOMMANDATIONS` in `appsettings.json`); the category is disabled when empty, see [Recommendations category](#recommendations-category)
 - `Recommendations:CategoryId` - XtreamForge ID of the recommendations category (default `999999999`); must be positive (validated at startup) and must not be the ID of an Xtream or custom category
 - `Popular:CategoryName` - name of the VOD and series popular category (`POPULAIRES` in `appsettings.json`); the category is disabled when empty, see [Popular category](#popular-category)
-- `Popular:CategoryId` - XtreamForge ID of the popular category (default `999999998`); must be positive (validated at startup) and must not be the ID of an Xtream, custom, or recommendations category
+- `Popular:CategoryId` - XtreamForge ID of the popular category (default `999999998`); must be positive and differ from `Recommendations:CategoryId` (both validated at startup), and must not be the ID of an Xtream or custom category
 - `ConnectionStrings:database` - PostgreSQL connection string (supplied by Aspire)
 
 Web (`XtreamForge.Web`):
@@ -93,9 +95,32 @@ dotnet run --project src/XtreamForge.AppHost
 The AppHost starts:
 
 - PostgreSQL with a persistent data volume (`xtreamforge-postserv-data`) and pgAdmin
-- `XtreamForge.ApiService` (waits for the database)
+- `XtreamForge.ApiService` (waits for the database), declared with external HTTP endpoints so that the IPTV devices can reach the Xtream proxy
 - `XtreamForge.Web` (waits for the backend and reaches it through service discovery)
 - the Aspire dashboard
+
+## Deployment
+
+Outside Aspire, the Dockerfiles under `src/` build the backend and Web images from the repository root, with the SDK of their base image (`global.json` is excluded from the Docker context):
+
+```bash
+docker build -f src/XtreamForge.ApiService/Dockerfile -t xtreamforge-apiservice .
+docker build -f src/XtreamForge.Web/Dockerfile -t xtreamforge-web .
+```
+
+Both images listen on HTTP port `8080`. The backend needs:
+
+- `ConnectionStrings__database` - PostgreSQL connection string (migrations are applied at startup)
+- `XtreamProxy__AllowedHosts__0`, `XtreamProxy__AllowedHosts__1`, ... - the upstream Xtream hosts (required, see [Configuration](#configuration))
+- `Tmdb__ApiKey` - optional, but without it no item is returned (see [Known limitations](#known-limitations))
+
+The Web image needs `Backend__BaseUrl`, the URL of the backend (for example `http://xtreamforge-apiservice:8080` on a shared Docker network).
+
+Exposure:
+
+- the IPTV devices must reach the backend, which serves the Xtream proxy; the admin API (`/api/admin/...`) is served on the same port without authentication, so expose the backend only to trusted networks, or behind a reverse proxy that blocks `/api/admin/` for untrusted clients
+- behind a reverse proxy (for example to terminate TLS), list it in `ReverseProxy:KnownProxies` or `ReverseProxy:KnownNetworks`: the `X-Forwarded-Proto` and `X-Forwarded-Host` headers it sends then give the scheme, host, and port written to the [authentication response](#authentication-and-stream-urls); the forwarded headers of any other sender are ignored
+- keep the Web UI on a trusted network: it is not authenticated either
 
 ## PostgreSQL notes
 
@@ -141,7 +166,7 @@ Security notes:
 Some clients build the stream URLs from the `server_info` of the authentication response (`{server_protocol}://{url}:{port}/movie/{username}/{password}/{id}.{extension}`), which would bypass XtreamForge. For `player_api.php` without `action` (`GET` only):
 
 - the upstream response is fetched; an error status is forwarded unchanged
-- when `user_info.auth` is `1`, `server_info.url`, `port`, `https_port`, and `server_protocol` are replaced with the host, port, and scheme of the request received by XtreamForge, and the upstream (`protocol` + `host` + `port`) of the account is remembered in memory (`XtreamAccountDirectory`, keyed by username and password, never persisted); the rest of the payload is unchanged
+- when `user_info.auth` is `1`, `server_info.url`, `port`, `https_port`, and `server_protocol` are replaced with the host, port, and scheme of the request received by XtreamForge (taken from `X-Forwarded-Host` and `X-Forwarded-Proto` when sent by a trusted reverse proxy, see [Deployment](#deployment)), and the upstream (`protocol` + `host` + `port`) of the account is remembered in memory (`XtreamAccountDirectory`, keyed by username and password, never persisted); the rest of the payload is unchanged
 - `/movie/{username}/{password}/{file}`, `/series/...`, and `/live/...` (without upstream prefix) are forwarded to the upstream of the account like the prefixed stream route (same destination validation, [watch history](#watch-history) included); an account that has not authenticated since XtreamForge started returns `404 Not Found`
 
 ## Watch history
@@ -176,7 +201,8 @@ When `Recommendations:CategoryName` is set, the recommended movies are exposed t
 - a TMDB ID appears only once in a virtual category: when several streams share it, the first one returned by the provider (after the rules and the TMDB filtering) takes the virtual category, the next ones keep their own category
 - `get_vod_info` / `get_series_info` always return the item in its own category, as they cannot know which stream of a TMDB ID is listed in the virtual category
 - `get_vod_streams` with another category keeps the category of the recommended movies
-- the TMDB IDs of the recommended movies are kept in memory for 6 hours (`TmdbIdCache`) and recomputed when the watch history changes (playback recorded, added, or deleted); when TMDB fails, the catalogue is returned without recommendation and the next request tries again
+- the TMDB IDs of the recommended movies are kept in memory for 6 hours (`TmdbIdCache`) and recomputed when the watch history changes (playback recorded, added, or deleted); once they expire, the other requests get the previous recommendations while one request computes them again
+- when TMDB fails, the previous recommendations (or none, after a watch history change or on the first computation) are returned and kept for 5 minutes before TMDB is called again
 
 ### Popular category
 
@@ -186,7 +212,7 @@ When `Popular:CategoryName` is set, the movies and TV shows currently popular on
 - with all the categories (`get_vod_streams` / `get_series`), a popular item is moved to the popular category, unless it is a recommended movie: the recommendations category wins
 - `get_vod_streams` / `get_series` with the popular `category_id`: the provider is called once with `category_id=ALL` and only the popular items are returned, in the popular category (recommended movies included)
 - as for the recommendations, only the first stream of a TMDB ID is in the popular category, and `get_vod_info` / `get_series_info` keep the item in its own category
-- the popular TMDB IDs are kept in memory for 6 hours per content type (`TmdbIdCache`); without `Tmdb:ApiKey` the category is empty; when TMDB fails, the catalogue is returned without popular item and the next request tries again
+- the popular TMDB IDs are kept in memory for 6 hours per content type (`TmdbIdCache`); once they expire, the other requests get the previous popular items while one request computes them again; without `Tmdb:ApiKey` the category is empty; when TMDB fails, the previous popular items (or none on the first computation) are returned and kept for 5 minutes before TMDB is called again
 
 ## Sources
 
@@ -281,7 +307,7 @@ When no TMDB ID is known and no lookup is deferred for the stream, XtreamForge e
 - the worker calls `get_vod_info` / `get_series_info` on the same upstream source and uses `info.tmdb_id` (and `movie_data.tmdb_id` for VOD) when present
 - otherwise, when `Tmdb:ApiKey` is configured, it searches TMDB and scores the candidates
 - a found TMDB ID is persisted so the item appears on a later request
-- a lookup without result or failing (provider or TMDB error) is persisted as a mapping without TMDB ID (`stream_tmdb_mappings.tmdb_id` is null) with an attempt count and the date of the next lookup; the item is not enqueued again before that date. The delay is 1 day after the first attempt and doubles on each new attempt, up to 30 days
+- a lookup without result or failing (provider or TMDB error) is persisted as a mapping without TMDB ID (`stream_tmdb_mappings.tmdb_id` is null) with an attempt count and the date of the next lookup; the item is not enqueued again before that date. The delay is 1 day after the first attempt and doubles on each new attempt, up to 30 days; after a transient failure (network error, timeout, open circuit, HTTP 408, 429, or 5xx), the next lookup is after 30 minutes and the attempt is not counted
 - a found TMDB ID, from the provider or from the TMDB search, is enqueued for the background load of its TMDB metadata, see below
 
 TMDB matching (`Services/Tmdb`):
@@ -312,7 +338,7 @@ The TMDB metadata of movies and TV shows is stored in `tmdb_infos`, one entry pe
 
 Entries are only filled from the TMDB details (`movie/{id}` / `tv/{id}` with `append_to_response=credits`), loaded in the background by `TmdbInfoService` through the in-memory `TmdbInfoQueue`, deduplicated per `ContentType + TmdbId`. A load is enqueued when a TMDB ID lookup finds a TMDB ID (from the provider or from the TMDB search), and when a returned item needs it (see below). A request for an entry already loaded and not due for a refresh (or waiting for a retry) is ignored.
 
-When an item with a TMDB ID is returned (lists and item details) and its metadata is missing, or due for a refresh or a retry, a background load is enqueued (only when `Tmdb:ApiKey` is configured). An item is returned only once its metadata is loaded: without it, the item is removed from the current response and appears on a later request; while a refresh is pending, the stored metadata is used. Loaded metadata is refreshed after 60 days. When TMDB does not know the ID or the load fails, the next load is deferred by 1 day, doubling on each new attempt up to 30 days; already loaded metadata is kept.
+When an item with a TMDB ID is returned (lists and item details) and its metadata is missing, or due for a refresh or a retry, a background load is enqueued (only when `Tmdb:ApiKey` is configured). An item is returned only once its metadata is loaded: without it, the item is removed from the current response and appears on a later request; while a refresh is pending, the stored metadata is used. Loaded metadata is refreshed after 60 days. When TMDB does not know the ID or the load fails, the next load is deferred by 1 day, doubling on each new attempt up to 30 days; after a transient failure (network error, timeout, open circuit, HTTP 408, 429, or 5xx), it is deferred by 30 minutes and the attempt is not counted. Already loaded metadata is kept.
 
 The provider values and the TMDB metadata are merged: the metadata replaces only the keys already present in the provider item, and only with available values, so a provider value is kept when TMDB has none; when both have a value, the TMDB value wins, except for `genre` (the JSON kind of numeric provider values is kept):
 
@@ -406,8 +432,8 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) restores, builds in Rel
 - items are hidden until their TMDB metadata is loaded, so the first catalogue requests return few items; without `Tmdb:ApiKey`, no metadata is loaded and no item is returned
 - changing `Tmdb:PreferredLanguage` only affects metadata loaded or refreshed afterwards
 - while a provider rate limits (HTTP 429), proxied client requests to it wait for their slot (up to one minute per attempt, three attempts), which can exceed the timeout of some IPTV clients
-- stream URLs without upstream prefix only work once the account has authenticated through XtreamForge since its last start, and use the host, port, and scheme of the request received by XtreamForge (a reverse proxy must forward the original `Host`; forwarded headers such as `X-Forwarded-Proto` are not processed); the short live form `/{username}/{password}/{id}` and `/timeshift/...` are not supported
+- stream URLs without upstream prefix only work once the account has authenticated through XtreamForge since its last start, and use the host, port, and scheme of the request received by XtreamForge (behind a reverse proxy, it must be trusted through the `ReverseProxy` options); the short live form `/{username}/{password}/{id}` and `/timeshift/...` are not supported
 - no admin authentication yet: the admin API is served by the same host and port as the Xtream proxy, so it must not be exposed to untrusted networks
-- only local development through Aspire is supported: the ApiService is not declared as an external endpoint, and no deployment is documented; the Dockerfiles under `src/` build the ApiService and Web images from the repository root (for example `docker build -f src/XtreamForge.ApiService/Dockerfile .`), with the SDK of their base image (`global.json` is excluded from the Docker context)
+- no deployment manifest is provided (Docker Compose, Kubernetes): the images are built and run as described in [Deployment](#deployment)
 
 Known bugs and design issues are tracked in [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md).

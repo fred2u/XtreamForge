@@ -18,12 +18,13 @@ public class CategoryServiceTests : IAsyncDisposable
     private const int Port = 8080;
 
     private readonly XtreamForgeDbContext _dbContext;
+    private readonly SteppingTimeProvider _time = new();
     private readonly CategoryService _service;
 
     public CategoryServiceTests()
     {
         _dbContext = SqliteDbContextFactory.Create();
-        _service = new CategoryService(_dbContext);
+        _service = new CategoryService(_dbContext, _time);
     }
 
     // ─── SyncCategoriesAsync ────────────────────────────────────────────────
@@ -81,7 +82,26 @@ public class CategoryServiceTests : IAsyncDisposable
         var updated = await _dbContext.XtreamCategories.AsNoTracking().SingleAsync(c => c.Id == category.Id, TestContext.Current.CancellationToken);
         Assert.Equal("New name", updated.Name);
         Assert.Null(updated.CustomCategoryId);
+        Assert.Equal(_time.Now, updated.UpdatedAtUtc);
         Assert.Equal([new XtreamCategoryDto(category.Id.ToString(), "New name")], result);
+    }
+
+    [Fact]
+    public async Task SyncCategoriesAsync_DatesTheChangesWithTheTimeProvider()
+    {
+        var source = await AddSourceAsync();
+        var removed = await AddCategoryAsync(source.Id, "1", "Action");
+
+        await _service.SyncCategoriesAsync(
+            CreateContext(RequestAction.GetCategories),
+            [new XtreamCategoryDto("2", "Comedy")],
+            TestContext.Current.CancellationToken);
+
+        var categories = await _dbContext.XtreamCategories.AsNoTracking().ToDictionaryAsync(c => c.XtreamId, TestContext.Current.CancellationToken);
+        Assert.Equal(_time.Now, categories["1"].UpdatedAtUtc);
+        Assert.Equal(removed.Id, categories["1"].Id);
+        Assert.NotEqual(_time.Now, categories["1"].CreatedAtUtc);
+        Assert.Equal((_time.Now, _time.Now), (categories["2"].CreatedAtUtc, categories["2"].UpdatedAtUtc));
     }
 
     [Fact]
@@ -150,7 +170,7 @@ public class CategoryServiceTests : IAsyncDisposable
         });
         await using var dbContext = SqliteDbContextFactory.Create(interceptor);
 
-        var result = await new CategoryService(dbContext).SyncCategoriesAsync(
+        var result = await new CategoryService(dbContext, _time).SyncCategoriesAsync(
             CreateContext(RequestAction.GetCategories),
             [new XtreamCategoryDto("1", "Action")],
             TestContext.Current.CancellationToken);
@@ -179,7 +199,7 @@ public class CategoryServiceTests : IAsyncDisposable
         }
 
         // the category is new when read, then created by a parallel request of the same content type before the save
-        var result = await new CategoryService(dbContext).SyncCategoriesAsync(
+        var result = await new CategoryService(dbContext, _time).SyncCategoriesAsync(
             CreateContext(RequestAction.GetCategories),
             [new XtreamCategoryDto("1", "Action")],
             TestContext.Current.CancellationToken);
@@ -208,19 +228,36 @@ public class CategoryServiceTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task SyncCategoriesAsync_MatchesUpstreamIdsIgnoringCase()
+    public async Task SyncCategoriesAsync_MatchesUpstreamIdsCaseSensitively()
     {
         var source = await AddSourceAsync();
         var category = await AddCategoryAsync(source.Id, "abc", "Action");
 
-        await _service.SyncCategoriesAsync(
+        var result = await _service.SyncCategoriesAsync(
             CreateContext(RequestAction.GetCategories),
             [new XtreamCategoryDto("ABC", "Action")],
             TestContext.Current.CancellationToken);
 
-        var stored = await _dbContext.XtreamCategories.AsNoTracking().SingleAsync(c => c.XtreamSourceId == source.Id, TestContext.Current.CancellationToken);
-        Assert.Equal(category.Id, stored.Id);
-        Assert.True(stored.IsEnabled);
+        // the unique index of the database is case-sensitive: another case is another provider category
+        var stored = await _dbContext.XtreamCategories.AsNoTracking().Where(c => c.XtreamSourceId == source.Id).ToDictionaryAsync(c => c.XtreamId, TestContext.Current.CancellationToken);
+        Assert.False(stored["abc"].IsEnabled);
+        Assert.True(stored["ABC"].IsEnabled);
+        Assert.Equal([new XtreamCategoryDto(stored["ABC"].Id.ToString(), "Action")], result);
+        Assert.NotEqual(category.Id, stored["ABC"].Id);
+    }
+
+    [Fact]
+    public async Task GetXtreamCategoryIdMappingAsync_MapsUpstreamIdsCaseSensitively()
+    {
+        var source = await AddSourceAsync();
+        var lower = await AddCategoryAsync(source.Id, "abc", "Action");
+        var upper = await AddCategoryAsync(source.Id, "ABC", "Comedy");
+
+        var mapping = await _service.GetXtreamCategoryIdMappingAsync(CreateContext(RequestAction.GetItems), CreateSnapshot(source.Id), TestContext.Current.CancellationToken);
+
+        Assert.Equal(lower.Id, mapping["abc"]);
+        Assert.Equal(upper.Id, mapping["ABC"]);
+        Assert.False(mapping.ContainsKey("Abc"));
     }
 
     [Fact]

@@ -19,7 +19,7 @@ public class ItemServiceTests
     private const long TmdbId = 603;
 
     // upstream category 10 is exposed as XtreamForge category 100
-    private static readonly Dictionary<string, int> XtreamCategoryIdMapping = new(StringComparer.OrdinalIgnoreCase) { ["10"] = 100 };
+    private static readonly Dictionary<string, int> XtreamCategoryIdMapping = new(StringComparer.Ordinal) { ["10"] = 100 };
 
     private readonly TmdbIdRetrieverQueue _queue = new();
     private readonly TmdbInfoQueue _tmdbInfoQueue = new();

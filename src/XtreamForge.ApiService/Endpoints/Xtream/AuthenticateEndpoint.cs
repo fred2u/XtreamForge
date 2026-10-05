@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using XtreamForge.ApiService.Xtream;
-using XtreamForge.Domain.Enums;
 
 namespace XtreamForge.ApiService.Endpoints.Xtream;
 

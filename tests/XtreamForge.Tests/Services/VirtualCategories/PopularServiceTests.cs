@@ -40,16 +40,24 @@ public sealed class PopularServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task GetPopularTmdbIds_WhenTmdbFails_ReturnsNothingAndRetriesNextTime()
+    public async Task GetPopularTmdbIds_WhenTmdbFails_ReturnsNothingAndRetriesAfterTheFailureDuration()
     {
         var failing = true;
         var tmdb = new StubTmdbHttpClientFactory(_ => failing ? throw new HttpRequestException("TMDB is down") : """{ "results": [ { "id": 1 } ] }""");
-        var service = tmdb.CreatePopularService(_cache);
+        var time = new SteppingTimeProvider();
+        using var cache = new TmdbIdCache(time);
+        var service = tmdb.CreatePopularService(cache);
 
         Assert.Empty(await service.GetPopularTmdbIdsAsync(ContentType.Vod, TestContext.Current.CancellationToken));
 
         failing = false;
+        var failedRequestCount = tmdb.RequestedUris.Count;
 
+        // TMDB is not called again, nor waited for, before the failure duration
+        Assert.Empty(await service.GetPopularTmdbIdsAsync(ContentType.Vod, TestContext.Current.CancellationToken));
+        Assert.Equal(failedRequestCount, tmdb.RequestedUris.Count);
+
+        time.Now += TmdbIdCache.FailureDuration;
         Assert.Equal([1L], await service.GetPopularTmdbIdsAsync(ContentType.Vod, TestContext.Current.CancellationToken));
     }
 

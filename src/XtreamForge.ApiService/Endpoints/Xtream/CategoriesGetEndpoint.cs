@@ -10,7 +10,7 @@ public class CategoriesGetEndpoint(IHttpClientFactory httpClientFactory, Categor
 {
     public async Task<IResult> GetAsync(XtreamContext xtreamContext, CancellationToken cancellationToken)
     {
-        if (xtreamContext.Action != Domain.Enums.RequestAction.GetCategories)
+        if (xtreamContext.Action != RequestAction.GetCategories)
         {
             return Results.BadRequest("Invalid request action.");
         }

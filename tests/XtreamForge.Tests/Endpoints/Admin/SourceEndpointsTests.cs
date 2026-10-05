@@ -244,7 +244,7 @@ public class SourceEndpointsTests : IAsyncDisposable
 
     private Task<IResult> PostAsync(IHttpClientFactory httpClientFactory, XtreamSourceCreateRequest request)
     {
-        var discoveryService = new XtreamCategoryDiscoveryAdminService(httpClientFactory, new CategoryService(_dbContext), NullLogger<XtreamCategoryDiscoveryAdminService>.Instance);
+        var discoveryService = new XtreamCategoryDiscoveryAdminService(httpClientFactory, new CategoryService(_dbContext, TimeProvider.System), NullLogger<XtreamCategoryDiscoveryAdminService>.Instance);
         var validator = new XtreamProviderValidator(Microsoft.Extensions.Options.Options.Create(new XtreamProxyOptions { AllowedHosts = ["provider.example.com"] }));
 
         return SourceEndpoints.PostAsync(request, _sourceAdminService, discoveryService, validator, TestContext.Current.CancellationToken);

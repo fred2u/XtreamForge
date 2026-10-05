@@ -1,4 +1,4 @@
-namespace XtreamForge.Domain.Enums;
+namespace XtreamForge.ApiService.Services.Admin;
 
 public enum XtreamCategoryPatchResult
 {

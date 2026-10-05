@@ -7,7 +7,11 @@ using XtreamForge.Domain.Enums;
 
 namespace XtreamForge.ApiService.Services.Catalog;
 
-public class CategoryService(XtreamForgeDbContext dbContext)
+/// <summary>
+/// Synchronizes the provider categories and resolves the requested categories. Provider category IDs (<c>xtream_id</c>) are compared
+/// ordinally (case-sensitive) in memory, like the unique index of the database.
+/// </summary>
+public class CategoryService(XtreamForgeDbContext dbContext, TimeProvider timeProvider)
 {
     public async Task<IReadOnlyCollection<XtreamCategoryDto>> SyncCategoriesAsync(XtreamContext xtreamContext, IReadOnlyCollection<XtreamCategoryDto> categories, CancellationToken cancellationToken)
     {
@@ -37,6 +41,7 @@ public class CategoryService(XtreamForgeDbContext dbContext)
 
     private async Task<Domain.Sources.XtreamSource> SyncCategoriesOnceAsync(string protocol, string host, int port, ContentType contentType, IReadOnlyCollection<XtreamCategoryDto> categories, CancellationToken cancellationToken)
     {
+        var now = timeProvider.GetUtcNow();
         var source = await dbContext.XtreamSources
             .Include(s => s.XtreamCategories.Where(c => c.ContentType == contentType))
             .ThenInclude(c => c.CustomCategory)
@@ -55,7 +60,9 @@ public class CategoryService(XtreamForgeDbContext dbContext)
                 {
                     XtreamId = c.CategoryId,
                     Name = c.CategoryName,
-                    ContentType = contentType
+                    ContentType = contentType,
+                    CreatedAtUtc = now,
+                    UpdatedAtUtc = now
                 })]
             };
             dbContext.XtreamSources.Add(source);
@@ -63,7 +70,7 @@ public class CategoryService(XtreamForgeDbContext dbContext)
         else
         {
             // sync categories
-            var existingCategories = source.XtreamCategories.ToDictionary(c => c.XtreamId, StringComparer.OrdinalIgnoreCase);
+            var existingCategories = source.XtreamCategories.ToDictionary(c => c.XtreamId, StringComparer.Ordinal);
             foreach (var categoryDto in categories)
             {
                 if (existingCategories.TryGetValue(categoryDto.CategoryId, out var existingCategory))
@@ -73,7 +80,7 @@ public class CategoryService(XtreamForgeDbContext dbContext)
                     {
                         existingCategory.Name = categoryDto.CategoryName;
                         existingCategory.IsEnabled = true;
-                        existingCategory.UpdatedAtUtc = DateTimeOffset.UtcNow;
+                        existingCategory.UpdatedAtUtc = now;
 
                         // intentionally reset the custom mapping when the upstream category is renamed or re-enabled:
                         // its content may have changed, so the admin must confirm the mapping again
@@ -88,14 +95,16 @@ public class CategoryService(XtreamForgeDbContext dbContext)
                     {
                         XtreamId = categoryDto.CategoryId,
                         Name = categoryDto.CategoryName,
-                        ContentType = contentType
+                        ContentType = contentType,
+                        CreatedAtUtc = now,
+                        UpdatedAtUtc = now
                     };
                     source.XtreamCategories.Add(newCategory);
                 }
             }
 
             // disable categories that are no longer present in the upstream source
-            var upstreamCategoryIds = categories.Select(c => c.CategoryId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var upstreamCategoryIds = categories.Select(c => c.CategoryId).ToHashSet(StringComparer.Ordinal);
             foreach (var existingCategory in source.XtreamCategories.Where(existingCategory => !upstreamCategoryIds.Contains(existingCategory.XtreamId)))
             {
                 if (existingCategory.IsEnabled)
@@ -103,7 +112,7 @@ public class CategoryService(XtreamForgeDbContext dbContext)
                     existingCategory.CustomCategoryId = null;
                     existingCategory.CustomCategory = null;
                     existingCategory.IsEnabled = false;
-                    existingCategory.UpdatedAtUtc = DateTimeOffset.UtcNow;
+                    existingCategory.UpdatedAtUtc = now;
                 }
             }
         }
@@ -172,7 +181,7 @@ public class CategoryService(XtreamForgeDbContext dbContext)
 
     private static Dictionary<string, int> BuildXtreamCategoryIdMapping(IEnumerable<Domain.Categories.XtreamCategory> xtreamCategories)
     {
-        var mapping = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var mapping = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var xtreamCategory in xtreamCategories)
         {
             var categoryId = xtreamCategory.CustomCategory is not null ? xtreamCategory.CustomCategory.Id : xtreamCategory.Id;

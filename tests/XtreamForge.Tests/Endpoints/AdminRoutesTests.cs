@@ -133,6 +133,7 @@ public sealed class AdminRoutesTests : IAsyncDisposable
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Tmdb:BaseUrl"] = "https://api.themoviedb.org/3/",
+            ["XtreamProxy:AllowedHosts:0"] = "provider.example.com",
             ["Recommendations:CategoryId"] = "999999999",
             ["Popular:CategoryId"] = "999999998"
         });

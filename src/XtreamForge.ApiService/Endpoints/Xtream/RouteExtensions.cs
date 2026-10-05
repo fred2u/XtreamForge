@@ -1,5 +1,4 @@
 using XtreamForge.ApiService.Xtream;
-using XtreamForge.Domain.Enums;
 using XtreamForge.ServiceDefaults;
 
 namespace XtreamForge.ApiService.Endpoints.Xtream;

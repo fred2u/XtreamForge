@@ -26,7 +26,7 @@ public class ItemsGetEndpoint(
 
     public async Task<IResult> GetAsync(XtreamContext xtreamContext, CancellationToken cancellationToken)
     {
-        if (xtreamContext.Action != Domain.Enums.RequestAction.GetItems)
+        if (xtreamContext.Action != RequestAction.GetItems)
         {
             return Results.BadRequest("Invalid request action.");
         }

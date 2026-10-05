@@ -65,7 +65,7 @@ public class CategoriesGetEndpointTests : IAsyncDisposable
     private CategoriesGetEndpoint CreateEndpoint(string action, RecommendationOptions recommendationOptions, PopularOptions popularOptions)
         => new(
             new StubXtreamHttpClientFactory(new Dictionary<string, (HttpStatusCode, string)> { [action] = (HttpStatusCode.OK, UpstreamCategories) }),
-            new CategoryService(_dbContext),
+            new CategoryService(_dbContext, TimeProvider.System),
             new StubTmdbHttpClientFactory(_ => null).CreateVirtualCategoryService(_dbContext, _cache, recommendationOptions, popularOptions),
             NullLogger<CategoriesGetEndpoint>.Instance);
 

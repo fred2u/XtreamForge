@@ -1,4 +1,4 @@
-namespace XtreamForge.Domain.Enums;
+namespace XtreamForge.ApiService.Xtream;
 
 public enum RequestAction
 {

@@ -11,8 +11,9 @@ namespace XtreamForge.ApiService.Services.TmdbInfos;
 
 /// <summary>
 /// Reads and stores the TMDB metadata used to enrich the Xtream items.
-/// Loaded metadata is refreshed after <see cref="RefreshDelay"/>; a load without result or failing is retried after a delay
-/// doubling from <see cref="FirstRetryDelay"/> up to <see cref="MaximumRetryDelay"/>.
+/// Loaded metadata is refreshed after <see cref="RefreshDelay"/>; a load without result or failing definitively is retried after a delay
+/// doubling from <see cref="FirstRetryDelay"/> up to <see cref="MaximumRetryDelay"/>, a transient failure (TMDB outage, timeout, HTTP 429 or 5xx)
+/// after <see cref="RetryDelay.TransientFailureDelay"/>.
 /// </summary>
 public class TmdbInfoService(XtreamForgeDbContext dbContext, TmdbClient tmdbClient, IOptions<TmdbOptions> options, TimeProvider timeProvider)
     : IQueueProcessor<TmdbInfoRequest>
@@ -74,10 +75,14 @@ public class TmdbInfoService(XtreamForgeDbContext dbContext, TmdbClient tmdbClie
         {
             data = await tmdbClient.GetInfoAsync(request.Type, request.TmdbId, cancellationToken);
         }
-        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
-            // a failing load is deferred like an unknown ID, so that TMDB is not called on every catalogue request; loaded metadata is kept
-            await DeferNextLoadAsync(info, cancellationToken);
+            // a failing load is deferred, so that TMDB is not called on every catalogue request; loaded metadata is kept
+            if (RetryDelay.IsTransient(exception))
+                await DeferNextLoadAfterTransientFailureAsync(info, cancellationToken);
+            else
+                await DeferNextLoadAsync(info, cancellationToken);
+
             throw;
         }
 
@@ -99,6 +104,16 @@ public class TmdbInfoService(XtreamForgeDbContext dbContext, TmdbClient tmdbClie
 
         info.LoadAttemptCount++;
         info.NextLoadAtUtc = now + RetryDelay.Get(info.LoadAttemptCount, FirstRetryDelay, MaximumRetryDelay);
+        info.UpdatedAtUtc = now;
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    // an outage says nothing about the TMDB ID: the attempt is not counted, so that it does not lengthen the next delays
+    private async Task DeferNextLoadAfterTransientFailureAsync(TmdbInfo info, CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+
+        info.NextLoadAtUtc = now + RetryDelay.TransientFailureDelay;
         info.UpdatedAtUtc = now;
         await dbContext.SaveChangesAsync(cancellationToken);
     }

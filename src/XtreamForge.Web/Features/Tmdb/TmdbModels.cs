@@ -166,6 +166,18 @@ public sealed record TmdbMappingFilter(string? Search = null, MappingStateFilter
 {
     public bool IsEmpty => this == new TmdbMappingFilter();
 
+    /// <summary>
+    /// Filter set by a link to the TMDB mappings screen (query parameter <c>state</c>, value is a <see cref="MappingStateFilter"/> name);
+    /// null without the parameter. A link resets the search, and an unknown value shows every mapping.
+    /// </summary>
+    public static TmdbMappingFilter? FromLink(string? state)
+    {
+        if (state is null)
+            return null;
+
+        return new TmdbMappingFilter(State: Enum.TryParse<MappingStateFilter>(state, ignoreCase: true, out var filter) && Enum.IsDefined(filter) ? filter : default);
+    }
+
     /// <summary>Query string of <c>GET /api/admin/sources/{sourceId}/tmdb-mappings</c> for this filter and page.</summary>
     public string ToQueryString(ContentType contentType, int skip, int take)
     {

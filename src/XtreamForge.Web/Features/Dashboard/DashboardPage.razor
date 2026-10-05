@@ -146,8 +146,8 @@ else
         ]),
         new("TMDB", "Stream to TMDB ID mappings and TMDB metadata",
         [
-            new("Known TMDB mappings", status.KnownTmdbMappingCount, new Icons.Regular.Size20.Link(), null),
-            new("Unresolved TMDB lookups", status.UnresolvedTmdbMappingCount, new Icons.Regular.Size20.LinkDismiss(), null),
+            new("Known TMDB mappings", status.KnownTmdbMappingCount, new Icons.Regular.Size20.Link(), "/items/tmdb-mappings?state=Mapped"),
+            new("Unresolved TMDB lookups", status.UnresolvedTmdbMappingCount, new Icons.Regular.Size20.LinkDismiss(), "/items/tmdb-mappings?state=NotMapped"),
             new("TMDB infos", status.TmdbInfoCount, new Icons.Regular.Size20.Video(), "/tmdb/infos"),
             new("Failed TMDB loads", status.NotLoadedTmdbInfoCount, new Icons.Regular.Size20.ErrorCircle(), "/tmdb/infos?load=NotLoaded"),
             new("Manually excluded TMDB infos", status.ManuallyExcludedTmdbInfoCount, new Icons.Regular.Size20.EyeOff(), "/tmdb/infos?manual=Excluded")

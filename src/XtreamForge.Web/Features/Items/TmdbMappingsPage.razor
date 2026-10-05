@@ -253,6 +253,10 @@ else
     [SupplyParameterFromQuery(Name = "type")]
     public string? ContentTypeQuery { get; set; }
 
+    // Filter that can be set by a link (for example from the dashboard); the value is a MappingStateFilter name.
+    [SupplyParameterFromQuery(Name = "state")]
+    public string? StateQuery { get; set; }
+
     private readonly CancellationTokenSource _disposal = new();
     private GridItemsProvider<TmdbMappingDto>? _itemsProvider;
     private FluentDataGrid<TmdbMappingDto>? _grid;
@@ -300,9 +304,10 @@ else
 
         _sourceId = sourceId;
         _contentType = contentType;
-        _filter = ScreenState.MappingFilter;
+        var linkedFilter = TmdbMappingFilter.FromLink(StateQuery);
+        _filter = linkedFilter ?? ScreenState.MappingFilter;
         RememberState();
-        if (SourceIdQuery != sourceId || ParseContentType(ContentTypeQuery) != contentType)
+        if (SourceIdQuery != sourceId || ParseContentType(ContentTypeQuery) != contentType || linkedFilter is not null)
         {
             UpdateQueryString();
         }
@@ -440,7 +445,8 @@ else
         var uri = NavigationManager.GetUriWithQueryParameters(new Dictionary<string, object?>
         {
             ["source"] = _sourceId,
-            ["type"] = _contentType?.ToString()
+            ["type"] = _contentType?.ToString(),
+            ["state"] = null
         });
         NavigationManager.NavigateTo(uri, replace: true);
     }

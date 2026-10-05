@@ -96,6 +96,23 @@ public class TmdbWebTests
     }
 
     [Fact]
+    public void TmdbMappingFilter_FromLink_WithoutStateParameter_ReturnsNull()
+    {
+        Assert.Null(TmdbMappingFilter.FromLink(null));
+    }
+
+    [Theory]
+    [InlineData("Mapped", MappingStateFilter.Mapped)]
+    [InlineData("notmapped", MappingStateFilter.NotMapped)]
+    [InlineData("Unknown", MappingStateFilter.All)]
+    [InlineData("42", MappingStateFilter.All)]
+    [InlineData("", MappingStateFilter.All)]
+    public void TmdbMappingFilter_FromLink_SetsTheStateAndResetsTheSearch(string state, MappingStateFilter expected)
+    {
+        Assert.Equal(new TmdbMappingFilter(State: expected), TmdbMappingFilter.FromLink(state));
+    }
+
+    [Fact]
     public void TmdbMappingDto_LinksToTheTmdbPageOnlyWhenMapped()
     {
         var mapped = new TmdbMappingDto(1, ContentType.Series, "42", 603, 0, null, null, null, null, null);

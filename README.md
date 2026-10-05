@@ -118,7 +118,7 @@ The Web image needs `Backend__BaseUrl`, the URL of the backend (for example `htt
 
 Published images: the `Publish images` workflow (`.github/workflows/publish-images.yml`) builds both images for `linux/amd64` and `linux/arm64` on every push to `main` (or on demand) and pushes them to GitHub Container Registry as `ghcr.io/fred2u/xtreamforge-api` and `ghcr.io/fred2u/xtreamforge-web`, tagged `latest` and with the commit SHA.
 
-Docker Compose: `deploy/synology/docker-compose.yml` runs PostgreSQL, the backend, and the Web UI from those images, with the host ports, the TMDB token, the upstream Xtream host, and the database password read from a `.env` file next to it (template: `deploy/synology/.env.example`; `.env` files are git-ignored). `deploy/synology/README.md` is a step-by-step guide (in French) for Synology Container Manager.
+Docker Compose: `deploy/synology/docker-compose.yml` runs PostgreSQL, the backend, and the Web UI from those images, with the host ports, the TMDB token, the upstream Xtream host, and the database password read from a `.env` file next to it (template: `deploy/synology/.env.example`; `.env` files are git-ignored). `deploy/synology/README.md` is a step-by-step guide for Synology Container Manager.
 
 Exposure:
 

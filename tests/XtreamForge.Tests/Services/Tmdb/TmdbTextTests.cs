@@ -5,13 +5,13 @@ namespace XtreamForge.Tests.Services.Tmdb;
 public class TmdbTextTests
 {
     [Theory]
-    [InlineData("|FR| The Matrix (1999) 4K", "The Matrix")]
-    [InlineData("[VOSTFR] Inception (2010)", "Inception")]
-    [InlineData("Inception 2010", "Inception 2010")]
-    [InlineData("Blade Runner 2049 (2017)", "Blade Runner 2049")]
-    [InlineData("1917 (2019) MULTI", "1917")]
-    [InlineData("Les Évadés - HD", "Les Évadés")]
-    [InlineData("FR ★ Notre planète a ses limites L'alerte de la science - 2021", "Notre planète a ses limites L'alerte de la science")]
+    [InlineData("|FR| The Lattice (1999) 4K", "The Lattice")]
+    [InlineData("[VOSTFR] Somnolence (2010)", "Somnolence")]
+    [InlineData("Somnolence 2010", "Somnolence 2010")]
+    [InlineData("Iron Courier 2049 (2017)", "Iron Courier 2049")]
+    [InlineData("1958 (2019) MULTI", "1958")]
+    [InlineData("Les Égarés - HD", "Les Égarés")]
+    [InlineData("FR ★ Notre océan a ses secrets L'appel des profondeurs - 2021", "Notre océan a ses secrets L'appel des profondeurs")]
     [InlineData("  ", "")]
     [InlineData(null, "")]
     public void CleanTitle_RemovesTagsAndYear(string? rawTitle, string expectedTitle)
@@ -20,35 +20,35 @@ public class TmdbTextTests
     }
 
     [Theory]
-    [InlineData("|FR| Undone 2019 FHD MULTI", "Undone")]
-    [InlineData("|FR| Grey's Anatomy", "Grey's Anatomy")]
-    [InlineData("|FR| The Grand Tour 2016 FHD MULTI", "The Grand Tour")]
-    [InlineData("|FR| Tales from the Loop 2020 HD", "Tales from the Loop")]
-    [InlineData("|FR| BROOKLYN NINE NINE 2013 FHD MULTI", "BROOKLYN NINE NINE")]
-    [InlineData("|FR| Good Doctor (2017) FHD MULTI", "Good Doctor")]
-    [InlineData("|FR| Hanna 2019 FHD MULTI (H.265)", "Hanna")]
-    [InlineData("|FR| Las Vegas 2003 FHD MULTI (H.265)", "Las Vegas")]
-    [InlineData("|FR| La Servante ecarlate (The Handmaid s Tale) 2017 FHD MULTI", "La Servante ecarlate (The Handmaid s Tale)")]
-    [InlineData("|FR| La Roue du Temps (The Wheel of Time) 2021 HD", "La Roue du Temps (The Wheel of Time)")]
-    [InlineData("|FR| Esprits criminels (Criminal Minds) 2005 HD", "Esprits criminels (Criminal Minds)")]
-    [InlineData("|FR| Le retour des Rafter (Back to the Rafters) 2021 HD", "Le retour des Rafter (Back to the Rafters)")]
-    [InlineData("|FR| Les Disciples (The Following) 2013 FHD MULTI (H.265)", "Les Disciples (The Following)")]
-    [InlineData("|FR| Histoires Fantastiques (Amazing Stories) 2020 FHD MULTI", "Histoires Fantastiques (Amazing Stories)")]
-    [InlineData("|FR| Power Book IV Force 2022 HD", "Power Book IV Force")]
-    [InlineData("|FR| MotoGP Unlimited 2022 FHD MULTI", "MotoGP Unlimited")]
-    [InlineData("|FR| Celebrity Hunted Chasse à l'homme 2021 FHD", "Celebrity Hunted Chasse à l'homme")]
-    [InlineData("|FR| LOL Qui rit sort 2021 FHD", "LOL Qui rit sort")]
-    [InlineData("|FR| Vita da Carlo 2021 HD", "Vita da Carlo")]
-    [InlineData("|FR| 9-1-1: Texas (9-1-1 Lone Star) 2020 FHD MULTI", "9-1-1: Texas (9-1-1 Lone Star)")]
-    [InlineData("|FR| On l'appelait Robin des Bois FHD (2026)", "On l'appelait Robin des Bois")]
-    [InlineData("|FR| Évanouis (2025) HEVC", "Évanouis")]
-    [InlineData("|FR| Le Nombre 23 (2007 FHD MULTI", "Le Nombre 23")]
-    [InlineData("|FR|  1992  (2024) SD", "1992")]
-    [InlineData("|FR| Les hommes en chaussures bleues | 1986", "Les hommes en chaussures bleues")]
-    [InlineData("|FR| 1917", "1917")]
-    [InlineData("|FR| 1917 (2020", "1917")]
-    [InlineData("|FR| Blade 2049", "Blade 2049")]
-    [InlineData("|FR| Scary Movie 2", "Scary Movie 2")]
+    [InlineData("|FR| Driftwood 2019 FHD MULTI", "Driftwood")]
+    [InlineData("|FR| Maple's Remedy", "Maple's Remedy")]
+    [InlineData("|FR| The Long Detour 2016 FHD MULTI", "The Long Detour")]
+    [InlineData("|FR| Stories from the Ridge 2020 HD", "Stories from the Ridge")]
+    [InlineData("|FR| HARBOR SEVEN SEVEN 2013 FHD MULTI", "HARBOR SEVEN SEVEN")]
+    [InlineData("|FR| Kind Surgeon (2017) FHD MULTI", "Kind Surgeon")]
+    [InlineData("|FR| Wren 2019 FHD MULTI (H.265)", "Wren")]
+    [InlineData("|FR| Port Solana 2003 FHD MULTI (H.265)", "Port Solana")]
+    [InlineData("|FR| La Gardienne pourpre (The Keeper s Lantern) 2017 FHD MULTI", "La Gardienne pourpre (The Keeper s Lantern)")]
+    [InlineData("|FR| La Rose des Sables (The Rose of Sand) 2021 HD", "La Rose des Sables (The Rose of Sand)")]
+    [InlineData("|FR| Esprits rebelles (Rebel Minds) 2005 HD", "Esprits rebelles (Rebel Minds)")]
+    [InlineData("|FR| Le retour des Morel (Back to the Morels) 2021 HD", "Le retour des Morel (Back to the Morels)")]
+    [InlineData("|FR| Les Guetteurs (The Lookouts) 2013 FHD MULTI (H.265)", "Les Guetteurs (The Lookouts)")]
+    [InlineData("|FR| Contes Insolites (Curious Tales) 2020 FHD MULTI", "Contes Insolites (Curious Tales)")]
+    [InlineData("|FR| Steel Chapter IV Rising 2022 HD", "Steel Chapter IV Rising")]
+    [InlineData("|FR| RallyX Unbound 2022 FHD MULTI", "RallyX Unbound")]
+    [InlineData("|FR| Famous Runaway Traque à l'aveugle 2021 FHD", "Famous Runaway Traque à l'aveugle")]
+    [InlineData("|FR| OMG Qui baille perd 2021 FHD", "OMG Qui baille perd")]
+    [InlineData("|FR| Vita da Pietro 2021 HD", "Vita da Pietro")]
+    [InlineData("|FR| 4-0-4: Nevada (4-0-4 Silver State) 2020 FHD MULTI", "4-0-4: Nevada (4-0-4 Silver State)")]
+    [InlineData("|FR| On l'appelait le Faucon des Bois FHD (2026)", "On l'appelait le Faucon des Bois")]
+    [InlineData("|FR| Évaporés (2025) HEVC", "Évaporés")]
+    [InlineData("|FR| Le Chiffre 41 (2007 FHD MULTI", "Le Chiffre 41")]
+    [InlineData("|FR|  1974  (2024) SD", "1974")]
+    [InlineData("|FR| Les hommes aux valises vertes | 1986", "Les hommes aux valises vertes")]
+    [InlineData("|FR| 1958", "1958")]
+    [InlineData("|FR| 1958 (2020", "1958")]
+    [InlineData("|FR| Iron 2049", "Iron 2049")]
+    [InlineData("|FR| Spooky Tale 2", "Spooky Tale 2")]
     public void CleanTitle_Should_Return_Valid_Title_When_Data_Are_Cleanable(string title, string expected)
     {
         var result = Cleaners.CleanTitle(title);
@@ -83,9 +83,9 @@ public class TmdbTextTests
     [Fact]
     public void CleanTitle_Should_Not_Remove_Valid_Number_In_Title()
     {
-        var title = "|FR| 1992 (2024)";
+        var title = "|FR| 1974 (2024)";
         var result = Cleaners.CleanTitle(title);
-        Assert.Equal("1992", result);
+        Assert.Equal("1974", result);
     }
 
     [Fact]
@@ -99,17 +99,17 @@ public class TmdbTextTests
     [Fact]
     public void CleanTitle_Should_Not_Confuse_Year_And_Title()
     {
-        var title = "|FR| Police 2020";
+        var title = "|FR| Patrol 2020";
         var result = Cleaners.CleanTitle(title);
-        Assert.Equal("Police 2020", result);
+        Assert.Equal("Patrol 2020", result);
     }
 
     [Theory]
-    [InlineData("Les Évadés", "les evades")]
-    [InlineData("Fast & Furious", "fast furious")]
-    [InlineData("Fast and Furious", "fast furious")]
+    [InlineData("Les Égarés", "les egares")]
+    [InlineData("Swift & Daring", "swift daring")]
+    [InlineData("Swift and Daring", "swift daring")]
     [InlineData("Sci-Fi & Fantasy", "sci fi fantasy")]
-    [InlineData("  Spider-Man:  Far From Home ", "spider man far from home")]
+    [InlineData("  Moth-Girl:  Far From Shore ", "moth girl far from shore")]
     [InlineData(null, "")]
     public void Normalize_MakesTextsComparable(string? value, string expected)
     {
@@ -117,8 +117,8 @@ public class TmdbTextTests
     }
 
     [Theory]
-    [InlineData("matrix", "matrix", 1)]
-    [InlineData("matrix", "", 0)]
+    [InlineData("lattice", "lattice", 1)]
+    [InlineData("lattice", "", 0)]
     [InlineData("abcd", "abce", 0.75)]
     public void Similarity_IsBetweenZeroAndOne(string first, string second, double expected)
     {

@@ -64,14 +64,14 @@ public class WatchHistoryAdminServiceTests : IAsyncDisposable
     [Fact]
     public async Task AddAsync_RecordsAPlaybackOfTheTmdbInfoStartedNow()
     {
-        var info = new TmdbInfo { ContentType = ContentType.Vod, TmdbId = 603, Title = "The Matrix", PosterPath = "/matrix.jpg" };
+        var info = new TmdbInfo { ContentType = ContentType.Vod, TmdbId = 603, Title = "The Lattice", PosterPath = "/lattice.jpg" };
         _dbContext.TmdbInfos.Add(info);
         await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var item = await _service.AddAsync(info.Id, TestContext.Current.CancellationToken);
 
         Assert.NotNull(item);
-        Assert.Equal((ContentType.Vod, 603L, _time.Now, "The Matrix", "/matrix.jpg"), (item.ContentType, item.TmdbId, item.StartedAtUtc, item.Title, item.PosterPath));
+        Assert.Equal((ContentType.Vod, 603L, _time.Now, "The Lattice", "/lattice.jpg"), (item.ContentType, item.TmdbId, item.StartedAtUtc, item.Title, item.PosterPath));
         var entry = Assert.Single(_dbContext.WatchHistory);
         Assert.Equal((item.Id, ContentType.Vod, 603L, _time.Now), (entry.Id, entry.ContentType, entry.TmdbId, entry.StartedAtUtc));
     }
@@ -113,10 +113,10 @@ public class WatchHistoryAdminServiceTests : IAsyncDisposable
         var page = await _service.GetPageAsync(new WatchHistoryListQuery(), TestContext.Current.CancellationToken);
 
         Assert.Equal(
-            [(603L, Day.AddDays(2), "The Matrix"), (604L, Day.AddDays(1), null), (603L, Day, "The Matrix")],
+            [(603L, Day.AddDays(2), "The Lattice"), (604L, Day.AddDays(1), null), (603L, Day, "The Lattice")],
             page.Items.Select(item => (item.TmdbId, item.StartedAtUtc, item.Title)));
         Assert.Equal(3, page.MatchingCount);
-        Assert.Equal(("/matrix.jpg", new DateOnly(1999, 3, 31)), (page.Items[0].PosterPath, page.Items[0].ReleaseDate));
+        Assert.Equal(("/lattice.jpg", new DateOnly(1999, 3, 31)), (page.Items[0].PosterPath, page.Items[0].ReleaseDate));
         Assert.Empty(_dbContext.ChangeTracker.Entries());
     }
 
@@ -161,9 +161,9 @@ public class WatchHistoryAdminServiceTests : IAsyncDisposable
         {
             ContentType = ContentType.Vod,
             TmdbId = 603,
-            Title = "The Matrix",
+            Title = "The Lattice",
             ReleaseDate = new DateOnly(1999, 3, 31),
-            PosterPath = "/matrix.jpg"
+            PosterPath = "/lattice.jpg"
         });
         _dbContext.WatchHistory.AddRange(
             new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 603, StartedAtUtc = Day },

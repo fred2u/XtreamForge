@@ -99,7 +99,7 @@ public class TmdbEndpointsTests : IAsyncDisposable
     [Fact]
     public async Task GetInfos_ReturnsAPageWithPosterUrlsAndDecision()
     {
-        _dbContext.TmdbInfos.Add(new TmdbInfo { TmdbId = 603, ContentType = ContentType.Vod, Title = "Matrix", PosterPath = "/matrix.jpg", IsExcluded = true, NextLoadAtUtc = DateTimeOffset.UtcNow });
+        _dbContext.TmdbInfos.Add(new TmdbInfo { TmdbId = 603, ContentType = ContentType.Vod, Title = "Lattice", PosterPath = "/lattice.jpg", IsExcluded = true, NextLoadAtUtc = DateTimeOffset.UtcNow });
         await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var result = await TmdbInfoEndpoints.GetListAsync(new TmdbInfoListQuery(ContentType.Vod), new TmdbInfoAdminService(_dbContext), TmdbOptions, TestContext.Current.CancellationToken);
@@ -108,7 +108,7 @@ public class TmdbEndpointsTests : IAsyncDisposable
         Assert.NotNull(page);
         var info = Assert.Single(page.Items);
         Assert.Equal(
-            ("https://image.tmdb.org/t/p/w92/matrix.jpg", "https://image.tmdb.org/t/p/w342/matrix.jpg", InclusionDecision.Exclude, (TmdbExclusionReason?)TmdbExclusionReason.ManuallyExcluded),
+            ("https://image.tmdb.org/t/p/w92/lattice.jpg", "https://image.tmdb.org/t/p/w342/lattice.jpg", InclusionDecision.Exclude, (TmdbExclusionReason?)TmdbExclusionReason.ManuallyExcluded),
             (info.PosterThumbnailUrl, info.PosterUrl, info.Decision, info.ExclusionReason));
         Assert.Equal((1, 1, 1), (page.TotalCount, page.ExcludedCount, page.NotLoadedCount));
     }
@@ -124,7 +124,7 @@ public class TmdbEndpointsTests : IAsyncDisposable
     [Fact]
     public async Task GetInfoAndPatchInfo_ReturnDetailsOrNotFound()
     {
-        var stored = new TmdbInfo { TmdbId = 603, ContentType = ContentType.Vod, Title = "Matrix", Overview = "Neo", Directors = ["Lana Wachowski"], DurationMinutes = 136, NextLoadAtUtc = DateTimeOffset.UtcNow };
+        var stored = new TmdbInfo { TmdbId = 603, ContentType = ContentType.Vod, Title = "Lattice", Overview = "Orion", Directors = ["Elena Marsh"], DurationMinutes = 136, NextLoadAtUtc = DateTimeOffset.UtcNow };
         _dbContext.TmdbInfos.Add(stored);
         await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
         _dbContext.ChangeTracker.Clear();
@@ -134,7 +134,7 @@ public class TmdbEndpointsTests : IAsyncDisposable
         var patched = await TmdbInfoEndpoints.PatchAsync(stored.Id, new AdminTmdbInfoPatchRequest(true), service, TestContext.Current.CancellationToken);
 
         Assert.NotNull(details);
-        Assert.Equal(("Neo", "Lana Wachowski", 136), (details.Overview, Assert.Single(details.Directors), details.DurationMinutes));
+        Assert.Equal(("Orion", "Elena Marsh", 136), (details.Overview, Assert.Single(details.Directors), details.DurationMinutes));
         Assert.IsType<NoContent>(patched);
         Assert.IsType<NotFound>(await TmdbInfoEndpoints.GetAsync(999, service, TmdbOptions, TestContext.Current.CancellationToken));
         Assert.IsType<NotFound>(await TmdbInfoEndpoints.PatchAsync(999, new AdminTmdbInfoPatchRequest(true), service, TestContext.Current.CancellationToken));
@@ -154,7 +154,7 @@ public class TmdbEndpointsTests : IAsyncDisposable
         var page = Assert.IsType<Ok<AdminStreamTmdbMappingPageDto>>(result).Value;
         Assert.NotNull(page);
         var item = Assert.Single(page.Items);
-        Assert.Equal(("1", (long?)603, "Matrix", "https://image.tmdb.org/t/p/w92/matrix.jpg"), (item.StreamId, item.TmdbId, item.Title, item.PosterThumbnailUrl));
+        Assert.Equal(("1", (long?)603, "Lattice", "https://image.tmdb.org/t/p/w92/lattice.jpg"), (item.StreamId, item.TmdbId, item.Title, item.PosterThumbnailUrl));
         Assert.Equal((1, 1, 1), (page.MatchingCount, page.TotalCount, page.MappedCount));
     }
 
@@ -200,7 +200,7 @@ public class TmdbEndpointsTests : IAsyncDisposable
         var mapping = new StreamTmdbMapping { ContentType = ContentType.Vod, StreamId = "1", TmdbId = 603 };
         source.StreamTmdbMappings.Add(mapping);
         _dbContext.XtreamSources.Add(source);
-        _dbContext.TmdbInfos.Add(new TmdbInfo { TmdbId = 603, ContentType = ContentType.Vod, Title = "Matrix", PosterPath = "/matrix.jpg", NextLoadAtUtc = DateTimeOffset.UtcNow });
+        _dbContext.TmdbInfos.Add(new TmdbInfo { TmdbId = 603, ContentType = ContentType.Vod, Title = "Lattice", PosterPath = "/lattice.jpg", NextLoadAtUtc = DateTimeOffset.UtcNow });
         await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
         _dbContext.ChangeTracker.Clear();
 

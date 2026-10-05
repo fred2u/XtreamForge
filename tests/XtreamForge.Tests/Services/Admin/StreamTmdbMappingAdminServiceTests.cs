@@ -31,10 +31,10 @@ public class StreamTmdbMappingAdminServiceTests : IAsyncDisposable
 
         Assert.NotNull(page);
         Assert.Equal(
-            [("3", null, null), ("2", 604L, null), ("1", (long?)603L, "The Matrix")],
+            [("3", null, null), ("2", 604L, null), ("1", (long?)603L, "The Lattice")],
             page.Items.Select(item => (item.StreamId, item.TmdbId, item.Title)));
         Assert.Equal((3, 3, 2), (page.MatchingCount, page.TotalCount, page.MappedCount));
-        Assert.Equal(("/matrix.jpg", new DateOnly(1999, 3, 31)), (page.Items[^1].PosterPath, page.Items[^1].ReleaseDate));
+        Assert.Equal(("/lattice.jpg", new DateOnly(1999, 3, 31)), (page.Items[^1].PosterPath, page.Items[^1].ReleaseDate));
         Assert.Empty(_dbContext.ChangeTracker.Entries());
     }
 
@@ -55,8 +55,8 @@ public class StreamTmdbMappingAdminServiceTests : IAsyncDisposable
     [Theory]
     [InlineData("3", new[] { "3" })]
     [InlineData("604", new[] { "2" })]
-    [InlineData(" mATRIX ", new[] { "1" })]
-    [InlineData("matrice", new[] { "1" })]
+    [InlineData(" lATTICE ", new[] { "1" })]
+    [InlineData("treillis", new[] { "1" })]
     [InlineData("60", new string[0])]
     public async Task GetPageAsync_SearchMatchesExactStreamIdExactTmdbIdOrTitles(string search, string[] expectedStreamIds)
     {
@@ -141,7 +141,7 @@ public class StreamTmdbMappingAdminServiceTests : IAsyncDisposable
             new StreamTmdbMapping { XtreamSourceId = source.Id, ContentType = ContentType.Series, StreamId = "4", TmdbId = 603 },
             new StreamTmdbMapping { XtreamSourceId = otherSource.Id, ContentType = ContentType.Vod, StreamId = "5", TmdbId = 603 });
         _dbContext.TmdbInfos.AddRange(
-            new TmdbInfo { TmdbId = 603, ContentType = ContentType.Vod, Title = "The Matrix", OriginalTitle = "Matrice", ReleaseDate = new DateOnly(1999, 3, 31), PosterPath = "/matrix.jpg", NextLoadAtUtc = DateTimeOffset.UtcNow },
+            new TmdbInfo { TmdbId = 603, ContentType = ContentType.Vod, Title = "The Lattice", OriginalTitle = "Treillis", ReleaseDate = new DateOnly(1999, 3, 31), PosterPath = "/lattice.jpg", NextLoadAtUtc = DateTimeOffset.UtcNow },
             // same TMDB ID for another content type: must not be joined to the VOD mappings
             new TmdbInfo { TmdbId = 604, ContentType = ContentType.Series, Title = "A show", NextLoadAtUtc = DateTimeOffset.UtcNow });
         await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);

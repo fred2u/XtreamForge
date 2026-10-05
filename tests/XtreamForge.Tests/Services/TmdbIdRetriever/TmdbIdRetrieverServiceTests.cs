@@ -212,12 +212,12 @@ public class TmdbIdRetrieverServiceTests : IAsyncDisposable
         var source = await CreateSourceAsync();
         var providerFactory = new StubXtreamHttpClientFactory(new Dictionary<string, (HttpStatusCode, string)>
         {
-            ["get_vod_info"] = (HttpStatusCode.OK, TmdbTestData.MatrixProviderInfo)
+            ["get_vod_info"] = (HttpStatusCode.OK, TmdbTestData.LatticeProviderInfo)
         });
         var tmdbFactory = new StubTmdbHttpClientFactory(new Dictionary<string, string>
         {
             ["search/movie"] = """{ "results": [{ "id": 603 }] }""",
-            ["movie/603"] = TmdbTestData.MatrixDetails
+            ["movie/603"] = TmdbTestData.LatticeDetails
         });
         var service = CreateService(providerFactory, tmdbFactory, "token");
 
@@ -245,13 +245,13 @@ public class TmdbIdRetrieverServiceTests : IAsyncDisposable
         var source = await CreateSourceAsync();
         var providerFactory = new StubXtreamHttpClientFactory(new Dictionary<string, (HttpStatusCode, string)>
         {
-            ["get_vod_info"] = (HttpStatusCode.OK, TmdbTestData.MatrixProviderInfo)
+            ["get_vod_info"] = (HttpStatusCode.OK, TmdbTestData.LatticeProviderInfo)
         });
         var tmdbFactory = new StubTmdbHttpClientFactory(new Dictionary<string, string>
         {
-            ["search/movie"] = """{ "results": [{ "id": 603, "title": "Matrix" }, { "id": 604, "title": "Matrix Reloaded" }] }""",
-            ["movie/603"] = TmdbTestData.MatrixDetails,
-            ["movie/604"] = """{ "id": 604, "title": "Matrix Reloaded", "release_date": "2003-05-15" }"""
+            ["search/movie"] = """{ "results": [{ "id": 603, "title": "Lattice" }, { "id": 604, "title": "Lattice Returns" }] }""",
+            ["movie/603"] = TmdbTestData.LatticeDetails,
+            ["movie/604"] = """{ "id": 604, "title": "Lattice Returns", "release_date": "2003-05-15" }"""
         });
         var service = CreateService(providerFactory, tmdbFactory, "token");
 

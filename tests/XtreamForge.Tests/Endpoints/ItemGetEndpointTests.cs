@@ -99,14 +99,14 @@ public class ItemGetEndpointTests : IAsyncDisposable
     public async Task GetAsync_ForVod_EnrichesWithLoadedTmdbInfo()
     {
         await SeedAsync(ContentType.Vod, tmdbId: 603);
-        await AddLoadedTmdbInfoAsync(ContentType.Vod, 603, "Matrix", new DateOnly(1999, 3, 30));
+        await AddLoadedTmdbInfoAsync(ContentType.Vod, 603, "Lattice", new DateOnly(1999, 3, 30));
         var context = CreateContext(ContentType.Vod, "?action=get_vod_info&vod_id=1");
 
         await CreateEndpoint(CreateHttpClientFactory(HttpStatusCode.OK, UpstreamVodInfo)).GetAsync(context, TestContext.Current.CancellationToken);
 
         var payload = ReadResponse(context);
-        Assert.Equal("Matrix | 1999", payload["info"]?["name"]?.GetValue<string>());
-        Assert.Equal("Matrix | 1999", payload["movie_data"]?["name"]?.GetValue<string>());
+        Assert.Equal("Lattice | 1999", payload["info"]?["name"]?.GetValue<string>());
+        Assert.Equal("Lattice | 1999", payload["movie_data"]?["name"]?.GetValue<string>());
     }
 
     [Fact]

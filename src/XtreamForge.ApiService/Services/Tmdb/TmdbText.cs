@@ -9,7 +9,7 @@ public static partial class TmdbText
     [GeneratedRegex(@"[^\p{L}\p{N}]+")]
     private static partial Regex NonAlphanumeric();
 
-    // "and" / "et" are dropped so that "Fast and Furious" and "Fast & Furious" normalize identically
+    // "and" / "et" are dropped so that "Swift and Daring" and "Swift & Daring" normalize identically
     [GeneratedRegex(@"\b(?:et|and)\b")]
     private static partial Regex Conjunction();
 

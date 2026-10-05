@@ -50,7 +50,7 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
     [Fact]
     public async Task Post_ReturnsTheRecordedPlaybackWithThePosterThumbnailUrl()
     {
-        var info = new TmdbInfo { ContentType = ContentType.Vod, TmdbId = 603, Title = "The Matrix", PosterPath = "/matrix.jpg" };
+        var info = new TmdbInfo { ContentType = ContentType.Vod, TmdbId = 603, Title = "The Lattice", PosterPath = "/lattice.jpg" };
         _dbContext.TmdbInfos.Add(info);
         await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
@@ -58,7 +58,7 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
 
         var entry = Assert.IsType<Ok<AdminWatchHistoryEntryDto>>(result).Value;
         Assert.NotNull(entry);
-        Assert.Equal((603L, "https://image.tmdb.org/t/p/w92/matrix.jpg"), (entry.TmdbId, entry.PosterThumbnailUrl));
+        Assert.Equal((603L, "https://image.tmdb.org/t/p/w92/lattice.jpg"), (entry.TmdbId, entry.PosterThumbnailUrl));
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
     public async Task Get_ReturnsThePageWithThePosterThumbnailUrl()
     {
         var startedAtUtc = new DateTimeOffset(2026, 10, 1, 20, 0, 0, TimeSpan.Zero);
-        _dbContext.TmdbInfos.Add(new TmdbInfo { ContentType = ContentType.Vod, TmdbId = 603, Title = "The Matrix", PosterPath = "/matrix.jpg" });
+        _dbContext.TmdbInfos.Add(new TmdbInfo { ContentType = ContentType.Vod, TmdbId = 603, Title = "The Lattice", PosterPath = "/lattice.jpg" });
         _dbContext.WatchHistory.Add(new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 603, StartedAtUtc = startedAtUtc });
         await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
@@ -92,7 +92,7 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
         Assert.NotNull(page);
         var entry = Assert.Single(page.Items);
         Assert.Equal(
-            (603L, ContentType.Vod, startedAtUtc, "The Matrix", "https://image.tmdb.org/t/p/w92/matrix.jpg"),
+            (603L, ContentType.Vod, startedAtUtc, "The Lattice", "https://image.tmdb.org/t/p/w92/lattice.jpg"),
             (entry.TmdbId, entry.ContentType, entry.StartedAtUtc, entry.Title, entry.PosterThumbnailUrl));
         Assert.Equal(1, page.MatchingCount);
     }

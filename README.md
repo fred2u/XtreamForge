@@ -3,6 +3,8 @@
 XtreamForge is an early-stage, self-hosted .NET application that sits in front of an Xtream-compatible API and acts as a transformation and enrichment layer.
 
 > XtreamForge is an independent project and is not affiliated with Xtream Codes or TMDB.
+>
+> XtreamForge does not provide any content and must only be used with services and content you are legally entitled to access. See [Disclaimer](#disclaimer).
 
 ## Current status
 
@@ -443,3 +445,13 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) restores, builds in Rel
 - no deployment manifest is provided (Docker Compose, Kubernetes): the images are built and run as described in [Deployment](#deployment)
 
 Known bugs and design issues are tracked in [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md).
+
+## Disclaimer
+
+XtreamForge is a technical tool that transforms and enriches the responses of an Xtream-compatible API configured by its user. It does not provide, host, index, or distribute any content: no streams, playlists, media, provider addresses, or credentials are supplied with the project.
+
+- XtreamForge must only be used with services, subscriptions, and content you are legally entitled to access, in compliance with the laws of your jurisdiction, the terms of service of your providers, and the [TMDB API terms of use](https://www.themoviedb.org/api-terms-of-use).
+- The authors do not encourage, support, or condone any illegal use, in particular copyright infringement or access to unlicensed content. Any such use is the sole responsibility of the user.
+- The software is provided "as is", without warranty of any kind, and the authors cannot be held liable for any use made of it (see sections 15 and 16 of the [license](LICENSE)).
+- This product uses the TMDB API but is not endorsed or certified by TMDB.
+- The titles and names used in the tests and documentation are fictional; any resemblance to existing works or persons is coincidental.

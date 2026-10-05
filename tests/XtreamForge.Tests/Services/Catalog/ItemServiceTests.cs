@@ -318,16 +318,16 @@ public class ItemServiceTests
     [Fact]
     public void EnrichStreamItem_WhenTmdbInfoIsLoaded_ReplacesOnlyExistingFields()
     {
-        var item = ParseObject("""{ "stream_id": 1, "name": "Matrix (1999)", "year": 1990, "rating": "5", "rating_5based": 2.5, "stream_icon": "http://provider/icon.jpg", "tmdb_id": "603" }""");
+        var item = ParseObject("""{ "stream_id": 1, "name": "Lattice (1999)", "year": 1990, "rating": "5", "rating_5based": 2.5, "stream_icon": "http://provider/icon.jpg", "tmdb_id": "603" }""");
 
         var included = _service.EnrichStreamItem(item, ContentType.Vod, CreateTmdbInfos(CreateLoadedInfo()), CreateSource());
 
         Assert.True(included);
-        Assert.Equal("Matrix | 1999", item["name"]?.GetValue<string>());
+        Assert.Equal("Lattice | 1999", item["name"]?.GetValue<string>());
         Assert.Equal(1999, item["year"]?.GetValue<double>());
         Assert.Equal("8.2", item["rating"]?.GetValue<string>());
         Assert.Equal(4.1, item["rating_5based"]?.GetValue<double>());
-        Assert.Equal("https://image.tmdb.org/t/p/w342/matrix.jpg", item["stream_icon"]?.GetValue<string>());
+        Assert.Equal("https://image.tmdb.org/t/p/w342/lattice.jpg", item["stream_icon"]?.GetValue<string>());
         Assert.False(item.ContainsKey("plot"));
         Assert.False(item.ContainsKey("cover"));
         Assert.Equal(0, _tmdbInfoQueue.Count);
@@ -354,7 +354,7 @@ public class ItemServiceTests
         var included = _service.EnrichStreamItem(item, ContentType.Vod, CreateTmdbInfos(info), CreateSource());
 
         Assert.True(included);
-        Assert.Equal("Matrix | 1999", item["name"]?.GetValue<string>());
+        Assert.Equal("Lattice | 1999", item["name"]?.GetValue<string>());
         Assert.Equal(1, _tmdbInfoQueue.Count);
     }
 
@@ -406,7 +406,7 @@ public class ItemServiceTests
     }
 
     [Theory]
-    [InlineData(TmdbRuleField.Title, RuleOperator.Contains, "Matr")]
+    [InlineData(TmdbRuleField.Title, RuleOperator.Contains, "Latt")]
     [InlineData(TmdbRuleField.Genre, RuleOperator.Contains, "horror")]
     public void EnrichStreamItem_WhenTmdbRuleExcludes_ExcludesItemWithoutEnrichingIt(TmdbRuleField field, RuleOperator @operator, string pattern)
     {
@@ -441,17 +441,17 @@ public class ItemServiceTests
         var included = _service.EnrichInfo(payload, ContentType.Vod, TmdbId, CreateTmdbInfos(CreateLoadedInfo()), CreateSource());
 
         Assert.True(included);
-        Assert.Equal("Matrix | 1999", payload["info"]?["name"]?.GetValue<string>());
-        Assert.Equal("Neo discovers the truth.", payload["info"]?["plot"]?.GetValue<string>());
-        Assert.Equal("https://image.tmdb.org/t/p/w780/matrix.jpg", payload["info"]?["cover_big"]?.GetValue<string>());
+        Assert.Equal("Lattice | 1999", payload["info"]?["name"]?.GetValue<string>());
+        Assert.Equal("Orion discovers the truth.", payload["info"]?["plot"]?.GetValue<string>());
+        Assert.Equal("https://image.tmdb.org/t/p/w780/lattice.jpg", payload["info"]?["cover_big"]?.GetValue<string>());
         Assert.Equal("1999-03-30", payload["info"]?["releasedate"]?.GetValue<string>());
-        Assert.Equal("Matrix | 1999", payload["movie_data"]?["name"]?.GetValue<string>());
+        Assert.Equal("Lattice | 1999", payload["movie_data"]?["name"]?.GetValue<string>());
     }
 
     [Fact]
     public void EnrichInfo_WhenTmdbRuleExcludes_ExcludesItem()
     {
-        var source = CreateSource(tmdbRules: [new TmdbRule { Sequence = 10, Field = TmdbRuleField.Title, Action = RuleAction.Exclude, Operator = RuleOperator.Contains, Pattern = "Matrix" }]);
+        var source = CreateSource(tmdbRules: [new TmdbRule { Sequence = 10, Field = TmdbRuleField.Title, Action = RuleAction.Exclude, Operator = RuleOperator.Contains, Pattern = "Lattice" }]);
         var payload = ParseObject("""{ "seasons": [], "info": { "name": "Show", "tmdb_id": "603" }, "episodes": {} }""");
 
         var included = _service.EnrichInfo(payload, ContentType.Series, TmdbId, CreateTmdbInfos(CreateLoadedInfo(ContentType.Series)), source);
@@ -494,10 +494,10 @@ public class ItemServiceTests
     {
         TmdbId = TmdbId,
         ContentType = contentType,
-        Title = "Matrix",
+        Title = "Lattice",
         ReleaseDate = new DateOnly(1999, 3, 30),
-        PosterPath = "/matrix.jpg",
-        Overview = "Neo discovers the truth.",
+        PosterPath = "/lattice.jpg",
+        Overview = "Orion discovers the truth.",
         VoteAverage = 8.2,
         VoteCount = 26000,
         LoadedAtUtc = _time.Now,

@@ -6,22 +6,22 @@ namespace XtreamForge.Tests.Services.Tmdb;
 
 public class TmdbIdMatcherTests
 {
-    private const string SingleMatrixResult = """{ "results": [{ "id": 603 }] }""";
+    private const string SingleLatticeResult = """{ "results": [{ "id": 603 }] }""";
 
     [Fact]
     public async Task FindTmdbIdAsync_WhenCandidateMatches_ReturnsTmdbIdAndSearchesWithYear()
     {
         var factory = new StubTmdbHttpClientFactory(new Dictionary<string, string>
         {
-            ["search/movie"] = SingleMatrixResult,
-            ["movie/603"] = TmdbTestData.MatrixDetails
+            ["search/movie"] = SingleLatticeResult,
+            ["movie/603"] = TmdbTestData.LatticeDetails
         });
 
-        var tmdbId = await FindAsync(factory, ContentType.Vod, TmdbTestData.MatrixProviderInfo);
+        var tmdbId = await FindAsync(factory, ContentType.Vod, TmdbTestData.LatticeProviderInfo);
 
         Assert.Equal(603, tmdbId);
         Assert.Equal(
-            ["https://tmdb.example.com/3/search/movie?query=The%20Matrix&language=fr-FR&year=1999",
+            ["https://tmdb.example.com/3/search/movie?query=The%20Lattice&language=fr-FR&year=1999",
              "https://tmdb.example.com/3/movie/603?language=fr-FR&append_to_response=credits"],
             factory.RequestedUris.Select(uri => uri.AbsoluteUri));
     }
@@ -32,23 +32,23 @@ public class TmdbIdMatcherTests
         var factory = new StubTmdbHttpClientFactory(uri => StubTmdbHttpClientFactory.GetRelativePath(uri) switch
         {
             "search/movie" when uri.Query.Contains("year=", StringComparison.Ordinal) => """{ "results": [] }""",
-            "search/movie" => SingleMatrixResult,
-            "movie/603" => TmdbTestData.MatrixDetails,
+            "search/movie" => SingleLatticeResult,
+            "movie/603" => TmdbTestData.LatticeDetails,
             _ => null
         });
 
-        var tmdbId = await FindAsync(factory, ContentType.Vod, TmdbTestData.MatrixProviderInfo);
+        var tmdbId = await FindAsync(factory, ContentType.Vod, TmdbTestData.LatticeProviderInfo);
 
         Assert.Equal(603, tmdbId);
-        Assert.Equal("?query=The%20Matrix&language=fr-FR", factory.RequestedUris[1].Query);
+        Assert.Equal("?query=The%20Lattice&language=fr-FR", factory.RequestedUris[1].Query);
     }
 
     [Fact]
     public async Task FindTmdbIdAsync_WhenApiKeyIsMissing_DoesNotCallTmdb()
     {
-        var factory = new StubTmdbHttpClientFactory(_ => SingleMatrixResult);
+        var factory = new StubTmdbHttpClientFactory(_ => SingleLatticeResult);
 
-        var tmdbId = await FindAsync(factory, ContentType.Vod, TmdbTestData.MatrixProviderInfo, apiKey: "");
+        var tmdbId = await FindAsync(factory, ContentType.Vod, TmdbTestData.LatticeProviderInfo, apiKey: "");
 
         Assert.Null(tmdbId);
         Assert.Empty(factory.RequestedUris);
@@ -57,9 +57,9 @@ public class TmdbIdMatcherTests
     [Fact]
     public async Task FindTmdbIdAsync_WhenSourceHasOnlyATitle_IsNotScorable()
     {
-        var factory = new StubTmdbHttpClientFactory(_ => SingleMatrixResult);
+        var factory = new StubTmdbHttpClientFactory(_ => SingleLatticeResult);
 
-        var tmdbId = await FindAsync(factory, ContentType.Vod, """{ "info": {}, "movie_data": { "name": "The Matrix" } }""");
+        var tmdbId = await FindAsync(factory, ContentType.Vod, """{ "info": {}, "movie_data": { "name": "The Lattice" } }""");
 
         Assert.Null(tmdbId);
         Assert.Empty(factory.RequestedUris);
@@ -72,7 +72,7 @@ public class TmdbIdMatcherTests
     {
         var factory = new StubTmdbHttpClientFactory(new Dictionary<string, string> { ["search/movie"] = searchResponse });
 
-        var tmdbId = await FindAsync(factory, ContentType.Vod, TmdbTestData.MatrixProviderInfo);
+        var tmdbId = await FindAsync(factory, ContentType.Vod, TmdbTestData.LatticeProviderInfo);
 
         Assert.Null(tmdbId);
         Assert.DoesNotContain(factory.RequestedUris, uri => uri.AbsolutePath.Contains("/movie/", StringComparison.Ordinal));
@@ -84,11 +84,11 @@ public class TmdbIdMatcherTests
         // same title only: 35 (title) + 5 (cast unknown) + 5 (genres unknown) + 10 (single candidate)
         var factory = new StubTmdbHttpClientFactory(new Dictionary<string, string>
         {
-            ["search/movie"] = SingleMatrixResult,
-            ["movie/603"] = """{ "id": 603, "title": "The Matrix", "original_title": "The Matrix", "release_date": "2010-01-01" }"""
+            ["search/movie"] = SingleLatticeResult,
+            ["movie/603"] = """{ "id": 603, "title": "The Lattice", "original_title": "The Lattice", "release_date": "2010-01-01" }"""
         });
 
-        var tmdbId = await FindAsync(factory, ContentType.Vod, """{ "info": { "releasedate": "1999-03-31" }, "movie_data": { "name": "The Matrix" } }""");
+        var tmdbId = await FindAsync(factory, ContentType.Vod, """{ "info": { "releasedate": "1999-03-31" }, "movie_data": { "name": "The Lattice" } }""");
 
         Assert.Null(tmdbId);
     }
@@ -98,11 +98,11 @@ public class TmdbIdMatcherTests
     {
         var factory = new StubTmdbHttpClientFactory(new Dictionary<string, string>
         {
-            ["search/movie"] = SingleMatrixResult,
-            ["movie/603"] = TmdbTestData.MatrixDetails
+            ["search/movie"] = SingleLatticeResult,
+            ["movie/603"] = TmdbTestData.LatticeDetails
         });
 
-        var tmdbId = await FindAsync(factory, ContentType.Vod, TmdbTestData.MatrixProviderInfo, minimumConfidenceScore: 200);
+        var tmdbId = await FindAsync(factory, ContentType.Vod, TmdbTestData.LatticeProviderInfo, minimumConfidenceScore: 200);
 
         Assert.Null(tmdbId);
     }
@@ -113,11 +113,11 @@ public class TmdbIdMatcherTests
         var factory = new StubTmdbHttpClientFactory(new Dictionary<string, string>
         {
             ["search/movie"] = """{ "results": [{ "id": 1 }, { "id": 603 }] }""",
-            ["movie/1"] = """{ "id": 1, "title": "The Matrix", "original_title": "The Matrix", "release_date": "1999-01-01" }""",
-            ["movie/603"] = TmdbTestData.MatrixDetails
+            ["movie/1"] = """{ "id": 1, "title": "The Lattice", "original_title": "The Lattice", "release_date": "1999-01-01" }""",
+            ["movie/603"] = TmdbTestData.LatticeDetails
         });
 
-        var tmdbId = await FindAsync(factory, ContentType.Vod, TmdbTestData.MatrixProviderInfo);
+        var tmdbId = await FindAsync(factory, ContentType.Vod, TmdbTestData.LatticeProviderInfo);
 
         Assert.Equal(603, tmdbId);
     }
@@ -129,11 +129,11 @@ public class TmdbIdMatcherTests
         {
             ["search/tv"] = """{ "results": [{ "id": 1399 }] }""",
             // 35 (title) + 25 (date) + 5 + 5 + 10 (single candidate) = 80, below 85 without the seasons
-            ["tv/1399"] = """{ "id": 1399, "name": "Game of Thrones", "original_name": "Game of Thrones", "first_air_date": "2011-04-17" }""",
+            ["tv/1399"] = """{ "id": 1399, "name": "Crowns of Ash", "original_name": "Crowns of Ash", "first_air_date": "2011-04-17" }""",
             ["tv/1399/season/1"] = """{ "episodes": [{ "episode_number": 1, "air_date": "2011-04-17" }, { "episode_number": 2, "air_date": "2011-04-24" }] }"""
         });
 
-        var tmdbId = await FindAsync(factory, ContentType.Series, SeriesProviderInfo("Game of Thrones", "2011-04-17"));
+        var tmdbId = await FindAsync(factory, ContentType.Series, SeriesProviderInfo("Crowns of Ash", "2011-04-17"));
 
         Assert.Equal(1399, tmdbId);
         Assert.Contains(factory.RequestedUris, uri => uri.AbsolutePath.EndsWith("/tv/1399/season/1", StringComparison.Ordinal));
@@ -148,7 +148,7 @@ public class TmdbIdMatcherTests
             ["tv/1399"] = """{ "id": 1399, "name": "Something Else", "original_name": "Something Else", "first_air_date": "1990-01-01" }"""
         });
 
-        var tmdbId = await FindAsync(factory, ContentType.Series, SeriesProviderInfo("Game of Thrones", "2011-04-17"));
+        var tmdbId = await FindAsync(factory, ContentType.Series, SeriesProviderInfo("Crowns of Ash", "2011-04-17"));
 
         Assert.Null(tmdbId);
         Assert.DoesNotContain(factory.RequestedUris, uri => uri.AbsolutePath.Contains("/season/", StringComparison.Ordinal));

@@ -60,8 +60,8 @@ public class DashboardEndpointsTests : IAsyncDisposable
     {
         var now = DateTimeOffset.UtcNow;
         _dbContext.TmdbInfos.AddRange(
-            new TmdbInfo { TmdbId = 603, ContentType = ContentType.Vod, Title = "Matrix", LoadedAtUtc = now, NextLoadAtUtc = now.AddDays(60) },
-            new TmdbInfo { TmdbId = 808, ContentType = ContentType.Vod, Title = "Shrek", IsExcluded = true, LoadedAtUtc = now, NextLoadAtUtc = now.AddDays(60) },
+            new TmdbInfo { TmdbId = 603, ContentType = ContentType.Vod, Title = "Lattice", LoadedAtUtc = now, NextLoadAtUtc = now.AddDays(60) },
+            new TmdbInfo { TmdbId = 808, ContentType = ContentType.Vod, Title = "Mossbeard", IsExcluded = true, LoadedAtUtc = now, NextLoadAtUtc = now.AddDays(60) },
             new TmdbInfo { TmdbId = 1399, ContentType = ContentType.Series, NextLoadAtUtc = now });
         _dbContext.TmdbRules.Add(new TmdbRule { ContentType = ContentType.Vod, Sequence = 10, Pattern = "Horror" });
         await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);

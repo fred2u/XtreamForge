@@ -9,13 +9,13 @@ public class TmdbSourceItemParserTests
     [Fact]
     public void Parse_ForVod_ReadsInfoAndMovieData()
     {
-        var source = Parse(ContentType.Vod, TmdbTestData.MatrixProviderInfo, null);
+        var source = Parse(ContentType.Vod, TmdbTestData.LatticeProviderInfo, null);
 
-        Assert.Equal("|FR| The Matrix (1999) 4K", source.RawTitle);
-        Assert.Equal("The Matrix", source.Title);
-        Assert.Equal("f89U3ADr1oiB1s9GkdPOEpXUk5H", source.PosterId);
+        Assert.Equal("|FR| The Lattice (1999) 4K", source.RawTitle);
+        Assert.Equal("The Lattice", source.Title);
+        Assert.Equal("a3Kq9ZtW7mLx2PbR8vNc5HdYe1J", source.PosterId);
         Assert.Equal(new DateTime(1999, 3, 31, 0, 0, 0, DateTimeKind.Unspecified), source.ReleaseDate);
-        Assert.Equal(["keanu reeves", "laurence fishburne"], source.Cast.Order());
+        Assert.Equal(["aldo ferrant", "desmond varga"], source.Cast.Order());
         Assert.Equal(["action", "science fiction"], source.Genres.Order());
         Assert.True(source.IsScorable);
     }
@@ -23,7 +23,7 @@ public class TmdbSourceItemParserTests
     [Fact]
     public void Parse_ForVod_PrefersStreamIconAsPoster()
     {
-        var source = Parse(ContentType.Vod, TmdbTestData.MatrixProviderInfo, "http://images.example.com/posters/streamicon123.png");
+        var source = Parse(ContentType.Vod, TmdbTestData.LatticeProviderInfo, "http://images.example.com/posters/streamicon123.png");
 
         Assert.Equal("streamicon123", source.PosterId);
     }
@@ -31,7 +31,7 @@ public class TmdbSourceItemParserTests
     [Fact]
     public void Parse_ForVod_WithoutMovieData_IsNotScorable()
     {
-        var source = Parse(ContentType.Vod, """{ "info": { "name": "The Matrix", "releasedate": "1999-03-31" } }""", null);
+        var source = Parse(ContentType.Vod, """{ "info": { "name": "The Lattice", "releasedate": "1999-03-31" } }""", null);
 
         Assert.False(source.IsScorable);
     }
@@ -41,13 +41,13 @@ public class TmdbSourceItemParserTests
     {
         var source = Parse(ContentType.Series, """
             {
-              "info": { "name": "Game of Thrones", "cover": "http://img/abc1234567.jpg", "releaseDate": "2011-04-17", "genre": "Drama / Fantasy" },
+              "info": { "name": "Crowns of Ash", "cover": "http://img/abc1234567.jpg", "releaseDate": "2011-04-17", "genre": "Drama / Fantasy" },
               "seasons": [{ "season_number": "1", "episode_count": 10 }],
               "episodes": { "1": [{ "season": 1, "episode_num": "2", "info": { "air_date": "2011-04-24" } }] }
             }
             """, null);
 
-        Assert.Equal("Game of Thrones", source.Title);
+        Assert.Equal("Crowns of Ash", source.Title);
         Assert.Equal("abc1234567", source.PosterId);
         Assert.Equal(["drama", "fantasy"], source.Genres.Order());
         Assert.Equal([new TmdbSourceSeason(1, 10)], source.Seasons);

@@ -24,7 +24,7 @@ public static partial class Cleaners
     [GeneratedRegex(@"(?:\(\s*|\|\s*)*(?:19|20)\d{2}\s*(?:\)|\|)*")]
     private static partial Regex Year();
 
-    // a trailing year must be delimited ("(2021)", "| 2021", " - 2021") so that titles such as "Blade Runner 2049" are kept
+    // a trailing year must be delimited ("(2021)", "| 2021", " - 2021") so that titles such as "Iron Courier 2049" are kept
     [GeneratedRegex(@"(?:\(\s*|\|\s*|\s[-–]\s*)(?:19|20)\d{2}\s*(?:\)|\|)*")]
     private static partial Regex YearSafe();
 

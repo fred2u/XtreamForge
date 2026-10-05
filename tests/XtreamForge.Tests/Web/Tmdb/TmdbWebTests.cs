@@ -16,10 +16,10 @@ public class TmdbWebTests
     [Fact]
     public void TmdbInfoFilter_SendsEveryFilter()
     {
-        var filter = new TmdbInfoFilter(" Star & Wars ", DecisionFilter.Excluded, ManualExclusionFilter.NotExcluded, LoadStateFilter.Loaded, "Science Fiction");
+        var filter = new TmdbInfoFilter(" Moon & Tides ", DecisionFilter.Excluded, ManualExclusionFilter.NotExcluded, LoadStateFilter.Loaded, "Science Fiction");
 
         Assert.Equal(
-            "contentType=Series&skip=200&take=50&search=Star%20%26%20Wars&genre=Science%20Fiction&decision=Exclude&isExcluded=false&isLoaded=true",
+            "contentType=Series&skip=200&take=50&search=Moon%20%26%20Tides&genre=Science%20Fiction&decision=Exclude&isExcluded=false&isLoaded=true",
             filter.ToQueryString(ContentType.Series, 200, 50));
     }
 
@@ -44,14 +44,14 @@ public class TmdbWebTests
     [Fact]
     public void TmdbInfoFilter_FromLink_WithoutFilterParameter_ReturnsNull()
     {
-        Assert.Null(TmdbInfoFilter.FromLink("Matrix", null, null, null));
+        Assert.Null(TmdbInfoFilter.FromLink("Lattice", null, null, null));
     }
 
     [Fact]
     public void TmdbInfoFilter_FromLink_SetsTheLinkedFiltersAndResetsTheOthers()
     {
         Assert.Equal(new TmdbInfoFilter(null, LoadState: LoadStateFilter.NotLoaded), TmdbInfoFilter.FromLink(null, null, null, "NotLoaded"));
-        Assert.Equal(new TmdbInfoFilter("Shrek", ManualExclusion: ManualExclusionFilter.Excluded), TmdbInfoFilter.FromLink("Shrek", null, "excluded", null));
+        Assert.Equal(new TmdbInfoFilter("Mossbeard", ManualExclusion: ManualExclusionFilter.Excluded), TmdbInfoFilter.FromLink("Mossbeard", null, "excluded", null));
     }
 
     [Theory]
@@ -90,8 +90,8 @@ public class TmdbWebTests
     {
         Assert.Equal("contentType=Vod&skip=0&take=100", new TmdbMappingFilter().ToQueryString(ContentType.Vod, 0, 100));
         Assert.Equal(
-            "contentType=Series&skip=200&take=50&search=Star%20%26%20Wars&isMapped=false",
-            new TmdbMappingFilter(" Star & Wars ", MappingStateFilter.NotMapped).ToQueryString(ContentType.Series, 200, 50));
+            "contentType=Series&skip=200&take=50&search=Moon%20%26%20Tides&isMapped=false",
+            new TmdbMappingFilter(" Moon & Tides ", MappingStateFilter.NotMapped).ToQueryString(ContentType.Series, 200, 50));
         Assert.EndsWith("&isMapped=true", new TmdbMappingFilter(State: MappingStateFilter.Mapped).ToQueryString(ContentType.Vod, 0, 10), StringComparison.Ordinal);
     }
 

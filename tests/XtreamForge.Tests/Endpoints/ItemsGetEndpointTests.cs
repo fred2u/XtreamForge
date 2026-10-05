@@ -284,7 +284,7 @@ public class ItemsGetEndpointTests : IAsyncDisposable
         {
             TmdbId = 101,
             ContentType = ContentType.Vod,
-            Title = "Die Hard",
+            Title = "Steel Siege",
             ReleaseDate = new DateOnly(1988, 7, 15),
             LoadedAtUtc = DateTimeOffset.UtcNow,
             NextLoadAtUtc = DateTimeOffset.UtcNow.AddDays(60)
@@ -295,7 +295,7 @@ public class ItemsGetEndpointTests : IAsyncDisposable
         await CreateEndpoint(CreateHttpClientFactory(HttpStatusCode.OK)).GetAsync(context, TestContext.Current.CancellationToken);
 
         // the other items are returned by a later request, once their TMDB metadata is loaded
-        Assert.Equal(["Die Hard | 1988"], ReadResponseItems(context).Select(item => item["name"]?.GetValue<string>()));
+        Assert.Equal(["Steel Siege | 1988"], ReadResponseItems(context).Select(item => item["name"]?.GetValue<string>()));
         Assert.Equal(2, _tmdbInfoQueue.Count);
     }
 

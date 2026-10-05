@@ -9,7 +9,7 @@ public class RuleEvaluatorTmdbTests
     [Fact]
     public void EvaluateTmdbInfos_WhenNoRuleMatches_IncludesWithoutDecidingRule()
     {
-        var evaluation = Evaluate(CreateInfo(), Rule(10, TmdbRuleField.Title, RuleAction.Exclude, RuleOperator.Contains, "Shrek"));
+        var evaluation = Evaluate(CreateInfo(), Rule(10, TmdbRuleField.Title, RuleAction.Exclude, RuleOperator.Contains, "Mossbeard"));
 
         Assert.Equal((InclusionDecision.Include, (TmdbExclusionReason?)null, (TmdbRule?)null), (evaluation.Decision, evaluation.ExclusionReason, evaluation.DecidingRule));
     }
@@ -20,7 +20,7 @@ public class RuleEvaluatorTmdbTests
         var info = CreateInfo();
         info.IsExcluded = true;
 
-        var evaluation = Evaluate(info, Rule(10, TmdbRuleField.Title, RuleAction.Include, RuleOperator.Contains, "Matrix"));
+        var evaluation = Evaluate(info, Rule(10, TmdbRuleField.Title, RuleAction.Include, RuleOperator.Contains, "Lattice"));
 
         Assert.Equal((InclusionDecision.Exclude, TmdbExclusionReason.ManuallyExcluded), (evaluation.Decision, evaluation.ExclusionReason));
         Assert.Null(evaluation.DecidingRule);
@@ -29,7 +29,7 @@ public class RuleEvaluatorTmdbTests
     [Fact]
     public void EvaluateTmdbInfos_FirstMatchingEnabledRuleBySequenceDecides()
     {
-        var disabled = Rule(1, TmdbRuleField.Title, RuleAction.Exclude, RuleOperator.Contains, "Matrix");
+        var disabled = Rule(1, TmdbRuleField.Title, RuleAction.Exclude, RuleOperator.Contains, "Lattice");
         disabled.IsEnabled = false;
         var include = Rule(20, TmdbRuleField.Title, RuleAction.Include, RuleOperator.StartsWith, "the");
         var exclude = Rule(10, TmdbRuleField.Genre, RuleAction.Exclude, RuleOperator.Contains, "Science");
@@ -42,9 +42,9 @@ public class RuleEvaluatorTmdbTests
     [Fact]
     public void EvaluateTmdbInfos_WhenIncludeRuleMatches_IncludesWithDecidingRule()
     {
-        var include = Rule(10, TmdbRuleField.Title, RuleAction.Include, RuleOperator.Contains, "matrix");
+        var include = Rule(10, TmdbRuleField.Title, RuleAction.Include, RuleOperator.Contains, "lattice");
 
-        var evaluation = Evaluate(CreateInfo(), include, Rule(20, TmdbRuleField.Title, RuleAction.Exclude, RuleOperator.Contains, "Matrix"));
+        var evaluation = Evaluate(CreateInfo(), include, Rule(20, TmdbRuleField.Title, RuleAction.Exclude, RuleOperator.Contains, "Lattice"));
 
         Assert.Equal((InclusionDecision.Include, (TmdbExclusionReason?)null, include), (evaluation.Decision, evaluation.ExclusionReason, evaluation.DecidingRule));
     }
@@ -84,9 +84,9 @@ public class RuleEvaluatorTmdbTests
 
     [Theory]
     [InlineData(RuleOperator.StartsWith, "The", true)]
-    [InlineData(RuleOperator.Contains, "atri", true)]
-    [InlineData(RuleOperator.NotContains, "Matrix", false)]
-    [InlineData(RuleOperator.NotStartsWith, "Matrix", true)]
+    [InlineData(RuleOperator.Contains, "atti", true)]
+    [InlineData(RuleOperator.NotContains, "Lattice", false)]
+    [InlineData(RuleOperator.NotStartsWith, "Lattice", true)]
     public void IsMatch_ForTitle_MatchesTheTmdbTitle(RuleOperator @operator, string pattern, bool expected)
     {
         Assert.Equal(expected, RuleEvaluator.IsMatch(CreateInfo(), Rule(10, TmdbRuleField.Title, RuleAction.Exclude, @operator, pattern)));
@@ -98,8 +98,8 @@ public class RuleEvaluatorTmdbTests
         var info = CreateInfo();
         info.Title = null;
 
-        Assert.False(RuleEvaluator.IsMatch(info, Rule(10, TmdbRuleField.Title, RuleAction.Exclude, RuleOperator.Contains, "Matrix")));
-        Assert.True(RuleEvaluator.IsMatch(info, Rule(10, TmdbRuleField.Title, RuleAction.Exclude, RuleOperator.NotContains, "Matrix")));
+        Assert.False(RuleEvaluator.IsMatch(info, Rule(10, TmdbRuleField.Title, RuleAction.Exclude, RuleOperator.Contains, "Lattice")));
+        Assert.True(RuleEvaluator.IsMatch(info, Rule(10, TmdbRuleField.Title, RuleAction.Exclude, RuleOperator.NotContains, "Lattice")));
     }
 
     private static TmdbRuleEvaluation Evaluate(TmdbInfo info, params TmdbRule[] rules) => Assert.Single(RuleEvaluator.EvaluateTmdbInfos([info], rules));
@@ -108,7 +108,7 @@ public class RuleEvaluatorTmdbTests
     {
         TmdbId = 603,
         ContentType = ContentType.Vod,
-        Title = "The Matrix",
+        Title = "The Lattice",
         Genres = ["Action", "Science Fiction", "Horror"]
     };
 

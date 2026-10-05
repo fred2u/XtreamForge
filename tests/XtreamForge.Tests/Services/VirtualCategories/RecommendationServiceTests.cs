@@ -94,14 +94,14 @@ public class RecommendationServiceTests : IAsyncDisposable
     {
         await WatchAsync(603);
         _responses["movie/603/recommendations"] = """
-            { "results": [ { "id": 604, "title": "Matrix Reloaded", "original_title": "The Matrix Reloaded", "release_date": "2003-05-15", "poster_path": "/reloaded.jpg", "vote_average": 7.1, "vote_count": 1200, "genre_ids": [28, 999999] } ] }
+            { "results": [ { "id": 604, "title": "Lattice Returns", "original_title": "The Lattice Returns", "release_date": "2003-05-15", "poster_path": "/reloaded.jpg", "vote_average": 7.1, "vote_count": 1200, "genre_ids": [28, 999999] } ] }
             """;
 
         var recommendations = await CreateService().GetAsync(TestContext.Current.CancellationToken);
 
         var recommendation = Assert.Single(recommendations);
         Assert.Equal(
-            ("Matrix Reloaded", "The Matrix Reloaded", new DateOnly(2003, 5, 15), "/reloaded.jpg", 7.1, (int?)1200),
+            ("Lattice Returns", "The Lattice Returns", new DateOnly(2003, 5, 15), "/reloaded.jpg", 7.1, (int?)1200),
             (recommendation.Title, recommendation.OriginalTitle, recommendation.ReleaseDate, recommendation.PosterPath, recommendation.VoteAverage, recommendation.VoteCount));
         // unknown genre IDs have no name
         Assert.Equal(["Action"], recommendation.Genres);

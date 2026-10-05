@@ -26,7 +26,7 @@ public class TmdbInfoQueueProcessingTests : IAsyncDisposable
     }
 
     [Theory]
-    [InlineData("""{ "id": 603, "title": "Matrix" }""", QueueItemOutcome.Succeeded)]
+    [InlineData("""{ "id": 603, "title": "Lattice" }""", QueueItemOutcome.Succeeded)]
     [InlineData(null, QueueItemOutcome.NoResult)]
     [InlineData("not json", QueueItemOutcome.Failed)]
     public async Task ExecuteAsync_LoadsQueuedRequestAndReportsTheOutcome(string? tmdbResponse, QueueItemOutcome expectedOutcome)

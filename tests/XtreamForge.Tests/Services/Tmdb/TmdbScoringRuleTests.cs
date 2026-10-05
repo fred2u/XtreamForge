@@ -8,16 +8,16 @@ namespace XtreamForge.Tests.Services.Tmdb;
 public class TmdbScoringRuleTests
 {
     [Theory]
-    [InlineData("The Matrix", "Matrix", "The Matrix", 35)]
-    [InlineData("Matrix The Matrix", "Matrix", "The Matrix", 35)]
-    [InlineData("Fast and Furious", "Fast & Furious", "Fast & Furious", 35)]
-    [InlineData("Les Évadés", "Les Evades", "The Shawshank Redemption", 35)]
-    [InlineData("Les Evades (The Shawshank Redemption)", "Les Évadés", "The Shawshank Redemption", 35)]
-    [InlineData("Les Evades (Rita Hayworth)", "Les Évadés", "The Shawshank Redemption", 30)]
-    [InlineData("Les Evades (Other)", "Something", "Different", 0)]
-    [InlineData("The Lord of the Rings Extended", "The Lord of the Rings", "The Lord of the Rings", 20)]
-    [InlineData("The Matrixx", "The Matrix", "The Matrix", 30)]
-    [InlineData("Alien", "Aliens vs Predator", "Aliens vs Predator", 0)]
+    [InlineData("The Lattice", "Lattice", "The Lattice", 35)]
+    [InlineData("Lattice The Lattice", "Lattice", "The Lattice", 35)]
+    [InlineData("Swift and Daring", "Swift & Daring", "Swift & Daring", 35)]
+    [InlineData("Les Égarés", "Les Egares", "The Lost Wanderers", 35)]
+    [InlineData("Les Egares (The Lost Wanderers)", "Les Égarés", "The Lost Wanderers", 35)]
+    [InlineData("Les Egares (Silent Valley)", "Les Égarés", "The Lost Wanderers", 30)]
+    [InlineData("Les Egares (Other)", "Something", "Different", 0)]
+    [InlineData("The Keeper of the Tides Extended", "The Keeper of the Tides", "The Keeper of the Tides", 20)]
+    [InlineData("The Latticee", "The Lattice", "The Lattice", 30)]
+    [InlineData("Comet", "Comets vs Raiders", "Comets vs Raiders", 0)]
     public async Task TitleScoringRule_ScoresTitleProximity(string sourceTitle, string candidateTitle, string candidateOriginalTitle, int expectedScore)
     {
         var context = CreateContext(new TmdbSourceItem { Title = sourceTitle }, new TmdbCandidate { Title = candidateTitle, OriginalTitle = candidateOriginalTitle });
@@ -26,9 +26,9 @@ public class TmdbScoringRuleTests
     }
 
     [Theory]
-    [InlineData("f89U3ADr1oiB1s9GkdPOEpXUk5H", "/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg", 40)]
-    [InlineData("F89U3ADR1OIB1S9GKDPOEPXUK5H", "/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg", 40)]
-    [InlineData("f89U3ADr1oiB1s9GkdPOEpXUk5H", "/other.jpg", 0)]
+    [InlineData("a3Kq9ZtW7mLx2PbR8vNc5HdYe1J", "/a3Kq9ZtW7mLx2PbR8vNc5HdYe1J.jpg", 40)]
+    [InlineData("A3KQ9ZTW7MLX2PBR8VNC5HDYE1J", "/a3Kq9ZtW7mLx2PbR8vNc5HdYe1J.jpg", 40)]
+    [InlineData("a3Kq9ZtW7mLx2PbR8vNc5HdYe1J", "/other.jpg", 0)]
     [InlineData("cover", "/cover.jpg", 0)]
     [InlineData("", null, 0)]
     public async Task PosterScoringRule_ScoresIdenticalPoster(string sourcePosterId, string? candidatePosterPath, int expectedScore)
@@ -56,11 +56,11 @@ public class TmdbScoringRuleTests
     }
 
     [Theory]
-    [InlineData(new[] { "keanu reeves", "carrie anne moss" }, new[] { "keanu reeves", "carrie anne moss", "laurence fishburne" }, 20)]
-    [InlineData(new[] { "keanu reeves", "unknown actor" }, new[] { "keanu reeves" }, 10)]
-    [InlineData(new[] { "unknown actor" }, new[] { "keanu reeves" }, 0)]
-    [InlineData(new string[0], new[] { "keanu reeves" }, 5)]
-    [InlineData(new[] { "keanu reeves" }, new string[0], 5)]
+    [InlineData(new[] { "aldo ferrant", "mira jane holt" }, new[] { "aldo ferrant", "mira jane holt", "desmond varga" }, 20)]
+    [InlineData(new[] { "aldo ferrant", "unknown actor" }, new[] { "aldo ferrant" }, 10)]
+    [InlineData(new[] { "unknown actor" }, new[] { "aldo ferrant" }, 0)]
+    [InlineData(new string[0], new[] { "aldo ferrant" }, 5)]
+    [InlineData(new[] { "aldo ferrant" }, new string[0], 5)]
     public async Task CastScoringRules_ScoreOverlapWithNeutralWhenUnknown(string[] sourceValues, string[] candidateValues, int expectedScore)
     {
         var context = CreateContext(
@@ -71,11 +71,11 @@ public class TmdbScoringRuleTests
     }
 
     [Theory]
-    [InlineData(new[] { "keanu reeves", "carrie anne moss" }, new[] { "keanu reeves", "carrie anne moss", "laurence fishburne" }, 10)]
-    [InlineData(new[] { "keanu reeves", "unknown actor" }, new[] { "keanu reeves" }, 5)]
-    [InlineData(new[] { "unknown actor" }, new[] { "keanu reeves" }, 0)]
-    [InlineData(new string[0], new[] { "keanu reeves" }, 5)]
-    [InlineData(new[] { "keanu reeves" }, new string[0], 5)]
+    [InlineData(new[] { "aldo ferrant", "mira jane holt" }, new[] { "aldo ferrant", "mira jane holt", "desmond varga" }, 10)]
+    [InlineData(new[] { "aldo ferrant", "unknown actor" }, new[] { "aldo ferrant" }, 5)]
+    [InlineData(new[] { "unknown actor" }, new[] { "aldo ferrant" }, 0)]
+    [InlineData(new string[0], new[] { "aldo ferrant" }, 5)]
+    [InlineData(new[] { "aldo ferrant" }, new string[0], 5)]
     public async Task GenreScoringRules_ScoreOverlapWithNeutralWhenUnknown(string[] sourceValues, string[] candidateValues, int expectedScore)
     {
         var context = CreateContext(

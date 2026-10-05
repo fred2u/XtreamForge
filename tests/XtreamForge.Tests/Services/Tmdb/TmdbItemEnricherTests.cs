@@ -26,24 +26,24 @@ public class TmdbItemEnricherTests
 
         TmdbItemEnricher.Apply(item, CreateInfo(), ImageBaseUrl);
 
-        Assert.Equal("Matrix | 1999", item["name"]?.GetValue<string>());
-        Assert.Equal("Matrix | 1999", item["o_name"]?.GetValue<string>());
-        Assert.Equal("Matrix | 1999", item["title"]?.GetValue<string>());
+        Assert.Equal("Lattice | 1999", item["name"]?.GetValue<string>());
+        Assert.Equal("Lattice | 1999", item["o_name"]?.GetValue<string>());
+        Assert.Equal("Lattice | 1999", item["title"]?.GetValue<string>());
         Assert.Equal("1999", item["year"]?.GetValue<string>());
         Assert.Equal("1999", item["release_date"]?.GetValue<string>());
         Assert.Equal("1999-03-30", item["releasedate"]?.GetValue<string>());
         Assert.Equal("1999-03-30", item["releaseDate"]?.GetValue<string>());
-        Assert.Equal("https://image.tmdb.org/t/p/w342/matrix.jpg", item["stream_icon"]?.GetValue<string>());
-        Assert.Equal("https://image.tmdb.org/t/p/w780/matrix.jpg", item["movie_image"]?.GetValue<string>());
-        Assert.Equal("https://image.tmdb.org/t/p/w780/matrix.jpg", item["cover_big"]?.GetValue<string>());
-        Assert.Equal("https://image.tmdb.org/t/p/w780/matrix.jpg", item["cover"]?.GetValue<string>());
+        Assert.Equal("https://image.tmdb.org/t/p/w342/lattice.jpg", item["stream_icon"]?.GetValue<string>());
+        Assert.Equal("https://image.tmdb.org/t/p/w780/lattice.jpg", item["movie_image"]?.GetValue<string>());
+        Assert.Equal("https://image.tmdb.org/t/p/w780/lattice.jpg", item["cover_big"]?.GetValue<string>());
+        Assert.Equal("https://image.tmdb.org/t/p/w780/lattice.jpg", item["cover"]?.GetValue<string>());
         Assert.Equal(8.2, item["rating"]?.GetValue<double>());
         Assert.Equal("4.1", item["rating_5based"]?.GetValue<string>());
-        Assert.Equal("Neo", item["plot"]?.GetValue<string>());
-        Assert.Equal("Neo", item["description"]?.GetValue<string>());
-        Assert.Equal("Lana Wachowski, Lilly Wachowski", item["director"]?.GetValue<string>());
-        Assert.Equal("Keanu Reeves, Carrie-Anne Moss", item["cast"]?.GetValue<string>());
-        Assert.Equal("Keanu Reeves, Carrie-Anne Moss", item["actors"]?.GetValue<string>());
+        Assert.Equal("Orion", item["plot"]?.GetValue<string>());
+        Assert.Equal("Orion", item["description"]?.GetValue<string>());
+        Assert.Equal("Elena Marsh, Clara Marsh", item["director"]?.GetValue<string>());
+        Assert.Equal("Aldo Ferrant, Mira-Jane Holt", item["cast"]?.GetValue<string>());
+        Assert.Equal("Aldo Ferrant, Mira-Jane Holt", item["actors"]?.GetValue<string>());
         Assert.Equal(8160, item["duration_secs"]?.GetValue<double>());
         Assert.Equal("02:16:00", item["duration"]?.GetValue<string>());
         Assert.Equal("136", item["episode_run_time"]?.GetValue<string>());
@@ -110,7 +110,7 @@ public class TmdbItemEnricherTests
 
         TmdbItemEnricher.Apply(item, info, ImageBaseUrl);
 
-        Assert.Equal("Matrix", item["name"]?.GetValue<string>());
+        Assert.Equal("Lattice", item["name"]?.GetValue<string>());
         Assert.Equal("1990", item["year"]?.GetValue<string>());
     }
 
@@ -140,16 +140,16 @@ public class TmdbItemEnricherTests
     {
         TmdbId = 603,
         ContentType = ContentType.Vod,
-        Title = "Matrix",
+        Title = "Lattice",
         ReleaseDate = new DateOnly(1999, 3, 30),
-        PosterPath = "/matrix.jpg",
-        Overview = "Neo",
+        PosterPath = "/lattice.jpg",
+        Overview = "Orion",
         VoteAverage = 8.2,
         VoteCount = 26000,
         GenreIds = [28, 878],
         Genres = ["Action", "Science Fiction"],
-        Directors = ["Lana Wachowski", "Lilly Wachowski"],
-        Cast = ["Keanu Reeves", "Carrie-Anne Moss"],
+        Directors = ["Elena Marsh", "Clara Marsh"],
+        Cast = ["Aldo Ferrant", "Mira-Jane Holt"],
         DurationMinutes = 136
     };
 

@@ -1,5 +1,5 @@
 using XtreamForge.ApiService.Endpoints.Admin.TmdbInfos.Dto;
-using XtreamForge.ApiService.Services;
+using XtreamForge.ApiService.Services.VirtualCategories;
 using XtreamForge.ApiService.Services.Tmdb;
 
 namespace XtreamForge.ApiService.Endpoints.Admin.Recommendations.Dto;

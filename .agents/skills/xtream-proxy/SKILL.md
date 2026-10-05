@@ -23,7 +23,7 @@ Request path (read all components before modifying any one):
 MapXtreamEndpoints()                    (RouteExtensions.cs: player_api.php, short live, prefixed forward, and account stream routes)
 
 /{protocol}/{host}/{port}/player_api.php → HandlePlayerApiRequestAsync
-  → XtreamContextBuilder.Build()        (validates + assembles XtreamContext)
+  → XtreamContextBuilder.TryBuild()     (validates + assembles XtreamContext, 400 with the validation error otherwise)
   → XtreamProviderValidator             (SSRF/protocol/host/port guard)
   → dispatch on XtreamContext.Action:
       RequestAction.GetCategories       → CategoriesGetEndpoint
@@ -36,12 +36,12 @@ MapXtreamEndpoints()                    (RouteExtensions.cs: player_api.php, sho
                                           its own route only names the credentials route values, which the telemetry redacts)
 
 /{protocol}/{host}/{port}/{**rest}      → ForwardXtreamRequestAsync (streams and any other path)
-  → XtreamContextBuilder.Build()        (same validation)
+  → XtreamContextBuilder.TryBuild()     (same validation)
   → XtreamRequestForwardEndpoint        (transparent; a GET of movie/{user}/{pass}/{id}.{ext} answered 2xx or 3xx is tracked by the singleton WatchHistoryQueue while it streams)
 
 /{movie|series|live}/{username}/{password}/{file} → ForwardAccountStreamAsync (stream URLs built from the rewritten server_info)
   → XtreamAccountDirectory.Find()      (404 when the account has not authenticated since the start)
-  → XtreamContextBuilder.Build()        (same validation, rest = {kind}/{username}/{password}/{file})
+  → XtreamContextBuilder.TryBuild()     (same validation, rest = {kind}/{username}/{password}/{file})
   → XtreamRequestForwardEndpoint
 ```
 
@@ -49,7 +49,9 @@ The literal `player_api.php` route takes precedence over the catch-all route. Ke
 
 `XtreamContext` only carries the request: Protocol, Host, Port, Action, ContentType, Request, and Response. It holds no loaded data: `SourceService.GetSnapshotAsync` returns an `XtreamSourceSnapshot` (source ID, ordered enabled rules, TMDB mappings, deferred TMDB lookups) and `CategoryService.GetXtreamCategoryIdMappingAsync` returns the upstream-to-XtreamForge category mapping; pass them explicitly to the code that needs them.
 
-Supported HTTP methods: GET, HEAD only. `XtreamHttpRequestMessageFactory` therefore forwards no request body and drops content headers.
+Supported HTTP methods: GET, HEAD only. `XtreamHttpForwarder` therefore forwards no request body and drops content headers.
+
+Every upstream Xtream call of the endpoints goes through `XtreamHttpForwarder.SendAsync` (upstream request built from the incoming one, sent with the Xtream HTTP client, response returned once its headers are read); a response forwarded unchanged (transparent forward, or a non-success status of a transformed action) is copied with `XtreamHttpForwarder.WriteResponseAsync`. This single class drops the hop-by-hop headers in both directions.
 
 The proxy routes are excluded from OpenAPI (`ExcludeFromDescription`).
 
@@ -71,8 +73,7 @@ Inspect the relevant:
 - XtreamContext;
 - XtreamContextBuilder;
 - XtreamProviderValidator;
-- XtreamHttpRequestMessageFactory;
-- XtreamHttpResponseMessageWriter;
+- XtreamHttpForwarder;
 - application service;
 - existing tests.
 
@@ -141,13 +142,13 @@ They must not be exposed through:
 - metrics;
 - diagnostic URLs.
 
-Use the existing credential-redaction mechanisms: `XtreamCredentialRedaction` (query parameters and stream path credentials, see `RedactPath`) and the `XtreamHttpClientLogger` of the Xtream HTTP client, which replaces the default `IHttpClientFactory` logging. A new stream path kind carrying credentials must be added to the stream path pattern of `XtreamCredentialRedaction`. Credentials without a recognizable path shape must be route values named `username` / `password`: `RedactServerResponse` redacts them from the server spans once routed, and `XtreamHttpRequestMessageFactory` marks them on the upstream request (`SetPathCredentials`) for the client spans and logs (`RedactRequestUri`). The ASP.NET Core request logs (`Microsoft.AspNetCore.Hosting.Diagnostics`) stay disabled: they and their `RequestPath` log scope write the raw path.
+Use the existing credential-redaction mechanisms: `XtreamCredentialRedaction` (query parameters and stream path credentials, see `RedactPath`) and the `XtreamHttpClientLogger` of the Xtream HTTP client, which replaces the default `IHttpClientFactory` logging. A new stream path kind carrying credentials must be added to the stream path pattern of `XtreamCredentialRedaction`. Credentials without a recognizable path shape must be route values named `username` / `password`: `RedactServerResponse` redacts them from the server spans once routed, and `XtreamHttpForwarder` marks them on the upstream request (`SetPathCredentials`) for the client spans and logs (`RedactRequestUri`). The ASP.NET Core request logs (`Microsoft.AspNetCore.Hosting.Diagnostics`) stay disabled: they and their `RequestPath` log scope write the raw path.
 
 Never persist upstream credentials as source identity unless explicitly designed and security-reviewed.
 
 # Upstream failures
 
-The Xtream endpoints translate upstream failures with `XtreamUpstreamFailure` (`IsUpstreamFailure` as exception filter, then `Handle`): 504 for a timeout, 502 for a network error, an interrupted body (`IOException`), or invalid JSON, and an aborted connection once the response has started. Start a streamed response explicitly (`Response.StartAsync`, with its `Content-Type`) before writing to it. `XtreamHttpResponseMessageWriter` copies the body unchanged and keeps `Content-Length` (null for a chunked or decompressed upstream body).
+The Xtream endpoints translate upstream failures with `XtreamUpstreamFailure` (`IsUpstreamFailure` as exception filter, then `Handle`): 504 for a timeout, 502 for a network error, an interrupted body (`IOException`), or invalid JSON, and an aborted connection once the response has started. Start a streamed response explicitly (`Response.StartAsync`, with its `Content-Type`) before writing to it. `XtreamHttpForwarder.WriteResponseAsync` copies the body unchanged and keeps `Content-Length` (null for a chunked or decompressed upstream body).
 
 # HttpClient
 

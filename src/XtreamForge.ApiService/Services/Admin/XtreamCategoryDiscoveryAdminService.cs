@@ -1,6 +1,7 @@
 using System.Text.Json;
 using XtreamForge.ApiService.Endpoints.Xtream.Dto;
 using XtreamForge.ApiService.Options;
+using XtreamForge.ApiService.Services.Catalog;
 using XtreamForge.Domain.Enums;
 using XtreamForge.Domain.Sources;
 using XtreamForge.ServiceDefaults;

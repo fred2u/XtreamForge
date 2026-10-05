@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using XtreamForge.ApiService.Endpoints.Admin.Sources;
 using XtreamForge.ApiService.Endpoints.Admin.Sources.Dto;
 using XtreamForge.ApiService.Options;
-using XtreamForge.ApiService.Services;
+using XtreamForge.ApiService.Services.Catalog;
 using XtreamForge.ApiService.Services.Admin;
 using XtreamForge.ApiService.Xtream;
 using XtreamForge.Database;

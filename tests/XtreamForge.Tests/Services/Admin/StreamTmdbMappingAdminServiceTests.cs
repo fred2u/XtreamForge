@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using XtreamForge.ApiService.Services;
+using XtreamForge.ApiService.Services.TmdbInfos;
 using XtreamForge.ApiService.Services.Admin;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;

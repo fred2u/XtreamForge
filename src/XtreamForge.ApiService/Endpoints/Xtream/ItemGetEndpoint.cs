@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
-using XtreamForge.ApiService.Options;
-using XtreamForge.ApiService.Services;
+using XtreamForge.ApiService.Services.Catalog;
+using XtreamForge.ApiService.Services.TmdbInfos;
 using XtreamForge.ApiService.Xtream;
 using XtreamForge.Domain.Enums;
 
@@ -44,17 +44,15 @@ public class ItemGetEndpoint(
             var xtreamCategoryIdMapping = await categoryService.GetXtreamCategoryIdMappingAsync(xtreamContext, source, cancellationToken);
             if (xtreamCategoryIdMapping.Count == 0)
             {
-                await XtreamHttpResponseMessageWriter.WriteAsJsonAsync(CreateEmptyInfo(xtreamContext.ContentType), xtreamContext.Response, cancellationToken);
+                await xtreamContext.Response.WriteAsJsonAsync(CreateEmptyInfo(xtreamContext.ContentType), cancellationToken);
                 return Results.Empty;
             }
 
-            using var requestMessage = XtreamHttpRequestMessageFactory.Create(xtreamContext.BuildTargetUri(), xtreamContext.Request);
-            var httpClient = httpClientFactory.CreateClient(XtreamProxyOptions.HttpClientName);
-            using var responseMessage = await httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using var responseMessage = await XtreamHttpForwarder.SendAsync(httpClientFactory, xtreamContext, xtreamContext.BuildTargetUri(), cancellationToken);
 
             if (!responseMessage.IsSuccessStatusCode)
             {
-                await XtreamHttpResponseMessageWriter.WriteResponseAsync(responseMessage, xtreamContext.Response, xtreamContext.Request.Method, cancellationToken);
+                await XtreamHttpForwarder.WriteResponseAsync(responseMessage, xtreamContext.Response, cancellationToken);
                 return Results.Empty;
             }
 
@@ -72,7 +70,7 @@ public class ItemGetEndpoint(
                     transformedPayload = null;
             }
 
-            await XtreamHttpResponseMessageWriter.WriteAsJsonAsync(transformedPayload ?? CreateEmptyInfo(xtreamContext.ContentType), xtreamContext.Response, cancellationToken);
+            await xtreamContext.Response.WriteAsJsonAsync(transformedPayload ?? CreateEmptyInfo(xtreamContext.ContentType), cancellationToken);
 
             return Results.Empty;
         }

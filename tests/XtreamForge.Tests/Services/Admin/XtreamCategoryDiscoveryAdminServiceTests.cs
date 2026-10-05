@@ -1,7 +1,7 @@
 using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-using XtreamForge.ApiService.Services;
+using XtreamForge.ApiService.Services.Catalog;
 using XtreamForge.ApiService.Services.Admin;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;

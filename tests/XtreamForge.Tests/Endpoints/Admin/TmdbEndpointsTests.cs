@@ -8,7 +8,7 @@ using XtreamForge.ApiService.Endpoints.Admin.StreamTmdbMappings.Dto;
 using XtreamForge.ApiService.Endpoints.Admin.TmdbInfos;
 using XtreamForge.ApiService.Endpoints.Admin.TmdbInfos.Dto;
 using XtreamForge.ApiService.Options;
-using XtreamForge.ApiService.Services;
+using XtreamForge.ApiService.Services.TmdbInfos;
 using XtreamForge.ApiService.Services.Admin;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;

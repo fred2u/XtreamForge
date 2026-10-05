@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
-using XtreamForge.ApiService.Options;
 using XtreamForge.ApiService.Xtream;
 using XtreamForge.Domain.Enums;
 
@@ -22,13 +21,11 @@ public class AuthenticateEndpoint(IHttpClientFactory httpClientFactory, XtreamAc
 
         try
         {
-            using var requestMessage = XtreamHttpRequestMessageFactory.Create(xtreamContext.BuildTargetUri(), xtreamContext.Request);
-            var httpClient = httpClientFactory.CreateClient(XtreamProxyOptions.HttpClientName);
-            using var responseMessage = await httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using var responseMessage = await XtreamHttpForwarder.SendAsync(httpClientFactory, xtreamContext, xtreamContext.BuildTargetUri(), cancellationToken);
 
             if (!responseMessage.IsSuccessStatusCode)
             {
-                await XtreamHttpResponseMessageWriter.WriteResponseAsync(responseMessage, xtreamContext.Response, xtreamContext.Request.Method, cancellationToken);
+                await XtreamHttpForwarder.WriteResponseAsync(responseMessage, xtreamContext.Response, cancellationToken);
                 return Results.Empty;
             }
 
@@ -42,7 +39,7 @@ public class AuthenticateEndpoint(IHttpClientFactory httpClientFactory, XtreamAc
                 RewriteServerInfo(authentication, xtreamContext.Request);
             }
 
-            await XtreamHttpResponseMessageWriter.WriteAsJsonAsync(payload, xtreamContext.Response, cancellationToken);
+            await xtreamContext.Response.WriteAsJsonAsync(payload, cancellationToken);
 
             return Results.Empty;
         }

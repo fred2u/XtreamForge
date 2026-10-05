@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Logging.Abstractions;
 using XtreamForge.ApiService.Endpoints.Xtream;
-using XtreamForge.ApiService.Services;
+using XtreamForge.ApiService.Services.WatchHistory;
 using XtreamForge.ApiService.Xtream;
 using XtreamForge.Domain.Enums;
 using XtreamForge.Tests.Infrastructure;

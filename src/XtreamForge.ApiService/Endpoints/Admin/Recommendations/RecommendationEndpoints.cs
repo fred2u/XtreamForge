@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Options;
 using XtreamForge.ApiService.Endpoints.Admin.Recommendations.Dto;
 using XtreamForge.ApiService.Options;
-using XtreamForge.ApiService.Services;
+using XtreamForge.ApiService.Services.VirtualCategories;
 
 namespace XtreamForge.ApiService.Endpoints.Admin.Recommendations;
 

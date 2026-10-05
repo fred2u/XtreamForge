@@ -11,26 +11,27 @@ public class XtreamContextBuilderTests
         Microsoft.Extensions.Options.Options.Create(new XtreamProxyOptions { AllowedHosts = ["provider.example.com"] })));
 
     [Fact]
-    public void Build_WhenProviderIsInvalid_ReturnsInvalidResult()
+    public void TryBuild_WhenProviderIsInvalid_ReturnsTheValidationError()
     {
-        var result = _builder.Build("http", "not-allowed.example.com", 80, "player_api.php", CreateHttpContext());
+        var isBuilt = _builder.TryBuild("http", "not-allowed.example.com", 80, "player_api.php", CreateHttpContext(), out var xtreamContext, out var error);
 
-        Assert.False(result.IsValid);
-        Assert.Null(result.XtreamContext);
-        Assert.False(string.IsNullOrEmpty(result.Error));
+        Assert.False(isBuilt);
+        Assert.Null(xtreamContext);
+        Assert.Equal("Upstream host is not allowed.", error);
     }
 
     [Fact]
-    public void Build_NormalizesProtocolHostAndPath()
+    public void TryBuild_NormalizesProtocolHostAndPath()
     {
-        var result = _builder.Build("HTTP", "Provider.Example.com", 8080, "/player_api.php/", CreateHttpContext());
+        var isBuilt = _builder.TryBuild("HTTP", "Provider.Example.com", 8080, "/player_api.php/", CreateHttpContext(), out var xtreamContext, out var error);
 
-        Assert.True(result.IsValid);
-        Assert.NotNull(result.XtreamContext);
-        Assert.Equal("http", result.XtreamContext.Protocol);
-        Assert.Equal("provider.example.com", result.XtreamContext.Host);
-        Assert.Equal(8080, result.XtreamContext.Port);
-        Assert.Equal(new Uri("http://provider.example.com:8080/player_api.php"), result.XtreamContext.BuildTargetUri());
+        Assert.True(isBuilt);
+        Assert.Null(error);
+        Assert.NotNull(xtreamContext);
+        Assert.Equal("http", xtreamContext.Protocol);
+        Assert.Equal("provider.example.com", xtreamContext.Host);
+        Assert.Equal(8080, xtreamContext.Port);
+        Assert.Equal(new Uri("http://provider.example.com:8080/player_api.php"), xtreamContext.BuildTargetUri());
     }
 
     [Theory]
@@ -44,38 +45,38 @@ public class XtreamContextBuilderTests
     [InlineData("get_live_streams", RequestAction.Undefined, ContentType.Undefined)]
     [InlineData("", RequestAction.Authenticate, ContentType.Undefined)]
     [InlineData(" ", RequestAction.Authenticate, ContentType.Undefined)]
-    public void Build_ClassifiesPlayerApiAction(string action, RequestAction expectedAction, ContentType expectedContentType)
+    public void TryBuild_ClassifiesPlayerApiAction(string action, RequestAction expectedAction, ContentType expectedContentType)
     {
         var httpContext = CreateHttpContext(QueryString.Create("action", action));
 
-        var result = _builder.Build("http", "provider.example.com", 80, "player_api.php", httpContext);
+        _builder.TryBuild("http", "provider.example.com", 80, "player_api.php", httpContext, out var xtreamContext, out _);
 
-        Assert.NotNull(result.XtreamContext);
-        Assert.Equal(expectedAction, result.XtreamContext.Action);
-        Assert.Equal(expectedContentType, result.XtreamContext.ContentType);
+        Assert.NotNull(xtreamContext);
+        Assert.Equal(expectedAction, xtreamContext.Action);
+        Assert.Equal(expectedContentType, xtreamContext.ContentType);
     }
 
     [Fact]
-    public void Build_WithoutAction_ClassifiesTheAuthentication()
+    public void TryBuild_WithoutAction_ClassifiesTheAuthentication()
     {
-        var result = _builder.Build("http", "provider.example.com", 80, "player_api.php", CreateHttpContext(new QueryString("?username=user&password=secret")));
+        _builder.TryBuild("http", "provider.example.com", 80, "player_api.php", CreateHttpContext(new QueryString("?username=user&password=secret")), out var xtreamContext, out _);
 
-        Assert.NotNull(result.XtreamContext);
-        Assert.Equal(RequestAction.Authenticate, result.XtreamContext.Action);
+        Assert.NotNull(xtreamContext);
+        Assert.Equal(RequestAction.Authenticate, xtreamContext.Action);
     }
 
     [Theory]
     [InlineData("xmltv.php")]
     [InlineData("movie/user/pass/1.mp4")]
-    public void Build_WhenPathIsNotPlayerApi_ReturnsUndefinedAction(string rest)
+    public void TryBuild_WhenPathIsNotPlayerApi_ReturnsUndefinedAction(string rest)
     {
         var httpContext = CreateHttpContext(QueryString.Create("action", "get_vod_streams"));
 
-        var result = _builder.Build("http", "provider.example.com", 80, rest, httpContext);
+        _builder.TryBuild("http", "provider.example.com", 80, rest, httpContext, out var xtreamContext, out _);
 
-        Assert.NotNull(result.XtreamContext);
-        Assert.Equal(RequestAction.Undefined, result.XtreamContext.Action);
-        Assert.Equal(ContentType.Undefined, result.XtreamContext.ContentType);
+        Assert.NotNull(xtreamContext);
+        Assert.Equal(RequestAction.Undefined, xtreamContext.Action);
+        Assert.Equal(ContentType.Undefined, xtreamContext.ContentType);
     }
 
     private static DefaultHttpContext CreateHttpContext(QueryString queryString = default)

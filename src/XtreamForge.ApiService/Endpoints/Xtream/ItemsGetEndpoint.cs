@@ -1,7 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using XtreamForge.ApiService.Options;
-using XtreamForge.ApiService.Services;
+using XtreamForge.ApiService.Services.Catalog;
+using XtreamForge.ApiService.Services.TmdbInfos;
+using XtreamForge.ApiService.Services.VirtualCategories;
 using XtreamForge.ApiService.Xtream;
 
 namespace XtreamForge.ApiService.Endpoints.Xtream;
@@ -55,13 +56,12 @@ public class ItemsGetEndpoint(
             // with all the categories, an item is moved to its virtual category; a requested virtual category only lists its items
             var virtualCategories = await virtualCategoryService.GetListAssignmentAsync(xtreamContext, cancellationToken);
 
-            using var requestMessage = XtreamHttpRequestMessageFactory.Create(xtreamContext.BuildTargetUri(new KeyValuePair<string, string>("category_id", upstreamCategoryId)), xtreamContext.Request);
-            var httpClient = httpClientFactory.CreateClient(XtreamProxyOptions.HttpClientName);
-            using var responseMessage = await httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            var targetUri = xtreamContext.BuildTargetUri(new KeyValuePair<string, string>("category_id", upstreamCategoryId));
+            using var responseMessage = await XtreamHttpForwarder.SendAsync(httpClientFactory, xtreamContext, targetUri, cancellationToken);
 
             if (!responseMessage.IsSuccessStatusCode)
             {
-                await XtreamHttpResponseMessageWriter.WriteResponseAsync(responseMessage, xtreamContext.Response, xtreamContext.Request.Method, cancellationToken);
+                await XtreamHttpForwarder.WriteResponseAsync(responseMessage, xtreamContext.Response, cancellationToken);
                 return Results.Empty;
             }
 

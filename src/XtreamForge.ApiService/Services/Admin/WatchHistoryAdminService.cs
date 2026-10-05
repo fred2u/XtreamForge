@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using XtreamForge.ApiService.Services.VirtualCategories;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;
 using XtreamForge.Domain.History;

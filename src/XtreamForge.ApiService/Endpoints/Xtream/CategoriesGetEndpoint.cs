@@ -1,7 +1,7 @@
 using System.Text.Json;
 using XtreamForge.ApiService.Endpoints.Xtream.Dto;
-using XtreamForge.ApiService.Options;
-using XtreamForge.ApiService.Services;
+using XtreamForge.ApiService.Services.Catalog;
+using XtreamForge.ApiService.Services.VirtualCategories;
 using XtreamForge.ApiService.Xtream;
 
 namespace XtreamForge.ApiService.Endpoints.Xtream;
@@ -17,15 +17,11 @@ public class CategoriesGetEndpoint(IHttpClientFactory httpClientFactory, Categor
 
         try
         {
-            using var requestMessage = XtreamHttpRequestMessageFactory.Create(xtreamContext.BuildTargetUri(), xtreamContext.Request);
-
-            var httpClient = httpClientFactory.CreateClient(XtreamProxyOptions.HttpClientName);
-
-            using var responseMessage = await httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using var responseMessage = await XtreamHttpForwarder.SendAsync(httpClientFactory, xtreamContext, xtreamContext.BuildTargetUri(), cancellationToken);
 
             if (!responseMessage.IsSuccessStatusCode)
             {
-                await XtreamHttpResponseMessageWriter.WriteResponseAsync(responseMessage, xtreamContext.Response, xtreamContext.Request.Method, cancellationToken);
+                await XtreamHttpForwarder.WriteResponseAsync(responseMessage, xtreamContext.Response, cancellationToken);
                 return Results.Empty;
             }
 
@@ -37,7 +33,7 @@ public class CategoriesGetEndpoint(IHttpClientFactory httpClientFactory, Categor
             // the virtual categories (recommendations, popular) come first
             IReadOnlyCollection<XtreamCategoryDto> categories = [.. virtualCategoryService.GetCategories(xtreamContext.ContentType), .. syncedCategories];
 
-            await XtreamHttpResponseMessageWriter.WriteAsJsonAsync(categories, xtreamContext.Response, cancellationToken);
+            await xtreamContext.Response.WriteAsJsonAsync(categories, cancellationToken);
 
             return Results.Empty;
         }

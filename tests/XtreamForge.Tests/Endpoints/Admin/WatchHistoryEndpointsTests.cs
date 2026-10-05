@@ -3,7 +3,7 @@ using Microsoft.Extensions.Options;
 using XtreamForge.ApiService.Endpoints.Admin.WatchHistory;
 using XtreamForge.ApiService.Endpoints.Admin.WatchHistory.Dto;
 using XtreamForge.ApiService.Options;
-using XtreamForge.ApiService.Services;
+using XtreamForge.ApiService.Services.VirtualCategories;
 using XtreamForge.ApiService.Services.Admin;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;

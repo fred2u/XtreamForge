@@ -5,14 +5,6 @@ using XtreamForge.ApiService.Options;
 
 namespace XtreamForge.ApiService.Xtream;
 
-public sealed record XtreamProviderValidationResult(string? Error = default)
-{
-    public bool IsValid => Error is null;
-
-    public static XtreamProviderValidationResult Success() => new();
-    public static XtreamProviderValidationResult Invalid(string error) => new(error);
-}
-
 /// <summary>
 /// Upstream destination guard (SSRF). <see cref="Validate"/> checks the request without resolving the host;
 /// <see cref="ConnectAsync"/>, the connect callback of the Xtream HTTP client, checks the addresses actually
@@ -20,21 +12,22 @@ public sealed record XtreamProviderValidationResult(string? Error = default)
 /// </summary>
 public sealed class XtreamProviderValidator(IOptions<XtreamProxyOptions> options)
 {
-    public XtreamProviderValidationResult Validate(string protocol, string host, int port)
+    /// <summary>Returns why the upstream destination is rejected, or null when it is valid.</summary>
+    public string? Validate(string protocol, string host, int port)
     {
         if (!IsSupportedProtocol(protocol))
-            return XtreamProviderValidationResult.Invalid("Invalid protocol. Only http and https are supported.");
+            return "Invalid protocol. Only http and https are supported.";
 
         if (!IsValidHost(host))
-            return XtreamProviderValidationResult.Invalid("Invalid host.");
+            return "Invalid host.";
 
         if (port is < 1 or > 65535)
-            return XtreamProviderValidationResult.Invalid("Port must be between 1 and 65535.");
+            return "Port must be between 1 and 65535.";
 
         if (!IsAllowedHost(host))
-            return XtreamProviderValidationResult.Invalid("Upstream host is not allowed.");
+            return "Upstream host is not allowed.";
 
-        return XtreamProviderValidationResult.Success();
+        return null;
     }
 
     private static bool IsSupportedProtocol(string protocol)

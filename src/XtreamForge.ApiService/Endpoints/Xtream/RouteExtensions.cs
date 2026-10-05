@@ -67,10 +67,9 @@ public static class RouteExtensions
        XtreamRequestForwardEndpoint xtreamRequestForwardEndpoint,
        XtreamContextBuilder contextBuilder)
     {
-        var buildResult = contextBuilder.Build(protocol, host, port, PlayerApiPath, httpContext);
-        if (buildResult.XtreamContext is not { } xtreamContext)
+        if (!contextBuilder.TryBuild(protocol, host, port, PlayerApiPath, httpContext, out var xtreamContext, out var error))
         {
-            return InvalidRequest(buildResult);
+            return TypedResults.BadRequest(error);
         }
 
         return xtreamContext.Action switch
@@ -89,10 +88,9 @@ public static class RouteExtensions
        XtreamRequestForwardEndpoint xtreamRequestForwardEndpoint,
        XtreamContextBuilder contextBuilder)
     {
-        var buildResult = contextBuilder.Build(protocol, host, port, rest, httpContext);
-        if (buildResult.XtreamContext is not { } xtreamContext)
+        if (!contextBuilder.TryBuild(protocol, host, port, rest, httpContext, out var xtreamContext, out var error))
         {
-            return InvalidRequest(buildResult);
+            return TypedResults.BadRequest(error);
         }
 
         return await xtreamRequestForwardEndpoint.ForwardAsync(xtreamContext, httpContext.RequestAborted);
@@ -118,15 +116,11 @@ public static class RouteExtensions
             return TypedResults.NotFound();
         }
 
-        var buildResult = contextBuilder.Build(upstream.Protocol, upstream.Host, upstream.Port, $"{kind}/{username}/{password}/{file}", httpContext);
-        if (buildResult.XtreamContext is not { } xtreamContext)
+        if (!contextBuilder.TryBuild(upstream.Protocol, upstream.Host, upstream.Port, $"{kind}/{username}/{password}/{file}", httpContext, out var xtreamContext, out var error))
         {
-            return InvalidRequest(buildResult);
+            return TypedResults.BadRequest(error);
         }
 
         return await xtreamRequestForwardEndpoint.ForwardAsync(xtreamContext, httpContext.RequestAborted);
     }
-
-    private static IResult InvalidRequest(XtreamContextBuildResult buildResult)
-        => TypedResults.BadRequest(buildResult.Error ?? "Invalid upstream destination.");
 }

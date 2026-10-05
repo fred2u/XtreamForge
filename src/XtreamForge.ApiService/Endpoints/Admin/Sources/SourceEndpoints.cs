@@ -82,13 +82,9 @@ public static class SourceEndpoints
         {
             errors[nameof(XtreamSourceCreateRequest.Url)] = ["Url must be an absolute http or https URL."];
         }
-        else
+        else if (xtreamProviderValidator.Validate(uri.Scheme, uri.Host, uri.Port) is { } error)
         {
-            var providerValidationResult = xtreamProviderValidator.Validate(uri.Scheme, uri.Host, uri.Port);
-            if (providerValidationResult.Error is not null)
-            {
-                errors[nameof(XtreamSourceCreateRequest.Url)] = [providerValidationResult.Error];
-            }
+            errors[nameof(XtreamSourceCreateRequest.Url)] = [error];
         }
 
         if (string.IsNullOrWhiteSpace(request.Username))

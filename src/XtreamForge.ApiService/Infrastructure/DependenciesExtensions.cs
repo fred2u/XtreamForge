@@ -1,5 +1,9 @@
 using XtreamForge.ApiService.Endpoints.Xtream;
-using XtreamForge.ApiService.Services;
+using XtreamForge.ApiService.Services.Catalog;
+using XtreamForge.ApiService.Services.TmdbIdRetriever;
+using XtreamForge.ApiService.Services.TmdbInfos;
+using XtreamForge.ApiService.Services.VirtualCategories;
+using XtreamForge.ApiService.Services.WatchHistory;
 using XtreamForge.ApiService.Services.Admin;
 using XtreamForge.ApiService.Services.Monitoring;
 using XtreamForge.ApiService.Services.Queues;

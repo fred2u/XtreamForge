@@ -20,9 +20,9 @@ public sealed class XtreamProviderValidatorTests : IDisposable
     {
         var validator = CreateValidator(allowedHosts: ["provider.example.com"]);
 
-        var result = validator.Validate(protocol, "provider.example.com", 80);
+        var error = validator.Validate(protocol, "provider.example.com", 80);
 
-        Assert.False(result.IsValid);
+        Assert.NotNull(error);
     }
 
     [Theory]
@@ -32,9 +32,9 @@ public sealed class XtreamProviderValidatorTests : IDisposable
     {
         var validator = CreateValidator(allowedHosts: ["provider.example.com"]);
 
-        var result = validator.Validate(protocol, "provider.example.com", 80);
+        var error = validator.Validate(protocol, "provider.example.com", 80);
 
-        Assert.True(result.IsValid);
+        Assert.Null(error);
     }
 
     [Theory]
@@ -46,9 +46,9 @@ public sealed class XtreamProviderValidatorTests : IDisposable
     {
         var validator = CreateValidator(allowAnyDestination: true);
 
-        var result = validator.Validate("http", host, 80);
+        var error = validator.Validate("http", host, 80);
 
-        Assert.Equal("Invalid host.", result.Error);
+        Assert.Equal("Invalid host.", error);
     }
 
     [Theory]
@@ -59,9 +59,9 @@ public sealed class XtreamProviderValidatorTests : IDisposable
     {
         var validator = CreateValidator(allowedHosts: ["provider.example.com"]);
 
-        var result = validator.Validate("http", "provider.example.com", port);
+        var error = validator.Validate("http", "provider.example.com", port);
 
-        Assert.False(result.IsValid);
+        Assert.NotNull(error);
     }
 
     [Theory]
@@ -71,9 +71,9 @@ public sealed class XtreamProviderValidatorTests : IDisposable
     {
         var validator = CreateValidator(allowedHosts: ["provider.example.com"]);
 
-        var result = validator.Validate("http", "provider.example.com", port);
+        var error = validator.Validate("http", "provider.example.com", port);
 
-        Assert.True(result.IsValid);
+        Assert.Null(error);
     }
 
     [Fact]
@@ -81,9 +81,9 @@ public sealed class XtreamProviderValidatorTests : IDisposable
     {
         var validator = CreateValidator(allowedHosts: ["Provider.Example.com"]);
 
-        var result = validator.Validate("http", "provider.example.com", 80);
+        var error = validator.Validate("http", "provider.example.com", 80);
 
-        Assert.True(result.IsValid);
+        Assert.Null(error);
     }
 
     [Fact]
@@ -91,9 +91,9 @@ public sealed class XtreamProviderValidatorTests : IDisposable
     {
         var validator = CreateValidator(allowedHosts: ["provider.example.com"]);
 
-        var result = validator.Validate("http", "8.8.8.8", 80);
+        var error = validator.Validate("http", "8.8.8.8", 80);
 
-        Assert.False(result.IsValid);
+        Assert.NotNull(error);
     }
 
     [Theory]
@@ -119,9 +119,9 @@ public sealed class XtreamProviderValidatorTests : IDisposable
     {
         var validator = CreateValidator(allowAnyDestination: true);
 
-        var result = validator.Validate("http", host, 80);
+        var error = validator.Validate("http", host, 80);
 
-        Assert.Equal("Upstream host is not allowed.", result.Error);
+        Assert.Equal("Upstream host is not allowed.", error);
     }
 
     [Theory]
@@ -135,9 +135,9 @@ public sealed class XtreamProviderValidatorTests : IDisposable
     {
         var validator = CreateValidator(allowAnyDestination: true);
 
-        var result = validator.Validate("http", host, 80);
+        var error = validator.Validate("http", host, 80);
 
-        Assert.True(result.IsValid);
+        Assert.Null(error);
     }
 
     [Fact]
@@ -145,9 +145,9 @@ public sealed class XtreamProviderValidatorTests : IDisposable
     {
         var validator = CreateValidator(allowedHosts: ["192.168.1.10"]);
 
-        var result = validator.Validate("http", "192.168.1.10", 80);
+        var error = validator.Validate("http", "192.168.1.10", 80);
 
-        Assert.True(result.IsValid);
+        Assert.Null(error);
     }
 
     [Fact]
@@ -155,9 +155,9 @@ public sealed class XtreamProviderValidatorTests : IDisposable
     {
         var validator = CreateValidator(allowAnyDestination: true);
 
-        var result = validator.Validate("http", "localhost", 80);
+        var error = validator.Validate("http", "localhost", 80);
 
-        Assert.True(result.IsValid);
+        Assert.Null(error);
     }
 
     [Theory]

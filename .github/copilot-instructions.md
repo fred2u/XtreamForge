@@ -225,6 +225,8 @@ Before creating a new service:
 3. check whether it is infrastructure-specific;
 4. create a new service only when it provides a meaningful responsibility boundary.
 
+Services are grouped by feature under `Services/<Feature>`: `Catalog` (catalogue requests: `CategoryService`, `ItemService`, `SourceService`, `XtreamSourceSnapshot`), `TmdbIdRetriever`, `TmdbInfos`, and `WatchHistory` (each with its queue, request, and consumer), `VirtualCategories` (virtual categories, recommendations, popular, `TmdbIdCache`), `Tmdb` (TMDB client and matching), `Admin`, `Queues`, and `Monitoring`. Only helpers shared by several features (`RuleEvaluator`, `RetryDelay`) stay at the root of `Services`. Put a new service in the folder of its feature; the tests mirror these folders.
+
 # Xtream Request Pipeline
 
 Xtream-related HTTP processing currently lives under:
@@ -244,6 +246,8 @@ Use dedicated components such as context building, request-message creation, pro
 Do not merge components merely to reduce file count if that makes responsibilities unclear.
 
 Conversely, do not split small cohesive behavior across additional classes without a clear benefit.
+
+Every upstream Xtream call of the endpoints goes through `XtreamHttpForwarder`: `SendAsync` builds the upstream request from the incoming one (no `Host` or hop-by-hop headers, path credentials marked for redaction) and sends it with the Xtream HTTP client; `WriteResponseAsync` copies an upstream response to the client unchanged (status, end-to-end headers, `Content-Length`, body except for HEAD). Do not create request messages or Xtream clients in the endpoints. `XtreamContextBuilder.TryBuild` validates the destination (`XtreamProviderValidator.Validate` returns the error, null when valid) and classifies the request.
 
 # TMDB Enrichment
 
@@ -284,9 +288,9 @@ Movie playbacks are recorded in `WatchHistory` (`Domain/History/WatchHistoryEntr
 - series episodes are not recorded: their stream URL only carries the episode ID, unknown to the `StreamTmdbMapping` keyed by series ID.
 - the admin can delete a playback and add one, started now, from a `TmdbInfo` entry (`WatchHistoryAdminService`).
 
-Recommendations (`Services/RecommendationService`, admin page `/recommendations`) are computed from the TMDB `movie/{id}/recommendations` of the most recently watched movies; a movie of the watch history or manually excluded must never be recommended. Nothing is persisted: the Xtream requests read the recommended TMDB IDs through the singleton `TmdbIdCache` (6 hours, key `RecommendationsKey`), which every watch history change must invalidate.
+Recommendations (`Services/VirtualCategories/RecommendationService`, admin page `/recommendations`) are computed from the TMDB `movie/{id}/recommendations` of the most recently watched movies; a movie of the watch history or manually excluded must never be recommended. Nothing is persisted: the Xtream requests read the recommended TMDB IDs through the singleton `TmdbIdCache` (6 hours, key `RecommendationsKey`), which every watch history change must invalidate.
 
-Virtual categories (`Services/VirtualCategoryService`) are filled from TMDB IDs instead of provider categories: recommendations (VOD only, `RecommendationOptions`) then popular (VOD and series, `PopularOptions`, `PopularService` reading 5 pages of TMDB `movie/popular` / `tv/popular`), in this priority order. They are listed first by `CategoriesGetEndpoint`; for `category_id=ALL` (`ItemsGetEndpoint`) an item is moved to the first virtual category containing it; a requested virtual category calls the provider with `ALL` and lists only its items. A TMDB ID is assigned once per response (`VirtualCategoryAssignment`): the first stream in provider order takes the virtual category, the next ones keep their provider category. `get_*_info` (`ItemGetEndpoint`) never applies the virtual categories, as a single item cannot know whether it is that first stream. Add a virtual category in `VirtualCategoryService`, not in the endpoints.
+Virtual categories (`Services/VirtualCategories/VirtualCategoryService`) are filled from TMDB IDs instead of provider categories: recommendations (VOD only, `RecommendationOptions`) then popular (VOD and series, `PopularOptions`, `PopularService` reading 5 pages of TMDB `movie/popular` / `tv/popular`), in this priority order. They are listed first by `CategoriesGetEndpoint`; for `category_id=ALL` (`ItemsGetEndpoint`) an item is moved to the first virtual category containing it; a requested virtual category calls the provider with `ALL` and lists only its items. A TMDB ID is assigned once per response (`VirtualCategoryAssignment`): the first stream in provider order takes the virtual category, the next ones keep their provider category. `get_*_info` (`ItemGetEndpoint`) never applies the virtual categories, as a single item cannot know whether it is that first stream. Add a virtual category in `VirtualCategoryService`, not in the endpoints.
 
 The authentication (`player_api.php` without action, `RequestAction.Authenticate`) is handled by `AuthenticateEndpoint`: when `user_info.auth` is 1, `server_info` is rewritten to the host, port, and scheme of the incoming request, and the account upstream is remembered in the singleton `XtreamAccountDirectory` (memory only, keyed by credentials). The `/movie|series|live/{username}/{password}/{file}` routes (no upstream prefix) resolve the upstream from it and reuse `XtreamContextBuilder` (destination validation) and `XtreamRequestForwardEndpoint`; like the prefixed stream route, they must not resolve a `DbContext`.
 
@@ -355,7 +359,7 @@ Sensitive information must not appear in:
 Use existing redaction mechanisms:
 
 - `XtreamCredentialRedaction` (ServiceDefaults) redacts the `username` / `password` query parameters and the credentials of the stream paths (`movie|series|live|timeshift/{username}/{password}/...`); it is applied to the server and client spans, and `SanitizeText` must wrap any logged text that may contain an upstream URL;
-- credentials without a recognizable path shape (short live form `{username}/{password}/{streamId}`) are redacted from the `username` / `password` route values (`XtreamCredentialRedaction.UsernameRouteValue` / `PasswordRouteValue`): the server spans are redacted again once routed (`RedactServerResponse`), and `XtreamHttpRequestMessageFactory` marks them on the upstream request (`SetPathCredentials`) for the client spans and `XtreamHttpClientLogger` (`RedactRequestUri`). A new route carrying credentials in its path must name them `username` / `password`;
+- credentials without a recognizable path shape (short live form `{username}/{password}/{streamId}`) are redacted from the `username` / `password` route values (`XtreamCredentialRedaction.UsernameRouteValue` / `PasswordRouteValue`): the server spans are redacted again once routed (`RedactServerResponse`), and `XtreamHttpForwarder` marks them on the upstream request (`SetPathCredentials`) for the client spans and `XtreamHttpClientLogger` (`RedactRequestUri`). A new route carrying credentials in its path must name them `username` / `password`;
 - `Microsoft.AspNetCore.Hosting.Diagnostics` is disabled in `Program.cs` (`LogLevel.None`): its request logs and its log scope (`RequestPath`, exported with every log) write the raw path. Do not re-enable it;
 - the Xtream HTTP client does not use the default `IHttpClientFactory` logging, which writes the request URL: `XtreamHttpClientLogger` logs the redacted URL instead. Do not add loggers that write raw upstream URLs;
 - log caught exceptions with the exception object (SonarAnalyzer rule S6667) and `SanitizeText(exception.Message)`; never put a request URL in an exception message.

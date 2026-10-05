@@ -9,7 +9,9 @@ COPY ["src/XtreamForge.ServiceDefaults/XtreamForge.ServiceDefaults.csproj", "src
 RUN dotnet restore "src/XtreamForge.Web/XtreamForge.Web.csproj"
 
 COPY . .
-RUN dotnet publish "src/XtreamForge.Web/XtreamForge.Web.csproj" -c Release -o /app/publish --no-restore /p:UseAppHost=false
+# restored again now that the sources are present: publishing on the project-only restore above left the framework web assets
+# (_framework/blazor.web.js) out of the image
+RUN dotnet publish "src/XtreamForge.Web/XtreamForge.Web.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app

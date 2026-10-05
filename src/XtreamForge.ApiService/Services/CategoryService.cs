@@ -14,7 +14,7 @@ public class CategoryService(XtreamForgeDbContext dbContext)
         var source = await SyncCategoriesAsync(xtreamContext.Protocol, xtreamContext.Host, xtreamContext.Port, xtreamContext.ContentType, categories, cancellationToken);
 
         // apply category rules
-        var filteredCategories = CategoryRuleService.ApplyRules(source.XtreamCategories, source.CategoryRules);
+        var filteredCategories = RuleEvaluator.ApplyCategoryRules(source.XtreamCategories, source.CategoryRules);
 
         return [.. filteredCategories.Select(c => c.CustomCategory is null ? new XtreamCategoryDto(c.Id.ToString(), c.Name) : new XtreamCategoryDto(c.CustomCategory.Id.ToString(), c.CustomCategory.Name)).Distinct()];
     }
@@ -160,7 +160,7 @@ public class CategoryService(XtreamForgeDbContext dbContext)
         }
 
         // apply category rules
-        var filteredCategories = CategoryRuleService.ApplyRules(xtreamCategories, source.CategoryRules);
+        var filteredCategories = RuleEvaluator.ApplyCategoryRules(xtreamCategories, source.CategoryRules);
 
         return BuildXtreamCategoryIdMapping(filteredCategories);
     }

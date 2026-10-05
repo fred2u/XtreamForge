@@ -206,7 +206,7 @@ Admin endpoints (`Endpoints/Admin`) are static handlers grouped in one `<Resourc
 
 Use endpoint DTOs when the HTTP contract differs from domain or persistence models.
 
-Category, item, and TMDB rules share one admin contract (`Endpoints/Admin/Rules`: `AdminRuleDto`, `AdminRuleRequest` with its validation, `AdminRuleOrderRequest`) and the `Domain/Rules/IRule` interface. The rules defined per source (`ISourceRule`: category and item rules) use the generic `SourceRuleAdminService<TRule>` and `SourceRuleEndpoints`, mapped once per rule type by `MapSourceRules<TRule>` in `RouteExtensions`; the TMDB rules (no source, a `Field`) keep `TmdbRuleAdminService` and `TmdbRuleEndpoints`. Values and renumbering are shared (`RuleValues`, `RuleSequences`). A new rule kind reuses these pieces instead of copying a service.
+Category, item, and TMDB rules share one admin contract (`Endpoints/Admin/Rules`: `AdminRuleDto`, `AdminRuleRequest` with its validation, `AdminRuleOrderRequest`) and the `Domain/Rules/IRule` interface. The rules defined per source (`ISourceRule`: category and item rules) use the generic `SourceRuleAdminService<TRule>` and `SourceRuleEndpoints`, mapped once per rule type by `MapSourceRules<TRule>` in `RouteExtensions`; the TMDB rules (no source, a `Field`) keep `TmdbRuleAdminService` and `TmdbRuleEndpoints`. Values and renumbering are shared (`RuleValues`, `RuleSequences`), and every rule is evaluated by `Services/RuleEvaluator` (enabled rules by ascending sequence, the first matching rule decides, no match means `Include`); keep kind-specific conditions (manual exclusion, provider-disabled category, item without name, TMDB title or genres) in its sections instead of new evaluator classes. A new rule kind reuses these pieces instead of copying a service.
 
 Do not expose EF Core entities automatically as public API contracts when doing so creates unwanted coupling.
 
@@ -264,7 +264,7 @@ TMDB metadata (`Domain/Tmdb/TmdbInfo`, one entry per `ContentType + TmdbId`) enr
 - list items are enriched by batches (`ItemsGetEndpoint` reads the metadata of each batch with one query): do not preload the metadata of a whole catalogue;
 - `TmdbItemEnricher` merges both sources: it only replaces keys already present in the provider item and only with available TMDB values (TMDB wins when both have a value, except `genre`, filled from the English TMDB genres only when the provider value is empty); TMDB and provider values are both untrusted;
 - an item that cannot be enriched (no positive TMDB ID, metadata not loaded) is excluded from the response and appears once its metadata is loaded;
-- item rules are applied once, on the provider name; after the enrichment, the TMDB rules (`TmdbRule`, global per content type, on the TMDB title or genres, evaluated by `TmdbRuleService`) and the manual exclusion of the TMDB metadata (`TmdbInfo.IsExcluded`) decide. Manually excluded entries are only loaded as IDs (`TmdbInfoLookup.ExcludedTmdbIds`) and never enqueued for loading.
+- item rules are applied once, on the provider name; after the enrichment, the TMDB rules (`TmdbRule`, global per content type, on the TMDB title or genres, evaluated by `RuleEvaluator`) and the manual exclusion of the TMDB metadata (`TmdbInfo.IsExcluded`) decide. Manually excluded entries are only loaded as IDs (`TmdbInfoLookup.ExcludedTmdbIds`) and never enqueued for loading.
 
 TMDB matching lives under `XtreamForge.ApiService/Services/Tmdb`:
 

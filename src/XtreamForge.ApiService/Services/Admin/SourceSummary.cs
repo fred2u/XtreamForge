@@ -9,7 +9,7 @@ public sealed record SourceSummary(XtreamSource Source, SourceContentSummary Vod
 /// Counters of one source and content type. Every Xtream category falls in exactly one of
 /// <paramref name="EffectiveCategories"/>, <paramref name="ManuallyExcludedCategories"/>,
 /// <paramref name="ProviderDisabledCategories"/> and <paramref name="RuleExcludedCategories"/>
-/// (the decision of the category filtering, see <c>CategoryRuleService.Evaluate</c>).
+/// (the decision of the category filtering, see <c>RuleEvaluator.EvaluateCategories</c>).
 /// </summary>
 public sealed record SourceContentSummary(
     int Categories,

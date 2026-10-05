@@ -70,7 +70,7 @@ public class TmdbInfoAdminService(XtreamForgeDbContext dbContext)
             })
             .ToListAsync(cancellationToken);
 
-        var evaluations = TmdbRuleService.Evaluate(infos, rules).ToList();
+        var evaluations = RuleEvaluator.EvaluateTmdbInfos(infos, rules).ToList();
 
         var matching = evaluations
             .Where(evaluation => Matches(evaluation, query))
@@ -109,7 +109,7 @@ public class TmdbInfoAdminService(XtreamForgeDbContext dbContext)
             .Where(rule => rule.ContentType == info.ContentType)
             .ToListAsync(cancellationToken);
 
-        return TmdbRuleService.Evaluate(info, TmdbRuleService.OrderEnabled(rules));
+        return RuleEvaluator.EvaluateTmdbInfo(info, RuleEvaluator.OrderEnabled(rules));
     }
 
     /// <summary>Sets the manual exclusion of an entry; returns false when it does not exist.</summary>

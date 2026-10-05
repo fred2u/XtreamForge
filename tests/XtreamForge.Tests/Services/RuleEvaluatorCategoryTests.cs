@@ -4,10 +4,10 @@ using XtreamForge.Domain.Enums;
 
 namespace XtreamForge.Tests.Services;
 
-public class CategoryRuleServiceTests
+public class RuleEvaluatorCategoryTests
 {
     [Fact]
-    public void ApplyRules_ExcludesCategoriesAlreadyMarkedExcluded()
+    public void ApplyCategoryRules_ExcludesCategoriesAlreadyMarkedExcluded()
     {
         var categories = new[]
         {
@@ -24,7 +24,7 @@ public class CategoryRuleServiceTests
             }
         };
 
-        var includedCategories = CategoryRuleService.ApplyRules(categories, [])
+        var includedCategories = RuleEvaluator.ApplyCategoryRules(categories, [])
             .ToList();
 
         var item = Assert.Single(includedCategories);
@@ -32,7 +32,7 @@ public class CategoryRuleServiceTests
     }
 
     [Fact]
-    public void ApplyRules_UsesFirstMatchingRule()
+    public void ApplyCategoryRules_UsesFirstMatchingRule()
     {
         var category = new XtreamCategory
         {
@@ -59,13 +59,13 @@ public class CategoryRuleServiceTests
             }
         };
 
-        var result = CategoryRuleService.ApplyRules([category], rules).ToList();
+        var result = RuleEvaluator.ApplyCategoryRules([category], rules).ToList();
 
         Assert.Empty(result);
     }
 
     [Fact]
-    public void ApplyRules_IncludesWhenNoRuleMatches()
+    public void ApplyCategoryRules_IncludesWhenNoRuleMatches()
     {
         var category = new XtreamCategory
         {
@@ -84,14 +84,14 @@ public class CategoryRuleServiceTests
             }
         };
 
-        var result = CategoryRuleService.ApplyRules([category], rules).ToList();
+        var result = RuleEvaluator.ApplyCategoryRules([category], rules).ToList();
 
         var item = Assert.Single(result);
         Assert.Equal("Documentary", item.Name);
     }
 
     [Fact]
-    public void ApplyRules_SkipsDisabledRules()
+    public void ApplyCategoryRules_SkipsDisabledRules()
     {
         var category = new XtreamCategory
         {
@@ -120,14 +120,14 @@ public class CategoryRuleServiceTests
             }
         };
 
-        var result = CategoryRuleService.ApplyRules([category], rules).ToList();
+        var result = RuleEvaluator.ApplyCategoryRules([category], rules).ToList();
 
         var item = Assert.Single(result);
         Assert.Equal("Kids", item.Name);
     }
 
     [Fact]
-    public void ApplyRules_CaseInsensitiveContainsMatch()
+    public void ApplyCategoryRules_CaseInsensitiveContainsMatch()
     {
         var category = new XtreamCategory
         {
@@ -147,18 +147,18 @@ public class CategoryRuleServiceTests
             }
         };
 
-        var result = CategoryRuleService.ApplyRules([category], rules).ToList();
+        var result = RuleEvaluator.ApplyCategoryRules([category], rules).ToList();
 
         Assert.Empty(result);
     }
 
     [Fact]
-    public void Evaluate_WhenManuallyExcluded_ReturnsManualExclusionEvenIfRuleMatches()
+    public void EvaluateCategories_WhenManuallyExcluded_ReturnsManualExclusionEvenIfRuleMatches()
     {
         var category = new XtreamCategory { Name = "Kids", XtreamId = "c1", IsExcluded = true, IsEnabled = false };
         var rules = new List<CategoryRule> { ExcludeRule("Kids", 1) };
 
-        var evaluation = Assert.Single(CategoryRuleService.Evaluate([category], rules));
+        var evaluation = Assert.Single(RuleEvaluator.EvaluateCategories([category], rules));
 
         Assert.Equal(InclusionDecision.Exclude, evaluation.Decision);
         Assert.Equal(CategoryExclusionReason.ManuallyExcluded, evaluation.ExclusionReason);
@@ -166,12 +166,12 @@ public class CategoryRuleServiceTests
     }
 
     [Fact]
-    public void Evaluate_WhenDisabledByProvider_ReturnsProviderDisabledEvenIfRuleMatches()
+    public void EvaluateCategories_WhenDisabledByProvider_ReturnsProviderDisabledEvenIfRuleMatches()
     {
         var category = new XtreamCategory { Name = "Kids", XtreamId = "c1", IsEnabled = false };
         var rules = new List<CategoryRule> { ExcludeRule("Kids", 1) };
 
-        var evaluation = Assert.Single(CategoryRuleService.Evaluate([category], rules));
+        var evaluation = Assert.Single(RuleEvaluator.EvaluateCategories([category], rules));
 
         Assert.Equal(InclusionDecision.Exclude, evaluation.Decision);
         Assert.Equal(CategoryExclusionReason.ProviderDisabled, evaluation.ExclusionReason);
@@ -179,7 +179,7 @@ public class CategoryRuleServiceTests
     }
 
     [Fact]
-    public void Evaluate_ReturnsFirstMatchingEnabledRuleBySequence()
+    public void EvaluateCategories_ReturnsFirstMatchingEnabledRuleBySequence()
     {
         var category = new XtreamCategory { Name = "Kids Movies", XtreamId = "c1" };
         var disabledRule = ExcludeRule("Kids", 1);
@@ -188,7 +188,7 @@ public class CategoryRuleServiceTests
         var earlierRule = ExcludeRule("Kids", 20);
         var rules = new List<CategoryRule> { disabledRule, laterRule, earlierRule };
 
-        var evaluation = Assert.Single(CategoryRuleService.Evaluate([category], rules));
+        var evaluation = Assert.Single(RuleEvaluator.EvaluateCategories([category], rules));
 
         Assert.Equal(InclusionDecision.Exclude, evaluation.Decision);
         Assert.Equal(CategoryExclusionReason.Rule, evaluation.ExclusionReason);
@@ -196,13 +196,13 @@ public class CategoryRuleServiceTests
     }
 
     [Fact]
-    public void Evaluate_WhenCaseSensitiveRuleDoesNotMatch_IncludesWithoutRule()
+    public void EvaluateCategories_WhenCaseSensitiveRuleDoesNotMatch_IncludesWithoutRule()
     {
         var category = new XtreamCategory { Name = "kids", XtreamId = "c1" };
         var rule = ExcludeRule("Kids", 1);
         rule.CaseSensitive = true;
 
-        var evaluation = Assert.Single(CategoryRuleService.Evaluate([category], [rule]));
+        var evaluation = Assert.Single(RuleEvaluator.EvaluateCategories([category], [rule]));
 
         Assert.Equal(InclusionDecision.Include, evaluation.Decision);
         Assert.Null(evaluation.ExclusionReason);
@@ -213,14 +213,14 @@ public class CategoryRuleServiceTests
     [InlineData("Kids Movies", "sport", false, InclusionDecision.Exclude)]
     [InlineData("Sports Live", "sport", false, InclusionDecision.Include)]
     [InlineData("Sports Live", "sport", true, InclusionDecision.Exclude)]
-    public void Evaluate_NotContainsRule_MatchesNamesWithoutPattern(string name, string pattern, bool caseSensitive, InclusionDecision expected)
+    public void EvaluateCategories_NotContainsRule_MatchesNamesWithoutPattern(string name, string pattern, bool caseSensitive, InclusionDecision expected)
     {
         var category = new XtreamCategory { Name = name, XtreamId = "c1" };
         var rule = ExcludeRule(pattern, 1);
         rule.Operator = RuleOperator.NotContains;
         rule.CaseSensitive = caseSensitive;
 
-        var evaluation = Assert.Single(CategoryRuleService.Evaluate([category], [rule]));
+        var evaluation = Assert.Single(RuleEvaluator.EvaluateCategories([category], [rule]));
 
         Assert.Equal(expected, evaluation.Decision);
         Assert.Equal(expected == InclusionDecision.Exclude ? rule : null, evaluation.DecidingRule);
@@ -231,14 +231,14 @@ public class CategoryRuleServiceTests
     [InlineData("Sports Live", "sport", false, InclusionDecision.Include)]
     [InlineData("Sports Live", "sport", true, InclusionDecision.Exclude)]
     [InlineData("Live Sports", "sport", false, InclusionDecision.Exclude)]
-    public void Evaluate_NotStartsWithRule_MatchesNamesNotStartingWithPattern(string name, string pattern, bool caseSensitive, InclusionDecision expected)
+    public void EvaluateCategories_NotStartsWithRule_MatchesNamesNotStartingWithPattern(string name, string pattern, bool caseSensitive, InclusionDecision expected)
     {
         var category = new XtreamCategory { Name = name, XtreamId = "c1" };
         var rule = ExcludeRule(pattern, 1);
         rule.Operator = RuleOperator.NotStartsWith;
         rule.CaseSensitive = caseSensitive;
 
-        var evaluation = Assert.Single(CategoryRuleService.Evaluate([category], [rule]));
+        var evaluation = Assert.Single(RuleEvaluator.EvaluateCategories([category], [rule]));
 
         Assert.Equal(expected, evaluation.Decision);
         Assert.Equal(expected == InclusionDecision.Exclude ? rule : null, evaluation.DecidingRule);

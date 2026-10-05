@@ -28,7 +28,7 @@ public class XtreamCategoryAdminService(XtreamForgeDbContext dbContext)
             .Where(r => r.XtreamSourceId == sourceId && r.ContentType == contentType && r.IsEnabled)
             .ToListAsync(cancellationToken);
 
-        return [.. CategoryRuleService.Evaluate(categories, rules)];
+        return [.. RuleEvaluator.EvaluateCategories(categories, rules)];
     }
 
     /// <summary>

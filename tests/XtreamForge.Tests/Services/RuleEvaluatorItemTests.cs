@@ -5,23 +5,23 @@ using XtreamForge.Domain.Items;
 
 namespace XtreamForge.Tests.Services;
 
-public class ItemRuleServiceTests
+public class RuleEvaluatorItemTests
 {
     [Theory]
     [InlineData("{}")]
     [InlineData("""{ "name": "" }""")]
     [InlineData("""{ "name": "   " }""")]
-    public void ApplyRules_WhenNameIsMissingOrBlank_ReturnsExclude(string json)
+    public void EvaluateItem_WhenNameIsMissingOrBlank_ReturnsExclude(string json)
     {
         var item = Assert.IsType<JsonObject>(JsonNode.Parse(json));
 
-        var decision = ItemRuleService.ApplyRules(item, []);
+        var decision = RuleEvaluator.EvaluateItem(item, []);
 
         Assert.Equal(InclusionDecision.Exclude, decision);
     }
 
     [Fact]
-    public void ApplyRules_WhenNoRuleMatches_ReturnsInclude()
+    public void EvaluateItem_WhenNoRuleMatches_ReturnsInclude()
     {
         var item = CreateItem("Documentary");
         var rules = new List<ItemRule>
@@ -29,13 +29,13 @@ public class ItemRuleServiceTests
             CreateRule(1, RuleAction.Exclude, RuleOperator.Contains, "Sports")
         };
 
-        var decision = ItemRuleService.ApplyRules(item, rules);
+        var decision = RuleEvaluator.EvaluateItem(item, rules);
 
         Assert.Equal(InclusionDecision.Include, decision);
     }
 
     [Fact]
-    public void ApplyRules_UsesFirstMatchingRule()
+    public void EvaluateItem_UsesFirstMatchingRule()
     {
         var item = CreateItem("Sports Arena");
         var rules = new List<ItemRule>
@@ -44,13 +44,13 @@ public class ItemRuleServiceTests
             CreateRule(2, RuleAction.Include, RuleOperator.Contains, "Arena")
         };
 
-        var decision = ItemRuleService.ApplyRules(item, rules);
+        var decision = RuleEvaluator.EvaluateItem(item, rules);
 
         Assert.Equal(InclusionDecision.Exclude, decision);
     }
 
     [Fact]
-    public void ApplyRules_IncludeRuleMatchingFirst_ReturnsInclude()
+    public void EvaluateItem_IncludeRuleMatchingFirst_ReturnsInclude()
     {
         var item = CreateItem("Sports Arena");
         var rules = new List<ItemRule>
@@ -59,7 +59,7 @@ public class ItemRuleServiceTests
             CreateRule(2, RuleAction.Exclude, RuleOperator.StartsWith, "Sports")
         };
 
-        var decision = ItemRuleService.ApplyRules(item, rules);
+        var decision = RuleEvaluator.EvaluateItem(item, rules);
 
         Assert.Equal(InclusionDecision.Include, decision);
     }
@@ -77,7 +77,7 @@ public class ItemRuleServiceTests
     [InlineData(RuleOperator.NotStartsWith, "news", false, InclusionDecision.Exclude)]
     [InlineData(RuleOperator.NotStartsWith, "morning", false, InclusionDecision.Include)]
     [InlineData(RuleOperator.NotStartsWith, "morning", true, InclusionDecision.Exclude)]
-    public void ApplyRules_RespectsOperatorAndCaseSensitivity(
+    public void EvaluateItem_RespectsOperatorAndCaseSensitivity(
         RuleOperator @operator,
         string pattern,
         bool caseSensitive,
@@ -89,7 +89,7 @@ public class ItemRuleServiceTests
             CreateRule(1, RuleAction.Exclude, @operator, pattern, caseSensitive)
         };
 
-        var decision = ItemRuleService.ApplyRules(item, rules);
+        var decision = RuleEvaluator.EvaluateItem(item, rules);
 
         Assert.Equal(expected, decision);
     }

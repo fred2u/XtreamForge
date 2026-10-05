@@ -50,7 +50,7 @@ public class SourceAdminService(XtreamForgeDbContext dbContext)
         {
             var key = (sourceId, contentType);
             var rules = categoryRules[key].ToList();
-            var evaluations = CategoryRuleService.Evaluate(categories[key], rules).ToList();
+            var evaluations = RuleEvaluator.EvaluateCategories(categories[key], rules).ToList();
 
             return new SourceContentSummary(
                 evaluations.Count,

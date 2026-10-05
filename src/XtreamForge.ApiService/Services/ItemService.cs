@@ -37,7 +37,7 @@ public class ItemService(TmdbIdRetrieverQueue tmdbIdRetrieverQueue, TmdbInfoQueu
             return null;
 
         // apply item filter rules before update tmdb info
-        var inclusionDecision = ItemRuleService.ApplyRules(transformedItem, source.ItemRules);
+        var inclusionDecision = RuleEvaluator.EvaluateItem(transformedItem, source.ItemRules);
         if (inclusionDecision == InclusionDecision.Exclude)
             return null;
 
@@ -146,7 +146,7 @@ public class ItemService(TmdbIdRetrieverQueue tmdbIdRetrieverQueue, TmdbInfoQueu
         if (contentType == ContentType.Vod && info is not null)
             _ = RewriteCategoryReferences(info, xtreamCategoryIdMapping);
 
-        if (ItemRuleService.ApplyRules(item, source.ItemRules) == InclusionDecision.Exclude)
+        if (RuleEvaluator.EvaluateItem(item, source.ItemRules) == InclusionDecision.Exclude)
             return null;
 
         // the mapped tmdb_id wins (it may have been corrected manually) and is exposed in the info section, where clients read it;
@@ -223,7 +223,7 @@ public class ItemService(TmdbIdRetrieverQueue tmdbIdRetrieverQueue, TmdbInfoQueu
             return false;
 
         // the TMDB rules replace a second evaluation of the item rules on the enriched item
-        if (TmdbRuleService.Evaluate(tmdbInfo, source.TmdbRules).Decision == InclusionDecision.Exclude)
+        if (RuleEvaluator.EvaluateTmdbInfo(tmdbInfo, source.TmdbRules).Decision == InclusionDecision.Exclude)
             return false;
 
         foreach (var target in targets)

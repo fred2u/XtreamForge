@@ -4,10 +4,10 @@ using XtreamForge.Domain.Tmdb;
 
 namespace XtreamForge.Tests.Services;
 
-public class TmdbRuleServiceTests
+public class RuleEvaluatorTmdbTests
 {
     [Fact]
-    public void Evaluate_WhenNoRuleMatches_IncludesWithoutDecidingRule()
+    public void EvaluateTmdbInfos_WhenNoRuleMatches_IncludesWithoutDecidingRule()
     {
         var evaluation = Evaluate(CreateInfo(), Rule(10, TmdbRuleField.Title, RuleAction.Exclude, RuleOperator.Contains, "Shrek"));
 
@@ -15,7 +15,7 @@ public class TmdbRuleServiceTests
     }
 
     [Fact]
-    public void Evaluate_WhenExcludedManually_ExcludesBeforeAnyRule()
+    public void EvaluateTmdbInfos_WhenExcludedManually_ExcludesBeforeAnyRule()
     {
         var info = CreateInfo();
         info.IsExcluded = true;
@@ -27,7 +27,7 @@ public class TmdbRuleServiceTests
     }
 
     [Fact]
-    public void Evaluate_FirstMatchingEnabledRuleBySequenceDecides()
+    public void EvaluateTmdbInfos_FirstMatchingEnabledRuleBySequenceDecides()
     {
         var disabled = Rule(1, TmdbRuleField.Title, RuleAction.Exclude, RuleOperator.Contains, "Matrix");
         disabled.IsEnabled = false;
@@ -40,7 +40,7 @@ public class TmdbRuleServiceTests
     }
 
     [Fact]
-    public void Evaluate_WhenIncludeRuleMatches_IncludesWithDecidingRule()
+    public void EvaluateTmdbInfos_WhenIncludeRuleMatches_IncludesWithDecidingRule()
     {
         var include = Rule(10, TmdbRuleField.Title, RuleAction.Include, RuleOperator.Contains, "matrix");
 
@@ -65,7 +65,7 @@ public class TmdbRuleServiceTests
         var rule = Rule(10, TmdbRuleField.Genre, RuleAction.Exclude, @operator, pattern);
         rule.CaseSensitive = caseSensitive;
 
-        Assert.Equal(expected, TmdbRuleService.IsMatch(CreateInfo(), rule));
+        Assert.Equal(expected, RuleEvaluator.IsMatch(CreateInfo(), rule));
     }
 
     [Theory]
@@ -79,7 +79,7 @@ public class TmdbRuleServiceTests
         info.Genres = [];
 
         // "does not …" matches when no genre matches, which is always the case without genres
-        Assert.Equal(expected, TmdbRuleService.IsMatch(info, Rule(10, TmdbRuleField.Genre, RuleAction.Exclude, @operator, "Horror")));
+        Assert.Equal(expected, RuleEvaluator.IsMatch(info, Rule(10, TmdbRuleField.Genre, RuleAction.Exclude, @operator, "Horror")));
     }
 
     [Theory]
@@ -89,7 +89,7 @@ public class TmdbRuleServiceTests
     [InlineData(RuleOperator.NotStartsWith, "Matrix", true)]
     public void IsMatch_ForTitle_MatchesTheTmdbTitle(RuleOperator @operator, string pattern, bool expected)
     {
-        Assert.Equal(expected, TmdbRuleService.IsMatch(CreateInfo(), Rule(10, TmdbRuleField.Title, RuleAction.Exclude, @operator, pattern)));
+        Assert.Equal(expected, RuleEvaluator.IsMatch(CreateInfo(), Rule(10, TmdbRuleField.Title, RuleAction.Exclude, @operator, pattern)));
     }
 
     [Fact]
@@ -98,11 +98,11 @@ public class TmdbRuleServiceTests
         var info = CreateInfo();
         info.Title = null;
 
-        Assert.False(TmdbRuleService.IsMatch(info, Rule(10, TmdbRuleField.Title, RuleAction.Exclude, RuleOperator.Contains, "Matrix")));
-        Assert.True(TmdbRuleService.IsMatch(info, Rule(10, TmdbRuleField.Title, RuleAction.Exclude, RuleOperator.NotContains, "Matrix")));
+        Assert.False(RuleEvaluator.IsMatch(info, Rule(10, TmdbRuleField.Title, RuleAction.Exclude, RuleOperator.Contains, "Matrix")));
+        Assert.True(RuleEvaluator.IsMatch(info, Rule(10, TmdbRuleField.Title, RuleAction.Exclude, RuleOperator.NotContains, "Matrix")));
     }
 
-    private static TmdbRuleEvaluation Evaluate(TmdbInfo info, params TmdbRule[] rules) => Assert.Single(TmdbRuleService.Evaluate([info], rules));
+    private static TmdbRuleEvaluation Evaluate(TmdbInfo info, params TmdbRule[] rules) => Assert.Single(RuleEvaluator.EvaluateTmdbInfos([info], rules));
 
     private static TmdbInfo CreateInfo() => new()
     {

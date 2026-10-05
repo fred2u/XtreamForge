@@ -590,7 +590,7 @@ The applicable `.editorconfig` is authoritative.
 Current baseline includes:
 
 - UTF-8;
-- LF line endings;
+- CRLF line endings;
 - final newline;
 - no trailing whitespace;
 - four-space indentation for C#/Razor;

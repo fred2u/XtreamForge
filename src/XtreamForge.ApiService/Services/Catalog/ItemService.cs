@@ -12,7 +12,12 @@ using XtreamForge.Domain.Tmdb;
 
 namespace XtreamForge.ApiService.Services.Catalog;
 
-public class ItemService(TmdbIdRetrieverQueue tmdbIdRetrieverQueue, TmdbInfoQueue tmdbInfoQueue, IOptions<TmdbOptions> tmdbOptions, TimeProvider timeProvider)
+public class ItemService(
+    TmdbIdRetrieverQueue tmdbIdRetrieverQueue,
+    ProviderTmdbIdQueue providerTmdbIdQueue,
+    TmdbInfoQueue tmdbInfoQueue,
+    IOptions<TmdbOptions> tmdbOptions,
+    TimeProvider timeProvider)
 {
     /// <summary>
     /// Filters and rewrites one upstream item in place; returns null when the item must not be returned.
@@ -24,8 +29,7 @@ public class ItemService(TmdbIdRetrieverQueue tmdbIdRetrieverQueue, TmdbInfoQueu
             return null;
 
         // extract the identifier based on the content type (VOD or Series)
-        var identifierKey = xtreamContext.ContentType == ContentType.Vod ? "stream_id" : "series_id";
-        if (!transformedItem.TryGetPropertyValue(identifierKey, out var streamIdNode) || streamIdNode is null)
+        if (!transformedItem.TryGetPropertyValue(GetIdentifierKey(xtreamContext.ContentType), out var streamIdNode) || streamIdNode is null)
             return null;
         string streamId = streamIdNode.ToString();
         if (string.IsNullOrWhiteSpace(streamId))
@@ -49,6 +53,31 @@ public class ItemService(TmdbIdRetrieverQueue tmdbIdRetrieverQueue, TmdbInfoQueu
             return null;
 
         return transformedItem;
+    }
+
+    /// <summary>
+    /// Enqueues the persistence of the provider TMDB IDs of list items returned by <see cref="TransformStreamItem"/> whose stream has no TMDB mapping:
+    /// the <c>get_vod_info</c> / <c>get_series_info</c> payload of some providers has no <c>tmdb_id</c> while their lists have one.
+    /// Once persisted, the streams are part of <see cref="XtreamSourceSnapshot.StreamTmdbMappings"/> and are no longer enqueued.
+    /// </summary>
+    public void EnqueueProviderTmdbIds(IEnumerable<JsonObject> items, ContentType contentType, XtreamSourceSnapshot source)
+    {
+        var identifierKey = GetIdentifierKey(contentType);
+        Dictionary<string, long>? tmdbIds = null;
+        foreach (var item in items)
+        {
+            // a mapped stream keeps its persisted TMDB ID, which may have been corrected manually
+            if (ReadTmdbId(item) is not { } tmdbId
+                || item[identifierKey]?.ToString() is not { } streamId
+                || source.StreamTmdbMappings.ContainsKey(streamId))
+                continue;
+
+            tmdbIds ??= new Dictionary<string, long>(StringComparer.Ordinal);
+            tmdbIds[streamId] = tmdbId;
+        }
+
+        if (tmdbIds is not null)
+            providerTmdbIdQueue.TryEnqueue(new ProviderTmdbIdRequest(source.Id, contentType, tmdbIds));
     }
 
     /// <summary>
@@ -209,6 +238,8 @@ public class ItemService(TmdbIdRetrieverQueue tmdbIdRetrieverQueue, TmdbInfoQueu
 
     private static bool HasTmdbId(JsonObject? item)
         => item is not null && item.TryGetPropertyValue("tmdb_id", out var tmdbIdNode) && tmdbIdNode is not null && !string.IsNullOrWhiteSpace(tmdbIdNode.ToString());
+
+    private static string GetIdentifierKey(ContentType contentType) => contentType == ContentType.Vod ? "stream_id" : "series_id";
 
     // returns true when the TMDB rules include the item and its metadata was applied; a missing metadata, or one due for a (re)load, is enqueued
     private bool ApplyTmdbInfo(ContentType contentType, long tmdbId, TmdbInfoLookup tmdbInfos, XtreamSourceSnapshot source, params JsonObject[] targets)

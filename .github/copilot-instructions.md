@@ -261,6 +261,7 @@ Missing TMDB IDs are resolved asynchronously in the background:
 - only confident matches are persisted: avoiding false positives takes precedence over finding more matches;
 - a lookup without result or failing is persisted in `StreamTmdbMapping` with a null `TmdbId`, `LookupAttemptCount`, and `NextLookupAtUtc` (delay of 1 day doubling up to 30 days; a transient failure, classified by `RetryDelay.IsTransient`, is retried after `RetryDelay.TransientFailureDelay` without counting the attempt); the source snapshot exposes these not-yet-due streams as `DeferredTmdbLookups` so `ItemService` does not enqueue them. Code reading `StreamTmdbMappings` must treat a null `TmdbId` as "not mapped".
 - mappings can be corrected or set manually by the admin (`StreamTmdbMappingAdminService`); a mapped stream is never looked up again, so a persisted mapping must win over the provider `tmdb_id` of the `get_vod_info` / `get_series_info` payload (`ItemService.TransformInfo`).
+- the provider `tmdb_id` of list items is persisted as their mapping, as some `get_*_info` payloads lack it: `ItemsGetEndpoint` passes each batch to `ItemService.EnqueueProviderTmdbIds`, which enqueues one `ProviderTmdbIdRequest` per batch with the streams absent from `StreamTmdbMappings` (no per-item request, no work once the catalogue is persisted); `ProviderTmdbIdService` creates missing mappings, completes mappings with a null `TmdbId`, and never replaces an existing `TmdbId`.
 
 TMDB metadata (`Domain/Tmdb/TmdbInfo`, one entry per `ContentType + TmdbId`) enriches the returned items:
 

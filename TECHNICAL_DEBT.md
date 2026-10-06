@@ -20,6 +20,12 @@ Items are returned only when a TMDB ID is known and its TMDB metadata (`TmdbInfo
 
 Fix: decide on a degraded mode (for example an option to return items without a TMDB ID or without TMDB metadata).
 
+### Manual TMDB corrections ignored by the lists
+
+`ItemService.TransformStreamItem` keeps the provider `tmdb_id` of a list item even when the stream has a persisted mapping, while `get_vod_info` / `get_series_info` and the watch history use the persisted mapping first. Since the provider `tmdb_id` of the listed items is persisted (`ProviderTmdbIdService`), these streams appear in the TMDB mappings screen, but a manual correction only applies to the item details and the watch history.
+
+Fix: let the persisted mapping win in the lists too (`EnsureTmdbId`), so that a correction applies everywhere.
+
 ### Migrations applied at startup
 
 `UseDatabase` runs `Database.Migrate()` at startup; several API instances would migrate concurrently.

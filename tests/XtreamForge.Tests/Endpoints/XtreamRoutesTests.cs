@@ -216,6 +216,7 @@ public sealed class XtreamRoutesTests : IAsyncDisposable
         builder.Services.AddSingleton<XtreamContextBuilder>();
         builder.Services.AddSingleton(_accountDirectory);
         builder.Services.AddSingleton<TmdbIdRetrieverQueue>();
+        builder.Services.AddSingleton<ProviderTmdbIdQueue>();
         builder.Services.AddSingleton<TmdbInfoQueue>();
         builder.Services.AddSingleton(_watchHistoryQueue);
         builder.Services.AddSingleton<TmdbClient>();

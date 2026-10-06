@@ -283,6 +283,7 @@ For `get_vod_streams` and `get_series`:
    - a TMDB ID must be known (see below), otherwise the item is removed from the current response
    - duplicated items are removed
    - by batches of 500 items, the loaded TMDB metadata of the batch is read with one query and applied (see [TMDB metadata](#tmdb-metadata)); an item whose metadata is not loaded (or whose `tmdb_id` is not a positive number) is removed from the current response, as is an item whose TMDB metadata is excluded manually or by a TMDB rule (see [TMDB rules](#tmdb-rules)); the item rules are not applied again
+   - by the same batches, the provider `tmdb_id` of the streams without TMDB mapping is enqueued to be persisted (see [TMDB enrichment](#tmdb-enrichment))
 
 Item rules, TMDB mappings, and deferred TMDB lookups are preloaded once per request (`Source + ContentType`) into in-memory dictionaries and sets to avoid per-item database lookups.
 
@@ -306,6 +307,8 @@ An item is returned only when a usable TMDB ID is known and its TMDB metadata is
 
 - the upstream list item already exposing `tmdb_id`
 - a persisted `Source + ContentType + StreamId -> TmdbId` mapping (injected as `tmdb_id`)
+
+Some providers expose `tmdb_id` in their lists but not in `get_vod_info` / `get_series_info`, so the provider `tmdb_id` of the listed items is persisted as their mapping: for each batch of 500 items, the streams with a positive `tmdb_id` and without mapping in the preloaded mappings are enqueued as one request (`ProviderTmdbIdQueue`, processed by `ProviderTmdbIdService` with one query reading the existing mappings of the batch and one save). A stream without mapping is mapped, a mapping without TMDB ID (lookup without result) receives the provider TMDB ID and is no longer looked up, and an existing TMDB ID is never replaced. Once persisted, the streams are part of the preloaded mappings and are no longer enqueued, so a catalogue already persisted adds no work to the list requests. Only the items reaching the batches are persisted (included category, not excluded by an item rule), as the item details apply the same conditions.
 
 When no TMDB ID is known and no lookup is deferred for the stream, XtreamForge enqueues a background lookup (`TmdbIdRetrieverQueue`, processed by `TmdbIdRetrieverService`):
 
@@ -334,7 +337,7 @@ Media stream requests (`movie`, `series`, `live`, and `timeshift` paths, and the
 
 The dashboard shows the number of known TMDB mappings and of unresolved lookups (mappings without TMDB ID).
 
-The persisted mappings can be corrected, and the unresolved ones mapped manually, from the `TMDB mappings` screen of the Items section. A TMDB ID set manually is never looked up again and its TMDB metadata is enqueued for loading. Items whose upstream list entry already exposes `tmdb_id` have no mapping and cannot be corrected this way.
+The persisted mappings can be corrected, and the unresolved ones mapped manually, from the `TMDB mappings` screen of the Items section. A TMDB ID set manually is never looked up again and its TMDB metadata is enqueued for loading. For items whose upstream list entry already exposes `tmdb_id`, the correction only applies to the item details and the watch history: the lists keep the provider `tmdb_id`.
 
 Admin API:
 
@@ -378,7 +381,7 @@ Admin API:
 
 ## Background queue monitoring
 
-Background queues (the TMDB ID lookup queue, the TMDB metadata queue, and the watch history queue) derive from `BackgroundQueue` (`Services/Queues`: bounded in-memory queue deduplicated per request key, whose oldest request is dropped when it is full), are consumed by `QueueBackgroundService` (each request in its own DI scope; a failed request is logged without its credentials and can be enqueued again), and are sampled by `QueueMonitor` (`Services/Monitoring`):
+Background queues (the TMDB ID lookup queue, the provider TMDB ID queue, the TMDB metadata queue, and the watch history queue) derive from `BackgroundQueue` (`Services/Queues`: bounded in-memory queue deduplicated per request key, whose oldest request is dropped when it is full), are consumed by `QueueBackgroundService` (each request in its own DI scope; a failed request is logged without its credentials and can be enqueued again), and are sampled by `QueueMonitor` (`Services/Monitoring`):
 
 - every 10 s, the size of each queue and the items processed since the previous sample (succeeded, no result, failed) are recorded; one hour of samples is kept in memory and lost on restart
 - `GET /api/admin/queues` returns the current size and the history of each queue, and the upstream hosts that answered HTTP 429 since the API started (current spacing, number of 429)
@@ -436,7 +439,8 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) restores, builds in Rel
 
 - items without a known TMDB ID are hidden until the background lookup succeeds
 - an item whose lookup found nothing is looked up again only after its retry delay (up to 30 days), even if `Tmdb:ApiKey` is configured in the meantime
-- the TMDB lookup and metadata queues are in memory: pending lookups and loads are lost on restart (missing metadata is enqueued again by the next catalogue request)
+- the TMDB lookup, provider TMDB ID, and metadata queues are in memory: pending lookups, provider TMDB IDs, and loads are lost on restart (provider TMDB IDs and missing metadata are enqueued again by the next catalogue request)
+- the item details of a stream whose provider payload has no `tmdb_id` are only returned once its list has been requested and its provider `tmdb_id` persisted
 - the watch history only records movies, from the start of the playback, whatever the part actually watched; pending playbacks are lost on restart, and stream URLs that bypass XtreamForge are not recorded
 - items are hidden until their TMDB metadata is loaded, so the first catalogue requests return few items; without `Tmdb:ApiKey`, no metadata is loaded and no item is returned
 - changing `Tmdb:PreferredLanguage` only affects metadata loaded or refreshed afterwards

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using XtreamForge.ApiService.Options;
 using XtreamForge.ApiService.Services.Catalog;
+using XtreamForge.ApiService.Services.Queues;
 using XtreamForge.ApiService.Services.TmdbIdRetriever;
 using XtreamForge.ApiService.Services.TmdbInfos;
 using XtreamForge.ApiService.Xtream;
@@ -22,6 +23,7 @@ public class ItemServiceTests
     private static readonly Dictionary<string, int> XtreamCategoryIdMapping = new(StringComparer.Ordinal) { ["10"] = 100 };
 
     private readonly TmdbIdRetrieverQueue _queue = new();
+    private readonly ProviderTmdbIdQueue _providerTmdbIdQueue = new();
     private readonly TmdbInfoQueue _tmdbInfoQueue = new();
     private readonly SteppingTimeProvider _time = new();
     private readonly ItemService _service;
@@ -490,6 +492,38 @@ public class ItemServiceTests
         Assert.Equal(expectedTmdbId, ItemService.ReadInfoTmdbId(ParseObject(json), contentType));
     }
 
+    [Fact]
+    public async Task EnqueueProviderTmdbIds_EnqueuesTheValidTmdbIdsOfTheStreamsWithoutMapping()
+    {
+        var source = CreateSource(new Dictionary<string, long> { ["2"] = 999 });
+        JsonObject[] items =
+        [
+            ParseObject("""{ "series_id": 1, "tmdb_id": "555" }"""),
+            ParseObject("""{ "series_id": 2, "tmdb_id": "556" }"""),
+            ParseObject("""{ "series_id": 3, "tmdb_id": "0" }"""),
+            ParseObject("""{ "series_id": 4, "tmdb_id": 557 }"""),
+            ParseObject("""{ "tmdb_id": "558" }""")
+        ];
+
+        _service.EnqueueProviderTmdbIds(items, ContentType.Series, source);
+
+        // the mapped stream 2 keeps its persisted TMDB ID
+        var request = await ReadSingleQueuedRequestAsync(_providerTmdbIdQueue);
+        Assert.Equal(SourceId, request.XtreamSourceId);
+        Assert.Equal(ContentType.Series, request.Type);
+        Assert.Equal(new Dictionary<string, long> { ["1"] = 555, ["4"] = 557 }, request.TmdbIds);
+    }
+
+    [Fact]
+    public void EnqueueProviderTmdbIds_WhenEveryStreamIsMapped_EnqueuesNothing()
+    {
+        var source = CreateSource(new Dictionary<string, long> { ["1"] = 555 });
+
+        _service.EnqueueProviderTmdbIds([ParseObject("""{ "stream_id": 1, "tmdb_id": "555" }""")], ContentType.Vod, source);
+
+        Assert.Equal(0, _providerTmdbIdQueue.Count);
+    }
+
     private TmdbInfo CreateLoadedInfo(ContentType contentType = ContentType.Vod) => new()
     {
         TmdbId = TmdbId,
@@ -508,16 +542,19 @@ public class ItemServiceTests
 
     private static JsonObject ParseObject(string json) => Assert.IsType<JsonObject>(JsonNode.Parse(json));
 
-    private async Task<TmdbIdRetrieverRequest> ReadSingleQueuedRequestAsync()
+    private Task<TmdbIdRetrieverRequest> ReadSingleQueuedRequestAsync() => ReadSingleQueuedRequestAsync(_queue);
+
+    private static async Task<TRequest> ReadSingleQueuedRequestAsync<TRequest>(BackgroundQueue<TRequest> queue)
+        where TRequest : notnull
     {
-        await using var requests = _queue.ReadAllAsync(TestContext.Current.CancellationToken).GetAsyncEnumerator(TestContext.Current.CancellationToken);
+        await using var requests = queue.ReadAllAsync(TestContext.Current.CancellationToken).GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
         Assert.True(await requests.MoveNextAsync());
         return requests.Current;
     }
 
     private ItemService CreateService(string tmdbApiKey)
-        => new(_queue, _tmdbInfoQueue, Options.Create(new TmdbOptions { ApiKey = tmdbApiKey }), _time);
+        => new(_queue, _providerTmdbIdQueue, _tmdbInfoQueue, Options.Create(new TmdbOptions { ApiKey = tmdbApiKey }), _time);
 
     private JsonObject? Transform(string json, XtreamContext context, HashSet<string> seenIds, XtreamSourceSnapshot? source = null)
         => _service.TransformStreamItem(JsonNode.Parse(json), context, source ?? CreateSource(), XtreamCategoryIdMapping, seenIds);

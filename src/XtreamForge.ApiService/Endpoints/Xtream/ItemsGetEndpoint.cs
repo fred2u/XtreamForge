@@ -110,11 +110,14 @@ public class ItemsGetEndpoint(
         await response.BodyWriter.FlushAsync(cancellationToken);
     }
 
-    // enriches the batched items with their TMDB metadata, writes the ones still included, and empties the batch
+    // enriches the batched items with their TMDB metadata, writes the ones still included, and empties the batch;
+    // the provider TMDB IDs not persisted yet are enqueued first, so that the get_*_info of these streams can use them
     private async Task WriteBatchAsync(List<JsonObject> batch, Utf8JsonWriter writer, XtreamContext xtreamContext, XtreamSourceSnapshot source, VirtualCategoryAssignment? virtualCategories, CancellationToken cancellationToken)
     {
         if (batch.Count == 0)
             return;
+
+        itemService.EnqueueProviderTmdbIds(batch, xtreamContext.ContentType, source);
 
         var tmdbIds = batch.Select(ItemService.ReadTmdbId).OfType<long>().Distinct().ToList();
         var tmdbInfos = await tmdbInfoService.GetAsync(xtreamContext.ContentType, tmdbIds, cancellationToken);

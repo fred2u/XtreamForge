@@ -46,6 +46,7 @@ public static class DependenciesExtensions
 
         // background queues, in the order of the monitoring screen
         AddBackgroundQueue<TmdbIdRetrieverQueue, TmdbIdRetrieverRequest, TmdbIdRetrieverService>(services, workerCount: 2);
+        AddBackgroundQueue<ProviderTmdbIdQueue, ProviderTmdbIdRequest, ProviderTmdbIdService>(services);
         AddBackgroundQueue<TmdbInfoQueue, TmdbInfoRequest, TmdbInfoService>(services);
         AddBackgroundQueue<WatchHistoryQueue, WatchHistoryRequest, WatchHistoryService>(services);
         services.AddSingleton<QueueMonitor>();

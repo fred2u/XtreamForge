@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using System.Web;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using XtreamForge.ApiService.Endpoints.Xtream;
@@ -15,6 +16,7 @@ using XtreamForge.Database;
 using XtreamForge.Domain.Categories;
 using XtreamForge.Domain.Enums;
 using XtreamForge.Domain.History;
+using XtreamForge.Domain.Items;
 using XtreamForge.Domain.Sources;
 using XtreamForge.Domain.Tmdb;
 using XtreamForge.Tests.Infrastructure;
@@ -44,6 +46,7 @@ public class ItemsGetEndpointTests : IAsyncDisposable
 
     private readonly XtreamForgeDbContext _dbContext;
     private readonly TmdbInfoQueue _tmdbInfoQueue = new();
+    private readonly ProviderTmdbIdQueue _providerTmdbIdQueue = new();
     private readonly Dictionary<string, string> _tmdbResponses = [];
     private readonly StubTmdbHttpClientFactory _tmdb;
     private readonly TmdbIdCache _recommendationCache = new(TimeProvider.System);
@@ -300,6 +303,27 @@ public class ItemsGetEndpointTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task GetAsync_EnqueuesTheProviderTmdbIdsOfTheStreamsWithoutMappingByBatch()
+    {
+        await SeedAsync();
+        var sourceId = await _dbContext.XtreamSources.Select(source => source.Id).SingleAsync(TestContext.Current.CancellationToken);
+        _dbContext.StreamTmdbMappings.Add(new StreamTmdbMapping { XtreamSourceId = sourceId, ContentType = ContentType.Vod, StreamId = "2", TmdbId = 999 });
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        _dbContext.ChangeTracker.Clear();
+        var context = CreateContext("?action=get_vod_streams");
+
+        await CreateEndpoint(CreateHttpClientFactory(HttpStatusCode.OK)).GetAsync(context, TestContext.Current.CancellationToken);
+
+        // the mapped stream 2 keeps its persisted TMDB ID
+        await using var requests = _providerTmdbIdQueue.ReadAllAsync(TestContext.Current.CancellationToken).GetAsyncEnumerator(TestContext.Current.CancellationToken);
+        Assert.True(await requests.MoveNextAsync());
+        Assert.Equal(sourceId, requests.Current.XtreamSourceId);
+        Assert.Equal(ContentType.Vod, requests.Current.Type);
+        Assert.Equal(new Dictionary<string, long> { ["1"] = 101, ["3"] = 103 }, requests.Current.TmdbIds);
+        Assert.Equal(0, _providerTmdbIdQueue.Count);
+    }
+
+    [Fact]
     public async Task GetAsync_WritesEveryItemAcrossTmdbInfoBatches()
     {
         await SeedAsync();
@@ -409,7 +433,7 @@ public class ItemsGetEndpointTests : IAsyncDisposable
             httpClientFactory,
             new SourceService(_dbContext, TimeProvider.System),
             new CategoryService(_dbContext, TimeProvider.System),
-            new ItemService(new TmdbIdRetrieverQueue(), _tmdbInfoQueue, Options.Create(new TmdbOptions { ApiKey = "token" }), TimeProvider.System),
+            new ItemService(new TmdbIdRetrieverQueue(), _providerTmdbIdQueue, _tmdbInfoQueue, Options.Create(new TmdbOptions { ApiKey = "token" }), TimeProvider.System),
             new StubTmdbHttpClientFactory(_ => null).CreateTmdbInfoService(_dbContext, TimeProvider.System),
             _tmdb.CreateVirtualCategoryService(_dbContext, _recommendationCache),
             NullLogger<ItemsGetEndpoint>.Instance);

@@ -8,7 +8,8 @@ namespace XtreamForge.ApiService.Xtream;
 /// <summary>
 /// HTTP exchange with the upstream provider: sends the incoming request upstream and copies an upstream response back
 /// to the client, without the <c>Host</c> and hop-by-hop headers. The proxy routes only accept GET and HEAD,
-/// so no request body is forwarded.
+/// so no request body is forwarded. The client address headers added by a reverse proxy in front of XtreamForge
+/// are not forwarded upstream either.
 /// </summary>
 public static class XtreamHttpForwarder
 {
@@ -24,6 +25,20 @@ public static class XtreamHttpForwarder
         HeaderNames.TransferEncoding,
         HeaderNames.Upgrade
     };
+
+    // Added by a reverse proxy in front of XtreamForge (or by ForwardedHeadersMiddleware, X-Original-*): they carry the
+    // client's address, often a private one. Providers may bind the stream URL they redirect to to this address, which
+    // then rejects the client calling it from its public address
+    private static readonly HashSet<string> ClientAddressHeaders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Forwarded",
+        "X-Real-IP",
+        "X-Client-IP",
+        "True-Client-IP",
+        "CF-Connecting-IP"
+    };
+
+    private static readonly string[] ClientAddressHeaderPrefixes = ["X-Forwarded-", "X-Original-"];
 
     /// <summary>
     /// Sends the incoming request of <paramref name="xtreamContext"/> to <paramref name="targetUri"/> through the Xtream HTTP client;
@@ -49,7 +64,7 @@ public static class XtreamHttpForwarder
         headersToSkip.Add(HeaderNames.Host);
 
         // content headers are rejected here and dropped, as there is no request content
-        foreach (var header in request.Headers.Where(header => !headersToSkip.Contains(header.Key)))
+        foreach (var header in request.Headers.Where(header => !headersToSkip.Contains(header.Key) && !IsClientAddressHeader(header.Key)))
         {
             requestMessage.Headers.TryAddWithoutValidation(header.Key, [.. header.Value]);
         }
@@ -59,6 +74,10 @@ public static class XtreamHttpForwarder
 
         return requestMessage;
     }
+
+    private static bool IsClientAddressHeader(string headerName) =>
+        ClientAddressHeaders.Contains(headerName)
+        || ClientAddressHeaderPrefixes.Any(prefix => headerName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Copies the status, headers, and body (none for a HEAD request) of <paramref name="responseMessage"/> to <paramref name="response"/>.</summary>
     public static async Task WriteResponseAsync(HttpResponseMessage responseMessage, HttpResponse response, CancellationToken cancellationToken)

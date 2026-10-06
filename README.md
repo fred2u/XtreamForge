@@ -126,6 +126,7 @@ Exposure:
 
 - the IPTV devices must reach the backend, which serves the Xtream proxy; the admin API (`/api/admin/...`) is served on the same port without authentication, so expose the backend only to trusted networks, or behind a reverse proxy that blocks `/api/admin/` for untrusted clients
 - behind a reverse proxy (for example to terminate TLS), list it in `ReverseProxy:KnownProxies` or `ReverseProxy:KnownNetworks`: the `X-Forwarded-Proto` and `X-Forwarded-Host` headers it sends then give the scheme, host, and port written to the [authentication response](#authentication-and-stream-urls); the forwarded headers of any other sender are ignored
+- the client address headers of a reverse proxy (`X-Forwarded-*`, `X-Real-IP`, `Forwarded`, ...) are never forwarded to the provider: some providers bind the stream URL they redirect to to the address these headers carry (often a private one), which then rejects the player
 - keep the Web UI on a trusted network: it is not authenticated either
 
 ## PostgreSQL notes

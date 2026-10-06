@@ -48,6 +48,26 @@ public class XtreamHttpForwarderTests
         Assert.False(requestMessage.Headers.Contains("X-Custom-Hop"));
     }
 
+    [Theory]
+    [InlineData("X-Real-IP")]
+    [InlineData("X-Forwarded-For")]
+    [InlineData("X-Forwarded-Proto")]
+    [InlineData("X-Forwarded-Scheme")]
+    [InlineData("X-Original-For")]
+    [InlineData("Forwarded")]
+    public void CreateRequestMessage_SkipsTheClientAddressHeadersOfAReverseProxy(string headerName)
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Method = "GET";
+        httpContext.Request.Headers.UserAgent = "IPTV Player";
+        httpContext.Request.Headers[headerName] = "192.168.1.20";
+
+        using var requestMessage = XtreamHttpForwarder.CreateRequestMessage(TargetUri, httpContext.Request);
+
+        Assert.False(requestMessage.Headers.Contains(headerName));
+        Assert.Equal("IPTV Player", requestMessage.Headers.UserAgent.ToString());
+    }
+
     [Fact]
     public async Task WriteResponseAsync_ForwardsTheContentLengthOfThePartialContent()
     {

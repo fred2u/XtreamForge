@@ -3,6 +3,7 @@
 @using XtreamForge.Web.Features.Categories
 @implements IDisposable
 @inject WatchHistoryClient WatchHistoryClient
+@inject BrowserTimeZone BrowserTimeZone
 @inject INotificationService NotificationService
 @inject IDialogService DialogService
 
@@ -47,8 +48,8 @@
                             Virtualize="true"
                             ItemSize="64"
                             GridTemplateColumns="minmax(150px, 0.8fr) minmax(260px, 2.5fr) 120px 64px">
-                <TemplateColumn Title="Started" HeaderTooltip="Start of the playback, in local time">
-                    <span class="cell-secondary">@context.StartedAtUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)</span>
+                <TemplateColumn Title="Started" HeaderTooltip="Start of the playback, in the time zone of the browser">
+                    <span class="cell-secondary">@FormatStartedAt(context.StartedAtUtc)</span>
                 </TemplateColumn>
                 <TemplateColumn Title="Title">
                     <div class="media-cell">
@@ -96,6 +97,7 @@
     private GridItemsProvider<WatchHistoryEntryDto>? _itemsProvider;
     private FluentDataGrid<WatchHistoryEntryDto>? _grid;
     private WatchHistoryPageDto? _page;
+    private TimeZoneInfo? _timeZone;
     private bool _isRefreshing;
     private Exception? _loadError;
 
@@ -103,6 +105,23 @@
     {
         _itemsProvider = ProvideItemsAsync;
     }
+
+    // The time zone of the browser is only readable once rendered; the start dates are shown once it is known.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _timeZone = await BrowserTimeZone.GetAsync(_disposal.Token);
+        StateHasChanged();
+    }
+
+    private string FormatStartedAt(DateTimeOffset startedAtUtc) =>
+        _timeZone is { } timeZone
+            ? TimeZoneInfo.ConvertTime(startedAtUtc, timeZone).ToString("g", CultureInfo.CurrentCulture)
+            : string.Empty;
 
     // Called by the virtualized grid for the visible rows; the API sorts and pages the history.
     private async ValueTask<GridItemsProviderResult<WatchHistoryEntryDto>> ProvideItemsAsync(GridItemsProviderRequest<WatchHistoryEntryDto> request)
@@ -160,7 +179,7 @@
     private async Task DeleteAsync(WatchHistoryEntryDto entry)
     {
         var confirmation = await DialogService.ShowConfirmationAsync(
-            $"Delete the playback of <strong>{WebUtility.HtmlEncode(entry.DisplayTitle)}</strong> started on {WebUtility.HtmlEncode(entry.StartedAtUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture))}? The movie can then be recommended again if it has no other playback. This cannot be undone.",
+            $"Delete the playback of <strong>{WebUtility.HtmlEncode(entry.DisplayTitle)}</strong> started on {WebUtility.HtmlEncode(FormatStartedAt(entry.StartedAtUtc))}? The movie can then be recommended again if it has no other playback. This cannot be undone.",
             "Delete playback",
             "Delete",
             "Cancel");

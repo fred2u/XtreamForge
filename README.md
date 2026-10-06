@@ -400,9 +400,9 @@ Boundaries:
 
 Features (`src/XtreamForge.Web/Features`):
 
-- `Dashboard` - application and database status; configuration counters (sources, Xtream and custom categories, category, item, and TMDB rules) and TMDB counters (known mappings, unresolved lookups, TMDB infos, failed TMDB loads, i.e. entries whose first load failed and that wait for a retry, and manually excluded entries; the mapping counters link to the TMDB mappings screen filtered by mapped state, the TMDB info counters to the filtered TMDB infos screen), and a heatmap of the movie playbacks per day over the last year (in the time zone of the Web server, like the dates of the watch history)
+- `Dashboard` - application and database status; configuration counters (sources, Xtream and custom categories, category, item, and TMDB rules) and TMDB counters (known mappings, unresolved lookups, TMDB infos, failed TMDB loads, i.e. entries whose first load failed and that wait for a retry, and manually excluded entries; the mapping counters link to the TMDB mappings screen filtered by mapped state, the TMDB info counters to the filtered TMDB infos screen), and a heatmap of the movie playbacks per day over the last year (in the time zone of the Web server)
 - `Monitoring` - live background queues (size, one hour charts) and upstream rate limits
-- `History` - watch history (`/history`): the playbacks, most recent first, with their start date, TMDB title and poster (paged by the API), and a button to delete a playback
+- `History` - watch history (`/history`): the playbacks, most recent first, with their start date (in the time zone of the browser, UTC when the server does not know it), TMDB title and poster (paged by the API), and a button to delete a playback
 - `Recommendations` - movies recommended from the watch history (`/recommendations`), in the TMDB section with poster, genres, rating, number of watched movies recommending it, and availability in the catalogue
 - `Sources` - list, create (with provider discovery), delete
 - `Categories` - Xtream categories, custom categories, category rules; a click on an Xtream category opens its details (decision and deciding rule) where the manual exclusion and the custom category can also be changed

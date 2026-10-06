@@ -28,6 +28,15 @@
         })();
     </script>
 
+    @* Read through JS interop by BrowserTimeZone: the server cannot know the time zone of the browser. *@
+    <script>
+        window.xtreamForge = {
+            getTimeZone: function () {
+                return Intl.DateTimeFormat().resolvedOptions().timeZone;
+            }
+        };
+    </script>
+
     <Routes @rendermode="InteractiveServer" />
     <script src="_framework/blazor.web.js"></script>
 </body>

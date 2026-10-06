@@ -324,6 +324,25 @@ public class ItemsGetEndpointTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task GetAsync_WhenAStreamIsMapped_EnrichesItWithTheMappedTmdbIdInsteadOfTheProviderOne()
+    {
+        await SeedAsync();
+        var sourceId = await _dbContext.XtreamSources.Select(source => source.Id).SingleAsync(TestContext.Current.CancellationToken);
+        _dbContext.StreamTmdbMappings.Add(new StreamTmdbMapping { XtreamSourceId = sourceId, ContentType = ContentType.Vod, StreamId = "1", TmdbId = 201 });
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        _dbContext.ChangeTracker.Clear();
+        await AddLoadedTmdbInfosAsync((101, "Provider movie"), (201, "Corrected movie"));
+        var context = CreateContext("?action=get_vod_streams");
+
+        await CreateEndpoint(CreateHttpClientFactory(HttpStatusCode.OK)).GetAsync(context, TestContext.Current.CancellationToken);
+
+        // the provider exposes tmdb_id 101 for stream 1, corrected manually to 201
+        Assert.Equal(
+            [("1", "201", "Corrected movie")],
+            ReadResponseItems(context).Select(item => (item["stream_id"]?.ToString(), item["tmdb_id"]?.ToString(), item["name"]?.GetValue<string>())));
+    }
+
+    [Fact]
     public async Task GetAsync_WritesEveryItemAcrossTmdbInfoBatches()
     {
         await SeedAsync();

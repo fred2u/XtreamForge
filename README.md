@@ -303,10 +303,10 @@ Unlike the lists, only the TMDB mapping of the requested stream is read, not eve
 
 ## TMDB enrichment
 
-An item is returned only when a usable TMDB ID is known and its TMDB metadata is loaded (see [TMDB metadata](#tmdb-metadata)). The TMDB ID comes from either:
+An item is returned only when a usable TMDB ID is known and its TMDB metadata is loaded (see [TMDB metadata](#tmdb-metadata)). The TMDB ID comes from, in this order:
 
+- a persisted `Source + ContentType + StreamId -> TmdbId` mapping (injected as `tmdb_id`, replacing the provider value, which keeps the manual corrections)
 - the upstream list item already exposing `tmdb_id`
-- a persisted `Source + ContentType + StreamId -> TmdbId` mapping (injected as `tmdb_id`)
 
 Some providers expose `tmdb_id` in their lists but not in `get_vod_info` / `get_series_info`, so the provider `tmdb_id` of the listed items is persisted as their mapping: for each batch of 500 items, the streams with a positive `tmdb_id` and without mapping in the preloaded mappings are enqueued as one request (`ProviderTmdbIdQueue`, processed by `ProviderTmdbIdService` with one query reading the existing mappings of the batch and one save). A stream without mapping is mapped, a mapping without TMDB ID (lookup without result) receives the provider TMDB ID and is no longer looked up, and an existing TMDB ID is never replaced. Once persisted, the streams are part of the preloaded mappings and are no longer enqueued, so a catalogue already persisted adds no work to the list requests. Only the items reaching the batches are persisted (included category, not excluded by an item rule), as the item details apply the same conditions.
 
@@ -337,7 +337,7 @@ Media stream requests (`movie`, `series`, `live`, and `timeshift` paths, and the
 
 The dashboard shows the number of known TMDB mappings and of unresolved lookups (mappings without TMDB ID).
 
-The persisted mappings can be corrected, and the unresolved ones mapped manually, from the `TMDB mappings` screen of the Items section. A TMDB ID set manually is never looked up again and its TMDB metadata is enqueued for loading. For items whose upstream list entry already exposes `tmdb_id`, the correction only applies to the item details and the watch history: the lists keep the provider `tmdb_id`.
+The persisted mappings can be corrected, and the unresolved ones mapped manually, from the `TMDB mappings` screen of the Items section. A TMDB ID set manually is never looked up again and its TMDB metadata is enqueued for loading. The persisted TMDB ID replaces the provider `tmdb_id` in the lists, the item details, and the watch history.
 
 Admin API:
 

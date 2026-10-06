@@ -126,10 +126,23 @@ public class ItemServiceTests
     }
 
     [Fact]
-    public void TransformStreamItem_WhenItemHasTmdbId_KeepsProviderTmdbId()
+    public void TransformStreamItem_WhenItemHasTmdbIdAndIsMapped_UsesMappedTmdbId()
     {
         var context = CreateContext(ContentType.Vod);
         var source = CreateSource(new Dictionary<string, long> { ["1"] = 999 });
+
+        var result = Transform("""{ "stream_id": 1, "name": "Movie", "category_id": "10", "tmdb_id": "555" }""", context, [], source);
+
+        // the mapping may have been corrected manually
+        Assert.NotNull(result);
+        Assert.Equal("999", result["tmdb_id"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public void TransformStreamItem_WhenItemHasTmdbIdAndIsNotMapped_KeepsProviderTmdbId()
+    {
+        var context = CreateContext(ContentType.Vod);
+        var source = CreateSource(new Dictionary<string, long> { ["2"] = 999 });
 
         var result = Transform("""{ "stream_id": 1, "name": "Movie", "category_id": "10", "tmdb_id": "555" }""", context, [], source);
 

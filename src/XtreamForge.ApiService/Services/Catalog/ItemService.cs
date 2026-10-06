@@ -219,14 +219,15 @@ public class ItemService(
 
     private bool EnsureTmdbId(string streamId, JsonObject item, XtreamContext xtreamContext, XtreamSourceSnapshot source)
     {
-        if (HasTmdbId(item))
-            return true;
-
+        // the mapped tmdb_id wins over the provider one, as in TransformInfo: it may have been corrected manually
         if (source.StreamTmdbMappings.TryGetValue(streamId, out var tmdbId))
         {
             item["tmdb_id"] = tmdbId.ToString();
             return true;
         }
+
+        if (HasTmdbId(item))
+            return true;
 
         // Background service to retrieve the tmdb_id for streamId and update the mapping in the database,
         // unless a previous lookup failed or found nothing and the next one is not due yet

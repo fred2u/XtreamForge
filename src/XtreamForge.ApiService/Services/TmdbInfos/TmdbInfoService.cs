@@ -11,14 +11,16 @@ namespace XtreamForge.ApiService.Services.TmdbInfos;
 
 /// <summary>
 /// Reads and stores the TMDB metadata used to enrich the Xtream items.
-/// Loaded metadata is refreshed after <see cref="RefreshDelay"/>; a load without result or failing definitively is retried after a delay
+/// Loaded metadata is refreshed after a random delay between <see cref="MinimumRefreshDelay"/> and <see cref="MaximumRefreshDelay"/>;
+/// a load without result or failing definitively is retried after a delay
 /// doubling from <see cref="FirstRetryDelay"/> up to <see cref="MaximumRetryDelay"/>, a transient failure (TMDB outage, timeout, HTTP 429 or 5xx)
 /// after <see cref="RetryDelay.TransientFailureDelay"/>.
 /// </summary>
 public class TmdbInfoService(XtreamForgeDbContext dbContext, TmdbClient tmdbClient, IOptions<TmdbOptions> options, TimeProvider timeProvider)
     : IQueueProcessor<TmdbInfoRequest>
 {
-    public static readonly TimeSpan RefreshDelay = TimeSpan.FromDays(60);
+    public static readonly TimeSpan MinimumRefreshDelay = TimeSpan.FromDays(50);
+    public static readonly TimeSpan MaximumRefreshDelay = TimeSpan.FromDays(180);
     public static readonly TimeSpan FirstRetryDelay = TimeSpan.FromDays(1);
     public static readonly TimeSpan MaximumRetryDelay = TimeSpan.FromDays(30);
 
@@ -135,9 +137,13 @@ public class TmdbInfoService(XtreamForgeDbContext dbContext, TmdbClient tmdbClie
         info.DurationMinutes = data.DurationMinutes is > 0 and <= MaximumDurationMinutes ? data.DurationMinutes : null;
         info.LoadedAtUtc = now;
         info.LoadAttemptCount = 0;
-        info.NextLoadAtUtc = now + RefreshDelay;
+        info.NextLoadAtUtc = now + GetRefreshDelay();
         info.UpdatedAtUtc = now;
     }
+
+    // metadata loaded together (a whole catalogue) is refreshed over several months instead of all on the same day
+    private static TimeSpan GetRefreshDelay()
+        => TimeSpan.FromTicks(Random.Shared.NextInt64(MinimumRefreshDelay.Ticks, MaximumRefreshDelay.Ticks));
 
     private static string? CleanText(string? value, int? maximumLength)
     {

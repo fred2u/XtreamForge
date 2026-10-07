@@ -265,7 +265,7 @@ Missing TMDB IDs are resolved asynchronously in the background:
 
 TMDB metadata (`Domain/Tmdb/TmdbInfo`, one entry per `ContentType + TmdbId`) enriches the returned items:
 
-- it is only loaded from the TMDB details, in the background by `TmdbInfoService` through the singleton `TmdbInfoQueue` (refresh after 60 days, retry delay of 1 day doubling up to 30 days, or `RetryDelay.TransientFailureDelay` after a transient failure; a request for an entry that is not due is ignored); `TmdbIdRetrieverService` enqueues every TMDB ID it finds, whatever its source; TMDB search results are never stored; all writes go through `TmdbInfoService`;
+- it is only loaded from the TMDB details, in the background by `TmdbInfoService` through the singleton `TmdbInfoQueue` (refresh after a random delay between 50 and 180 days, retry delay of 1 day doubling up to 30 days, or `RetryDelay.TransientFailureDelay` after a transient failure; a request for an entry that is not due is ignored); `TmdbIdRetrieverService` enqueues every TMDB ID it finds, whatever its source; TMDB search results are never stored; all writes go through `TmdbInfoService`;
 - list items are enriched by batches (`ItemsGetEndpoint` reads the metadata of each batch with one query): do not preload the metadata of a whole catalogue;
 - `TmdbItemEnricher` merges both sources: it only replaces keys already present in the provider item and only with available TMDB values (TMDB wins when both have a value, except `genre`, filled from the English TMDB genres only when the provider value is empty); TMDB and provider values are both untrusted;
 - an item that cannot be enriched (no positive TMDB ID, metadata not loaded) is excluded from the response and appears once its metadata is loaded;

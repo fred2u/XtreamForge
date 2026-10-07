@@ -49,7 +49,7 @@ public class TmdbInfoServiceTests : IAsyncDisposable
         Assert.Equal([28, 878], info.GenreIds);
         Assert.Equal(["Action", "Science Fiction"], info.Genres);
         Assert.Equal(_time.Now, info.LoadedAtUtc);
-        Assert.Equal(_time.Now.AddDays(60), info.NextLoadAtUtc);
+        Assert.InRange(info.NextLoadAtUtc, _time.Now.AddDays(50), _time.Now.AddDays(180));
     }
 
     [Theory]
@@ -195,7 +195,7 @@ public class TmdbInfoServiceTests : IAsyncDisposable
         Assert.True(loaded);
         var info = await _dbContext.TmdbInfos.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
         Assert.Equal("Lattice", info.Title);
-        Assert.Equal(_time.Now.AddDays(60), info.NextLoadAtUtc);
+        Assert.InRange(info.NextLoadAtUtc, _time.Now.AddDays(50), _time.Now.AddDays(180));
     }
 
     [Fact]

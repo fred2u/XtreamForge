@@ -12,11 +12,16 @@ public sealed record WatchHistoryListQuery(
     int Skip = 0,
     int Take = WatchHistoryAdminService.DefaultPageSize);
 
-/// <summary>A playback of the watch history with the TMDB metadata of its TMDB ID, when loaded.</summary>
+/// <summary>
+/// A playback of the watch history with the TMDB metadata of its TMDB ID, when loaded; a series episode has the TMDB ID and metadata
+/// of its series, and its season and episode numbers when known.
+/// </summary>
 public sealed record WatchHistoryEntryItem(
     int Id,
     ContentType ContentType,
     long TmdbId,
+    int? SeasonNumber,
+    int? EpisodeNumber,
     DateTimeOffset StartedAtUtc,
     string? Title,
     string? OriginalTitle,
@@ -26,10 +31,10 @@ public sealed record WatchHistoryEntryItem(
 /// <summary>A page of the watch history; <see cref="MatchingCount"/> counts the entries matching the filters.</summary>
 public sealed record WatchHistoryPage(IReadOnlyList<WatchHistoryEntryItem> Items, int MatchingCount);
 
-/// <summary>Number of movie playbacks started on a day of the requested time zone.</summary>
-public sealed record WatchHistoryDayActivity(DateOnly Date, int Count);
+/// <summary>Number of movie and series episode playbacks started on a day of the requested time zone.</summary>
+public sealed record WatchHistoryDayActivity(DateOnly Date, int MovieCount, int EpisodeCount);
 
-/// <summary>Movie playbacks per day from <see cref="From"/> to <see cref="To"/> (included); the days without playback are omitted.</summary>
+/// <summary>Playbacks per day from <see cref="From"/> to <see cref="To"/> (included); the days without playback are omitted.</summary>
 public sealed record WatchHistoryActivity(DateOnly From, DateOnly To, IReadOnlyList<WatchHistoryDayActivity> Days);
 
 public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TmdbIdCache recommendationCache, TimeProvider timeProvider)
@@ -41,7 +46,7 @@ public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TmdbIdCach
     public const int ActivityDayCount = 371;
 
     /// <summary>
-    /// Counts the movie playbacks per day of <paramref name="timeZone"/> over the last <see cref="ActivityDayCount"/> days, today included.
+    /// Counts the movie and series episode playbacks per day of <paramref name="timeZone"/> over the last <see cref="ActivityDayCount"/> days, today included.
     /// </summary>
     public async Task<WatchHistoryActivity> GetActivityAsync(TimeZoneInfo timeZone, CancellationToken cancellationToken = default)
     {
@@ -50,19 +55,23 @@ public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TmdbIdCach
 
         // only the playbacks of the period are read: a local day starts at most 14 hours before the same UTC day (UTC+14),
         // so starting one UTC day before the first day keeps all of its playbacks; their start dates are then converted to the
-        // time zone in memory, which keeps the day boundaries exact for every offset and daylight saving time
+        // time zone in memory, which keeps the day boundaries exact for every offset and daylight saving time.
+        // The content types are listed so that the (content type, start date) index is used
         var fromUtc = new DateTimeOffset(from.AddDays(-1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-        var startDates = await dbContext.WatchHistory
+        var playbacks = await dbContext.WatchHistory
             .AsNoTracking()
-            .Where(entry => entry.ContentType == ContentType.Vod && entry.StartedAtUtc >= fromUtc)
-            .Select(entry => entry.StartedAtUtc)
+            .Where(entry => (entry.ContentType == ContentType.Vod || entry.ContentType == ContentType.Series) && entry.StartedAtUtc >= fromUtc)
+            .Select(entry => new { entry.ContentType, entry.StartedAtUtc })
             .ToListAsync(cancellationToken);
 
-        var days = startDates
-            .Select(startedAtUtc => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(startedAtUtc, timeZone).DateTime))
-            .Where(date => date >= from && date <= to)
-            .GroupBy(date => date)
-            .Select(group => new WatchHistoryDayActivity(group.Key, group.Count()))
+        var days = playbacks
+            .Select(playback => (playback.ContentType, Date: DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(playback.StartedAtUtc, timeZone).DateTime)))
+            .Where(playback => playback.Date >= from && playback.Date <= to)
+            .GroupBy(playback => playback.Date)
+            .Select(group => new WatchHistoryDayActivity(
+                group.Key,
+                group.Count(playback => playback.ContentType == ContentType.Vod),
+                group.Count(playback => playback.ContentType == ContentType.Series)))
             .OrderBy(day => day.Date)
             .ToList();
 
@@ -70,8 +79,8 @@ public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TmdbIdCach
     }
 
     /// <summary>
-    /// Records a playback of a TMDB metadata entry started now, as if it had been played through the proxy;
-    /// returns null when the entry does not exist.
+    /// Records a playback of a TMDB metadata entry (movie or TV show, without season nor episode) started now, as if it had been played
+    /// through the proxy; returns null when the entry does not exist.
     /// </summary>
     public async Task<WatchHistoryEntryItem?> AddAsync(int tmdbInfoId, CancellationToken cancellationToken = default)
     {
@@ -84,9 +93,11 @@ public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TmdbIdCach
         var entry = new WatchHistoryEntry { ContentType = info.ContentType, TmdbId = info.TmdbId, StartedAtUtc = timeProvider.GetUtcNow() };
         dbContext.WatchHistory.Add(entry);
         await dbContext.SaveChangesAsync(cancellationToken);
-        recommendationCache.Invalidate(TmdbIdCache.RecommendationsKey);
+        recommendationCache.Invalidate(TmdbIdCache.RecommendationsKey(entry.ContentType));
 
-        return new WatchHistoryEntryItem(entry.Id, entry.ContentType, entry.TmdbId, entry.StartedAtUtc, info.Title, info.OriginalTitle, info.ReleaseDate, info.PosterPath);
+        return new WatchHistoryEntryItem(
+            entry.Id, entry.ContentType, entry.TmdbId, entry.SeasonNumber, entry.EpisodeNumber, entry.StartedAtUtc,
+            info.Title, info.OriginalTitle, info.ReleaseDate, info.PosterPath);
     }
 
     /// <summary>Deletes one playback of the watch history; returns false when it does not exist.</summary>
@@ -95,7 +106,9 @@ public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TmdbIdCach
         var deleted = await dbContext.WatchHistory.Where(entry => entry.Id == id).ExecuteDeleteAsync(cancellationToken) > 0;
         if (deleted)
         {
-            recommendationCache.Invalidate(TmdbIdCache.RecommendationsKey);
+            // the content type of the deleted playback is not read: deletions are rare, so both recommendation sets are computed again
+            recommendationCache.Invalidate(TmdbIdCache.RecommendationsKey(ContentType.Vod));
+            recommendationCache.Invalidate(TmdbIdCache.RecommendationsKey(ContentType.Series));
         }
 
         return deleted;
@@ -129,6 +142,8 @@ public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TmdbIdCach
                     entry.Id,
                     entry.ContentType,
                     entry.TmdbId,
+                    entry.SeasonNumber,
+                    entry.EpisodeNumber,
                     entry.StartedAtUtc,
                     info == null ? null : info.Title,
                     info == null ? null : info.OriginalTitle,

@@ -45,8 +45,8 @@ public sealed class VirtualCategoryAssignment(IReadOnlyList<VirtualCategory> cat
 }
 
 /// <summary>
-/// Exposes the virtual categories configured by <see cref="RecommendationOptions"/> (VOD only) and <see cref="PopularOptions"/> (VOD and series),
-/// in priority order: a recommended movie that is also popular belongs to the recommendations.
+/// Exposes the virtual categories configured by <see cref="RecommendationOptions"/> and <see cref="PopularOptions"/> (VOD and series),
+/// in priority order: a recommended movie or TV show that is also popular belongs to the recommendations.
 /// </summary>
 public class VirtualCategoryService(
     RecommendationService recommendationService,
@@ -100,14 +100,17 @@ public class VirtualCategoryService(
         return GetDefinitions(xtreamContext.ContentType).FirstOrDefault(definition => definition.Id == categoryId);
     }
 
-    // in priority order; the recommendations are computed from the movie history only
+    // in priority order; the recommendations of a content type are computed from its own watch history
     private List<Definition> GetDefinitions(ContentType contentType)
     {
         List<Definition> definitions = [];
-        if (contentType == ContentType.Vod && recommendationOptions.Value.IsCategoryEnabled)
+        if (contentType is not (ContentType.Vod or ContentType.Series))
+            return definitions;
+
+        if (recommendationOptions.Value.IsCategoryEnabled)
             definitions.Add(new Definition(Kind.Recommendations, recommendationOptions.Value.CategoryId, recommendationOptions.Value.CategoryName));
 
-        if (contentType is ContentType.Vod or ContentType.Series && popularOptions.Value.IsCategoryEnabled)
+        if (popularOptions.Value.IsCategoryEnabled)
             definitions.Add(new Definition(Kind.Popular, popularOptions.Value.CategoryId, popularOptions.Value.CategoryName));
 
         return definitions;
@@ -116,7 +119,7 @@ public class VirtualCategoryService(
     private async Task<VirtualCategory> LoadAsync(Definition definition, ContentType contentType, CancellationToken cancellationToken)
     {
         var tmdbIds = definition.Kind == Kind.Recommendations
-            ? await recommendationService.GetRecommendedTmdbIdsAsync(cancellationToken)
+            ? await recommendationService.GetRecommendedTmdbIdsAsync(contentType, cancellationToken)
             : await popularService.GetPopularTmdbIdsAsync(contentType, cancellationToken);
 
         return new VirtualCategory(definition.Id, tmdbIds);

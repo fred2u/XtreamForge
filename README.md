@@ -69,7 +69,7 @@ Backend (`XtreamForge.ApiService`):
 - `Tmdb:ImageBaseUrl` - TMDB image base URL used for the posters (default `https://image.tmdb.org/t/p/`); must be an absolute HTTP(S) URL, validated at startup
 - `Tmdb:PreferredLanguage` - language used for TMDB searches and details (default `fr-FR`)
 - `Tmdb:MinimumConfidenceScore` - minimum score for a TMDB match to be accepted (default `85`)
-- `Recommendations:CategoryName` - name of the VOD recommendations category (`RECOMMANDATIONS` in `appsettings.json`); the category is disabled when empty, see [Recommendations category](#recommendations-category)
+- `Recommendations:CategoryName` - name of the VOD and series recommendations category (`RECOMMANDATIONS` in `appsettings.json`); the category is disabled when empty, see [Recommendations category](#recommendations-category)
 - `Recommendations:CategoryId` - XtreamForge ID of the recommendations category (default `999999999`); must be positive (validated at startup) and must not be the ID of an Xtream or custom category
 - `Popular:CategoryName` - name of the VOD and series popular category (`POPULAIRES` in `appsettings.json`); the category is disabled when empty, see [Popular category](#popular-category)
 - `Popular:CategoryId` - XtreamForge ID of the popular category (default `999999998`); must be positive and differ from `Recommendations:CategoryId` (both validated at startup), and must not be the ID of an Xtream or custom category
@@ -149,11 +149,11 @@ Example:
 {xtreamforge-base-url}/http/example.com/8080/player_api.php?username=user&password=pass&action=get_vod_streams
 ```
 
-Only `GET` and `HEAD` requests are accepted. Several routes share this URL shape: `/{protocol}/{host}/{port}/player_api.php` (case-insensitive) is handled by XtreamForge as described below, and every other path (streams, other files) is forwarded upstream by separate routes that do not load any XtreamForge data (movie streams are only reported in memory to the [watch history](#watch-history)). The short live form `/{protocol}/{host}/{port}/{username}/{password}/{streamId}` has its own route, only so that its credentials are known from the route values and redacted; it is forwarded like any other path.
+Only `GET` and `HEAD` requests are accepted. Several routes share this URL shape: `/{protocol}/{host}/{port}/player_api.php` (case-insensitive) is handled by XtreamForge as described below, and every other path (streams, other files) is forwarded upstream by separate routes that do not load any XtreamForge data (movie and series episode streams are only reported in memory to the [watch history](#watch-history)). The short live form `/{protocol}/{host}/{port}/{username}/{password}/{streamId}` has its own route, only so that its credentials are known from the route values and redacted; it is forwarded like any other path.
 
 Behavior by `player_api.php` action:
 
-- `get_vod_categories` / `get_series_categories` - fetched from upstream, synchronized in PostgreSQL, filtered by category rules, and returned with XtreamForge category IDs; they start with the virtual categories: recommendations (VOD only), then popular
+- `get_vod_categories` / `get_series_categories` - fetched from upstream, synchronized in PostgreSQL, filtered by category rules, and returned with XtreamForge category IDs; they start with the virtual categories: recommendations, then popular
 - `get_vod_streams` / `get_series` - see [Catalogue processing](#catalogue-processing)
 - `get_vod_info` / `get_series_info` - see [Item details](#item-details)
 - no action (authentication) - see [Authentication and stream URLs](#authentication-and-stream-urls)
@@ -178,37 +178,38 @@ Some clients build the stream URLs from the `server_info` of the authentication 
 
 ## Watch history
 
-Every movie played through the proxy is recorded with its TMDB ID, its content type, and the start date of the playback; a movie played several times appears once per playback. The history is global: neither the Xtream account nor the source is stored.
+Every movie and series episode played through the proxy is recorded with its TMDB ID (the TMDB ID of its series for an episode, with its season and episode numbers when the provider gives them), its content type, and the start date of the playback; a title played several times appears once per playback. The history is global: neither the Xtream account nor the source is stored.
 
-- a playback starts with a `GET` of a movie stream, `movie/{username}/{password}/{streamId}.{extension}` with or without the upstream prefix, that the provider serves or redirects (redirects are forwarded to the client, which then calls the redirect target directly) (`HEAD` requests, series episodes, and live streams are not recorded)
-- a player sends several requests for one playback (range requests, seeks, reconnections): a request starts a new playback only when no request of the same movie and account is running and the last one ended more than 30 minutes ago; this state is kept in memory by the singleton `WatchHistoryQueue`, so the stream route does not access the database
-- the playbacks are recorded in the background by `WatchHistoryService`: the TMDB ID is the persisted mapping of the stream when it exists, otherwise the `tmdb_id` of the provider `get_vod_info` payload (called with the credentials of the stream URL, kept in memory only); a playback of an unknown source or of a movie without TMDB ID is not recorded
-- `GET /api/admin/watch-history?contentType=&skip=&take=` - page (most recent first, at most 200 entries) of the history, with the title, original title, release date, and `w92` poster of the loaded TMDB metadata, and the number of matching entries; an invalid content type returns `400`
-- `GET /api/admin/watch-history/activity?timeZone=` - number of movie playbacks per day (days without playback omitted) over the last 53 weeks, today included, the days being those of the given time zone (IANA or Windows ID, UTC when empty; an unknown time zone returns `400`)
+- a playback starts with a `GET` of a movie stream, `movie/{username}/{password}/{streamId}.{extension}`, or of a series episode stream, `series/{username}/{password}/{episodeId}.{extension}`, with or without the upstream prefix, that the provider serves or redirects (redirects are forwarded to the client, which then calls the redirect target directly) (`HEAD` requests and live streams are not recorded)
+- a player sends several requests for one playback (range requests, seeks, reconnections): a request starts a new playback only when no request of the same stream and account is running and the last one ended more than 30 minutes ago; this state is kept in memory by the singleton `WatchHistoryQueue`, so the stream route does not access the database
+- the stream URL of an episode only carries the episode ID: its series, season, and number are the ones persisted from the episodes listed by `get_series_info` (`series_episodes`, one row per `Source + EpisodeId`, written in the background by `SeriesEpisodeService` through the `SeriesEpisodeQueue`, deduplicated per listed series; a known episode is only updated when its series, season, or number changed). An episode is therefore recorded once its series has been listed through XtreamForge, at any time before the playback, so clients that keep the episode lists in cache are supported
+- the playbacks are recorded in the background by `WatchHistoryService`: the TMDB ID is the persisted mapping of the movie or series stream when it exists, otherwise the `tmdb_id` of the provider `get_vod_info` / `get_series_info` payload (called with the credentials of the stream URL, kept in memory only); a playback of an unknown source, of an episode that was not listed, or of a title without TMDB ID is not recorded
+- `GET /api/admin/watch-history?contentType=&skip=&take=` - page (most recent first, at most 200 entries) of the history, optionally filtered by content type, with the season and episode numbers of the episodes and the title, original title, release date, and `w92` poster of the loaded TMDB metadata (of the series for an episode), and the number of matching entries; an invalid content type returns `400`
+- `GET /api/admin/watch-history/activity?timeZone=` - number of movie playbacks and of episode playbacks per day (days without playback omitted) over the last 53 weeks, today included, the days being those of the given time zone (IANA or Windows ID, UTC when empty; an unknown time zone returns `400`)
 - `DELETE /api/admin/watch-history/{id}` - deletes one playback (`204`, or `404` when unknown); from the `Watch history` screen
-- `POST /api/admin/tmdb-infos/{id}/watch-history` - records a playback of a TMDB metadata entry started now and returns it (`404` for an unknown entry); from the details of an entry on the `TMDB infos` screen
+- `POST /api/admin/tmdb-infos/{id}/watch-history` - records a playback of a TMDB metadata entry (movie or TV show, without season nor episode) started now and returns it (`404` for an unknown entry); from the details of an entry on the `TMDB infos` screen
 
 ### Recommendations
 
-Movies are recommended from the watch history, computed on each request (nothing is stored):
+Movies and TV shows are recommended from the watch history of the same content type, computed on each request (nothing is stored):
 
-- the TMDB recommendations (`movie/{id}/recommendations`, first page, in `Tmdb:PreferredLanguage`) of the 20 most recently watched distinct movies are requested; without `Tmdb:ApiKey`, the list is empty
-- a movie of the watch history is never recommended, nor a movie whose TMDB metadata is excluded manually
-- each watched movie gives its recommendations a weight (20 for the most recent, down to 1); the 50 best summed weights are returned, then by vote average
+- the TMDB recommendations (`movie/{id}/recommendations` / `tv/{id}/recommendations`, first page, in `Tmdb:PreferredLanguage`) of the 20 most recently watched distinct movies or series (the episodes of a series count once, at their last playback) are requested; without `Tmdb:ApiKey`, the list is empty
+- a movie or series of the watch history is never recommended, nor a title whose TMDB metadata is excluded manually
+- each watched movie or series gives its recommendations a weight (20 for the most recent, down to 1); the 50 best summed weights are returned, then by vote average
 - a recommendation is flagged as available in the catalogue when TMDB metadata is known for it (TMDB rules are not applied)
-- `GET /api/admin/recommendations` - the recommendations with title, original title, release date, `w92` poster, vote average and count, English genre names, score, number of watched movies recommending it, and the catalogue flag
+- `GET /api/admin/recommendations?contentType=` - the recommended movies (`Vod`, the default) or TV shows (`Series`) with their content type, title, original title, release date (first air date of a TV show), `w92` poster, vote average and count, English genre names, score, number of watched titles recommending it, and the catalogue flag; an invalid content type returns `400`
 
 ### Recommendations category
 
-When `Recommendations:CategoryName` is set, the recommended movies are exposed to the Xtream clients in a virtual VOD category:
+When `Recommendations:CategoryName` is set, the recommended movies and TV shows are exposed to the Xtream clients in a virtual category, for VOD and series (each content type with its own recommendations):
 
-- `get_vod_categories` returns it first, with the ID `Recommendations:CategoryId`
-- `get_vod_streams` with all the categories (`category_id` missing, empty, or `ALL`): a recommended movie is returned in the recommendations category (`category_id` and `category_ids` rewritten) instead of its own category
-- `get_vod_streams` with the recommendations `category_id`: the provider is called once with `category_id=ALL` and only the recommended movies are returned, in the recommendations category
+- `get_vod_categories` / `get_series_categories` return it first, with the ID `Recommendations:CategoryId`
+- `get_vod_streams` / `get_series` with all the categories (`category_id` missing, empty, or `ALL`): a recommended item is returned in the recommendations category (`category_id` and `category_ids` rewritten) instead of its own category
+- `get_vod_streams` / `get_series` with the recommendations `category_id`: the provider is called once with `category_id=ALL` and only the recommended items are returned, in the recommendations category
 - a TMDB ID appears only once in a virtual category: when several streams share it, the first one returned by the provider (after the rules and the TMDB filtering) takes the virtual category, the next ones keep their own category
 - `get_vod_info` / `get_series_info` always return the item in its own category, as they cannot know which stream of a TMDB ID is listed in the virtual category
-- `get_vod_streams` with another category keeps the category of the recommended movies
-- the TMDB IDs of the recommended movies are kept in memory for 6 hours (`TmdbIdCache`) and recomputed when the watch history changes (playback recorded, added, or deleted); once they expire, the other requests get the previous recommendations while one request computes them again
+- `get_vod_streams` / `get_series` with another category keeps the category of the recommended items
+- the TMDB IDs of the recommended items are kept in memory for 6 hours per content type (`TmdbIdCache`) and recomputed when the watch history of the content type changes (playback recorded or added; a deleted playback recomputes both content types); once they expire, the other requests get the previous recommendations while one request computes them again
 - when TMDB fails, the previous recommendations (or none, after a watch history change or on the first computation) are returned and kept for 5 minutes before TMDB is called again
 
 ### Popular category
@@ -216,8 +217,8 @@ When `Recommendations:CategoryName` is set, the recommended movies are exposed t
 When `Popular:CategoryName` is set, the movies and TV shows currently popular on TMDB (`movie/popular` / `tv/popular`, first 5 pages, i.e. up to 100 titles per content type) are exposed in a virtual category, for VOD and series:
 
 - `get_vod_categories` / `get_series_categories` return it after the recommendations category, with the ID `Popular:CategoryId`
-- with all the categories (`get_vod_streams` / `get_series`), a popular item is moved to the popular category, unless it is a recommended movie: the recommendations category wins
-- `get_vod_streams` / `get_series` with the popular `category_id`: the provider is called once with `category_id=ALL` and only the popular items are returned, in the popular category (recommended movies included)
+- with all the categories (`get_vod_streams` / `get_series`), a popular item is moved to the popular category, unless it is recommended: the recommendations category wins
+- `get_vod_streams` / `get_series` with the popular `category_id`: the provider is called once with `category_id=ALL` and only the popular items are returned, in the popular category (recommended items included)
 - as for the recommendations, only the first stream of a TMDB ID is in the popular category, and `get_vod_info` / `get_series_info` keep the item in its own category
 - the popular TMDB IDs are kept in memory for 6 hours per content type (`TmdbIdCache`); once they expire, the other requests get the previous popular items while one request computes them again; without `Tmdb:ApiKey` the category is empty; when TMDB fails, the previous popular items (or none on the first computation) are returned and kept for 5 minutes before TMDB is called again
 
@@ -298,6 +299,8 @@ For `get_vod_info` and `get_series_info`, the item is returned only if it would 
 5. The TMDB metadata must be loaded: it is applied to `info` and `movie_data` for VOD, and to `info` for series (see [TMDB metadata](#tmdb-metadata)); the item is not returned when its TMDB metadata is excluded manually or by a TMDB rule.
 
 When the item would not be listed, the empty payload of Xtream panels is returned with `200 OK`: `{"info":[],"movie_data":[]}` for VOD, `{"seasons":[],"info":[],"episodes":[]}` for series. Other fields (seasons, episodes, metadata) are returned unchanged; an upstream error status is forwarded.
+
+The episodes listed by a successful `get_series_info` (whatever the rules decide) are enqueued to be persisted with their series, season, and number, so that their playbacks can be recorded in the [watch history](#watch-history).
 
 Unlike the lists, only the TMDB mapping of the requested stream is read, not every mapping of the source.
 
@@ -381,7 +384,7 @@ Admin API:
 
 ## Background queue monitoring
 
-Background queues (the TMDB ID lookup queue, the provider TMDB ID queue, the TMDB metadata queue, and the watch history queue) derive from `BackgroundQueue` (`Services/Queues`: bounded in-memory queue deduplicated per request key, whose oldest request is dropped when it is full), are consumed by `QueueBackgroundService` (each request in its own DI scope; a failed request is logged without its credentials and can be enqueued again), and are sampled by `QueueMonitor` (`Services/Monitoring`):
+Background queues (the TMDB ID lookup queue, the provider TMDB ID queue, the TMDB metadata queue, the series episodes queue, and the watch history queue) derive from `BackgroundQueue` (`Services/Queues`: bounded in-memory queue deduplicated per request key, whose oldest request is dropped when it is full), are consumed by `QueueBackgroundService` (each request in its own DI scope; a failed request is logged without its credentials and can be enqueued again), and are sampled by `QueueMonitor` (`Services/Monitoring`):
 
 - every 10 s, the size of each queue and the items processed since the previous sample (succeeded, no result, failed) are recorded; one hour of samples is kept in memory and lost on restart
 - `GET /api/admin/queues` returns the current size and the history of each queue, and the upstream hosts that answered HTTP 429 since the API started (current spacing, number of 429)
@@ -400,10 +403,10 @@ Boundaries:
 
 Features (`src/XtreamForge.Web/Features`):
 
-- `Dashboard` - application and database status; configuration counters (sources, Xtream and custom categories, category, item, and TMDB rules) and TMDB counters (known mappings, unresolved lookups, TMDB infos, failed TMDB loads, i.e. entries whose first load failed and that wait for a retry, and manually excluded entries; the mapping counters link to the TMDB mappings screen filtered by mapped state, the TMDB info counters to the filtered TMDB infos screen), and a heatmap of the movie playbacks per day over the last year (in the time zone of the Web server)
+- `Dashboard` - application and database status; configuration counters (sources, Xtream and custom categories, category, item, and TMDB rules) and TMDB counters (known mappings, unresolved lookups, TMDB infos, failed TMDB loads, i.e. entries whose first load failed and that wait for a retry, and manually excluded entries; the mapping counters link to the TMDB mappings screen filtered by mapped state, the TMDB info counters to the filtered TMDB infos screen), and a heatmap of the playbacks per day over the last year, with the movies and episodes of each day (in the time zone of the Web server)
 - `Monitoring` - live background queues (size, one hour charts) and upstream rate limits
-- `History` - watch history (`/history`): the playbacks, most recent first, with their start date (in the time zone of the browser, UTC when the server does not know it), TMDB title and poster (paged by the API), and a button to delete a playback
-- `Recommendations` - movies recommended from the watch history (`/recommendations`), in the TMDB section with poster, genres, rating, number of watched movies recommending it, and availability in the catalogue
+- `History` - watch history (`/history`): the playbacks, most recent first, filtered by content type (all, VOD, or series), with their start date (in the time zone of the browser, UTC when the server does not know it), TMDB title and poster (of the series for an episode, with its season and episode, for example `S01E02`; paged by the API), and a button to delete a playback
+- `Recommendations` - movies or series (content type selector) recommended from the watch history (`/recommendations`), in the TMDB section with poster, genres, rating, number of watched titles recommending it, and availability in the catalogue
 - `Sources` - list, create (with provider discovery), delete
 - `Categories` - Xtream categories, custom categories, category rules; a click on an Xtream category opens its details (decision and deciding rule) where the manual exclusion and the custom category can also be changed
 - `Items` - item rules, and TMDB mappings: the mappings of a source and content type (stream ID, TMDB title and poster, or the state of the background lookup when not found; filtered by search and mapped state, the latter also settable by a link with `state=Mapped|NotMapped`, and paged by the API), whose edit button opens an editor to set the TMDB ID
@@ -441,7 +444,8 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) restores, builds in Rel
 - an item whose lookup found nothing is looked up again only after its retry delay (up to 30 days), even if `Tmdb:ApiKey` is configured in the meantime
 - the TMDB lookup, provider TMDB ID, and metadata queues are in memory: pending lookups, provider TMDB IDs, and loads are lost on restart (provider TMDB IDs and missing metadata are enqueued again by the next catalogue request)
 - the item details of a stream whose provider payload has no `tmdb_id` are only returned once its list has been requested and its provider `tmdb_id` persisted
-- the watch history only records movies, from the start of the playback, whatever the part actually watched; pending playbacks are lost on restart, and stream URLs that bypass XtreamForge are not recorded
+- the watch history records movies and series episodes from the start of the playback, whatever the part actually watched; pending playbacks are lost on restart, and stream URLs that bypass XtreamForge are not recorded
+- a series episode is only recorded once its series has been listed (`get_series_info`) through XtreamForge; the pending episode lists are lost on restart and persisted again by the next `get_series_info` of the series
 - items are hidden until their TMDB metadata is loaded, so the first catalogue requests return few items; without `Tmdb:ApiKey`, no metadata is loaded and no item is returned
 - changing `Tmdb:PreferredLanguage` only affects metadata loaded or refreshed afterwards
 - while a provider rate limits (HTTP 429), proxied API requests to it (not the media streams) wait for their slot (up to one minute per attempt, three attempts), which can exceed the timeout of some IPTV clients

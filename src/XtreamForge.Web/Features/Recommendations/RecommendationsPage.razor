@@ -1,10 +1,11 @@
 @page "/recommendations"
+@using XtreamForge.Web.Features.Categories
 @implements IDisposable
 @inject RecommendationsClient RecommendationsClient
 
 <PageTitle>Recommendations - XtreamForge</PageTitle>
 
-<PageHeader Title="Recommendations" Subtitle="Movies recommended by TMDB for the recently watched movies. A watched movie is never recommended.">
+<PageHeader Title="Recommendations" Subtitle="Movies and series recommended by TMDB for the recently watched ones (a series counts once its episodes are watched). A watched title is never recommended.">
     <Actions>
         <FluentButton Appearance="ButtonAppearance.Outline"
                       IconStart="@(new Icons.Regular.Size16.ArrowClockwise())"
@@ -14,6 +15,10 @@
         </FluentButton>
     </Actions>
 </PageHeader>
+
+<FluentCard Class="surface filter-bar">
+    <CategoryScopeBar Sources="null" ContentType="@_contentType" ContentTypeChanged="@SetContentTypeAsync" Disabled="@_isLoading" />
+</FluentCard>
 
 <FluentCard Class="surface grid-surface">
     @if (_loadError is not null)
@@ -27,13 +32,13 @@
     else if (_recommendations.Count == 0)
     {
         <EmptyState Title="No recommendation yet"
-                    Description="Recommendations appear once movies are in the watch history and the TMDB API key is configured."
+                    Description="@($"Recommendations appear once {TitlesNoun(2)} are in the watch history and the TMDB API key is configured.")"
                     Icon="@(new Icons.Regular.Size24.Sparkle())" />
     }
     else
     {
         <div class="grid-caption" aria-live="polite">
-            <span><strong>@_recommendations.Count.ToString("N0", CultureInfo.CurrentCulture)</strong> recommended movies</span>
+            <span><strong>@_recommendations.Count.ToString("N0", CultureInfo.CurrentCulture)</strong> recommended @TitlesNoun(_recommendations.Count)</span>
             <span class="grid-caption-stats">
                 <span>@_recommendations.Count(recommendation => recommendation.IsInCatalogue).ToString("N0", CultureInfo.CurrentCulture) available in the catalogue</span>
             </span>
@@ -103,10 +108,10 @@
                         <span class="cell-secondary">No votes</span>
                     }
                 </TemplateColumn>
-                <TemplateColumn Title="Recommended by" HeaderTooltip="Number of recently watched movies recommending it">
-                    <span class="cell-secondary">@context.RecommendedByCount.ToString(CultureInfo.CurrentCulture) @(context.RecommendedByCount == 1 ? "movie" : "movies")</span>
+                <TemplateColumn Title="Recommended by" HeaderTooltip="@($"Number of recently watched {TitlesNoun(2)} recommending it")">
+                    <span class="cell-secondary">@context.RecommendedByCount.ToString(CultureInfo.CurrentCulture) @TitlesNoun(context.RecommendedByCount)</span>
                 </TemplateColumn>
-                <TemplateColumn Title="Catalogue" HeaderTooltip="Known TMDB metadata: a source exposes the movie">
+                <TemplateColumn Title="Catalogue" HeaderTooltip="Known TMDB metadata: a source exposes it">
                     @if (context.IsInCatalogue)
                     {
                         <span class="status-pill status-pill-success">
@@ -129,11 +134,35 @@
     private const int MaxGenreChips = 3;
 
     private readonly CancellationTokenSource _disposal = new();
+    private ContentType _contentType = ContentType.Vod;
     private IReadOnlyList<RecommendationDto>? _recommendations;
     private bool _isLoading;
     private Exception? _loadError;
 
     protected override Task OnInitializedAsync() => LoadAsync();
+
+    // "series" is both singular and plural
+    private string TitlesNoun(int count)
+    {
+        if (_contentType == ContentType.Series)
+        {
+            return "series";
+        }
+
+        return count == 1 ? "movie" : "movies";
+    }
+
+    private async Task SetContentTypeAsync(ContentType? contentType)
+    {
+        if (contentType is not { } type || type == _contentType)
+        {
+            return;
+        }
+
+        _contentType = type;
+        _recommendations = null;
+        await LoadAsync();
+    }
 
     private async Task LoadAsync()
     {
@@ -141,7 +170,7 @@
         _loadError = null;
         try
         {
-            _recommendations = await RecommendationsClient.GetAsync(_disposal.Token);
+            _recommendations = await RecommendationsClient.GetAsync(_contentType, _disposal.Token);
         }
         catch (OperationCanceledException) when (_disposal.IsCancellationRequested)
         {

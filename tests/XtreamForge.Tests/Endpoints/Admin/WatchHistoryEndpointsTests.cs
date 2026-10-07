@@ -97,6 +97,20 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
         Assert.Equal(1, page.MatchingCount);
     }
 
+    [Fact]
+    public async Task Get_ReturnsTheSeasonAndEpisodeOfAnEpisodePlayback()
+    {
+        _dbContext.WatchHistory.Add(new WatchHistoryEntry { ContentType = ContentType.Series, TmdbId = 1399, SeasonNumber = 1, EpisodeNumber = 3, StartedAtUtc = DateTimeOffset.UtcNow });
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await WatchHistoryEndpoints.GetListAsync(new WatchHistoryListQuery(ContentType.Series), _service, TmdbOptions, TestContext.Current.CancellationToken);
+
+        var page = Assert.IsType<Ok<AdminWatchHistoryPageDto>>(result).Value;
+        Assert.NotNull(page);
+        var entry = Assert.Single(page.Items);
+        Assert.Equal((ContentType.Series, 1399L, (int?)1, (int?)3), (entry.ContentType, entry.TmdbId, entry.SeasonNumber, entry.EpisodeNumber));
+    }
+
     [Theory]
     [InlineData(ContentType.Undefined)]
     [InlineData((ContentType)99)]

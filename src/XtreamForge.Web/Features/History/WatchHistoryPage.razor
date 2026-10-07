@@ -9,7 +9,7 @@
 
 <PageTitle>Watch history - XtreamForge</PageTitle>
 
-<PageHeader Title="Watch history" Subtitle="Movies played through the proxy or added from the TMDB infos, the most recent first. A movie played several times appears once per playback.">
+<PageHeader Title="Watch history" Subtitle="Movies and series episodes played through the proxy or added from the TMDB infos, the most recent first. A title played several times appears once per playback.">
     <Actions>
         <FluentButton Appearance="ButtonAppearance.Outline"
                       IconStart="@(new Icons.Regular.Size16.ArrowClockwise())"
@@ -20,6 +20,12 @@
     </Actions>
 </PageHeader>
 
+<FluentCard Class="surface filter-bar">
+    <div class="filter-row">
+        <SegmentedControl TValue="ContentType?" Label="Content type" Options="@ContentTypeOptions" Value="@_contentType" ValueChanged="@SetContentTypeAsync" />
+    </div>
+</FluentCard>
+
 <FluentCard Class="surface grid-surface">
     @if (_loadError is not null)
     {
@@ -28,7 +34,7 @@
     else if (_page is { MatchingCount: 0 })
     {
         <EmptyState Title="No playback yet"
-                    Description="A playback appears once a client plays a movie through the proxy and its TMDB ID is known."
+                    Description="A playback appears once a client plays a movie or a series episode through the proxy and its TMDB ID is known. An episode is only recognized once the client has listed the episodes of its series through the proxy."
                     Icon="@(new Icons.Regular.Size24.History())" />
     }
     else
@@ -78,7 +84,7 @@
                     }
                     <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" IconOnly="true"
                                   IconStart="@(new Icons.Regular.Size16.Delete())"
-                                  aria-label="@($"Delete the playback of {context.DisplayTitle}")" Tooltip="Delete"
+                                  aria-label="@($"Delete the playback of {context.FullTitle}")" Tooltip="Delete"
                                   Loading="@isBusy"
                                   Disabled="@isBusy"
                                   OnClick="@(() => DeleteAsync(context))" />
@@ -92,11 +98,19 @@
     // the API returns at most 200 entries per request; the virtualized grid requests the visible rows and a few more
     private const int PageSize = 100;
 
+    // a null content type lists every playback
+    private static readonly IReadOnlyList<SegmentOption<ContentType?>> ContentTypeOptions =
+    [
+        new(null, "All"),
+        .. CategoryLabels.ContentTypes.Select(type => new SegmentOption<ContentType?>(type, CategoryLabels.ContentTypeName(type), CategoryLabels.ContentTypeIcon(type)))
+    ];
+
     private readonly CancellationTokenSource _disposal = new();
     private readonly HashSet<int> _busyIds = [];
     private GridItemsProvider<WatchHistoryEntryDto>? _itemsProvider;
     private FluentDataGrid<WatchHistoryEntryDto>? _grid;
     private WatchHistoryPageDto? _page;
+    private ContentType? _contentType;
     private TimeZoneInfo? _timeZone;
     private bool _isRefreshing;
     private Exception? _loadError;
@@ -129,7 +143,7 @@
         try
         {
             var count = request.Count is int requested && requested > 0 ? Math.Min(requested, PageSize) : PageSize;
-            var page = await WatchHistoryClient.GetPageAsync(request.StartIndex, count, request.CancellationToken);
+            var page = await WatchHistoryClient.GetPageAsync(_contentType, request.StartIndex, count, request.CancellationToken);
 
             var countChanged = _page?.MatchingCount != page.MatchingCount;
             _page = page;
@@ -176,10 +190,22 @@
         }
     }
 
+    private async Task SetContentTypeAsync(ContentType? contentType)
+    {
+        if (contentType == _contentType)
+        {
+            return;
+        }
+
+        _contentType = contentType;
+        await RefreshAsync();
+    }
+
     private async Task DeleteAsync(WatchHistoryEntryDto entry)
     {
+        var titleKind = entry.ContentType == ContentType.Series ? "series" : "movie";
         var confirmation = await DialogService.ShowConfirmationAsync(
-            $"Delete the playback of <strong>{WebUtility.HtmlEncode(entry.DisplayTitle)}</strong> started on {WebUtility.HtmlEncode(FormatStartedAt(entry.StartedAtUtc))}? The movie can then be recommended again if it has no other playback. This cannot be undone.",
+            $"Delete the playback of <strong>{WebUtility.HtmlEncode(entry.FullTitle)}</strong> started on {WebUtility.HtmlEncode(FormatStartedAt(entry.StartedAtUtc))}? The {titleKind} can then be recommended again if it has no other playback. This cannot be undone.",
             "Delete playback",
             "Delete",
             "Cancel");
@@ -193,16 +219,16 @@
             var result = await WatchHistoryClient.DeleteAsync(entry.Id, _disposal.Token);
             if (result == AdminOperationResult.Success)
             {
-                await NotificationService.ShowSuccessToastAsync($"Playback of \"{entry.DisplayTitle}\" deleted.");
+                await NotificationService.ShowSuccessToastAsync($"Playback of \"{entry.FullTitle}\" deleted.");
             }
             else
             {
-                await NotificationService.ShowWarningToastAsync($"The playback of \"{entry.DisplayTitle}\" no longer exists.", "The list is reloaded.");
+                await NotificationService.ShowWarningToastAsync($"The playback of \"{entry.FullTitle}\" no longer exists.", "The list is reloaded.");
             }
         }
         catch (Exception exception) when (!_disposal.IsCancellationRequested)
         {
-            await NotificationService.ShowErrorToastAsync($"Unable to delete the playback of \"{entry.DisplayTitle}\".", ApiErrorMessage.Describe(exception));
+            await NotificationService.ShowErrorToastAsync($"Unable to delete the playback of \"{entry.FullTitle}\".", ApiErrorMessage.Describe(exception));
         }
         finally
         {

@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using XtreamForge.ApiService.Services.Catalog;
 using XtreamForge.ApiService.Services.TmdbInfos;
+using XtreamForge.ApiService.Services.WatchHistory;
 using XtreamForge.ApiService.Xtream;
 using XtreamForge.Domain.Enums;
 
@@ -10,6 +11,7 @@ namespace XtreamForge.ApiService.Endpoints.Xtream;
 /// Handles <c>get_vod_info</c> / <c>get_series_info</c>: the upstream payload is returned with the same category, TMDB ID, and TMDB metadata rewriting
 /// as the item lists, or as an empty Xtream payload when the item would not be listed. The item keeps its provider category: only one stream
 /// of a TMDB ID is listed in a virtual category, which a single item cannot know.
+/// The episodes listed by <c>get_series_info</c> are enqueued to <see cref="SeriesEpisodeQueue"/>, so that their playbacks can be recorded.
 /// </summary>
 public class ItemGetEndpoint(
     IHttpClientFactory httpClientFactory,
@@ -17,6 +19,7 @@ public class ItemGetEndpoint(
     CategoryService categoryService,
     ItemService itemService,
     TmdbInfoService tmdbInfoService,
+    SeriesEpisodeQueue seriesEpisodeQueue,
     ILogger<ItemGetEndpoint> logger)
 {
     public async Task<IResult> GetAsync(XtreamContext xtreamContext, CancellationToken cancellationToken)
@@ -59,6 +62,11 @@ public class ItemGetEndpoint(
             // the payload of a single item is small and must be rewritten, so it is buffered
             await using var payloadStream = await responseMessage.Content.ReadAsStreamAsync(cancellationToken);
             var payload = await JsonNode.ParseAsync(payloadStream, cancellationToken: cancellationToken);
+
+            // the stream URL of an episode only carries its ID: the series of each episode is remembered, whatever the rules decide,
+            // as a client may keep the episode list and play an episode later
+            if (xtreamContext.ContentType == ContentType.Series && payload is JsonObject seriesInfo)
+                seriesEpisodeQueue.TryEnqueue(new SeriesEpisodeRequest(source.Id, streamId, SeriesEpisodeService.ReadEpisodes(seriesInfo)));
 
             var transformedPayload = ItemService.TransformInfo(payload, streamId, xtreamContext.ContentType, source, xtreamCategoryIdMapping);
             if (transformedPayload is not null)

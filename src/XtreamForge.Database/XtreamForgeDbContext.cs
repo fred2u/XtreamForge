@@ -12,6 +12,7 @@ public sealed class XtreamForgeDbContext(DbContextOptions<XtreamForgeDbContext> 
     public DbSet<CategoryRule> CategoryRules => Set<CategoryRule>();
     public DbSet<CustomCategory> CustomCategories => Set<CustomCategory>();
     public DbSet<ItemRule> ItemRules => Set<ItemRule>();
+    public DbSet<SeriesEpisode> SeriesEpisodes => Set<SeriesEpisode>();
     public DbSet<StreamTmdbMapping> StreamTmdbMappings => Set<StreamTmdbMapping>();
     public DbSet<TmdbInfo> TmdbInfos => Set<TmdbInfo>();
     public DbSet<TmdbRule> TmdbRules => Set<TmdbRule>();

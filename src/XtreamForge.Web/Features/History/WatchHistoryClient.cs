@@ -7,10 +7,14 @@ namespace XtreamForge.Web.Features.History;
 /// <summary>HTTP client for the watch history endpoints of ApiService.</summary>
 public sealed class WatchHistoryClient(HttpClient httpClient)
 {
-    /// <summary>Returns a page of the watch history, the most recent playback first.</summary>
-    public async Task<WatchHistoryPageDto> GetPageAsync(int skip, int take, CancellationToken cancellationToken = default)
+    /// <summary>Returns a page of the watch history, the most recent playback first; a null content type returns every playback.</summary>
+    public async Task<WatchHistoryPageDto> GetPageAsync(ContentType? contentType, int skip, int take, CancellationToken cancellationToken = default)
     {
         var query = $"skip={skip.ToString(CultureInfo.InvariantCulture)}&take={take.ToString(CultureInfo.InvariantCulture)}";
+        if (contentType is { } type)
+        {
+            query += $"&contentType={type}";
+        }
 
         return await httpClient.GetFromJsonAsync<WatchHistoryPageDto>($"/api/admin/watch-history?{query}", cancellationToken)
             ?? new WatchHistoryPageDto([], 0);

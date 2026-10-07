@@ -44,7 +44,10 @@ public sealed class TmdbCandidate
 
 public sealed record TmdbEpisode(int EpisodeNumber, DateTime? AirDate);
 
-/// <summary>Movie recommended by TMDB for another movie; any value may be missing. <see cref="Genres"/> are the known English genre names.</summary>
+/// <summary>
+/// Movie or TV show recommended by TMDB for another one of the same kind; any value may be missing. <see cref="ReleaseDate"/> is the first air date
+/// of a TV show, and <see cref="Genres"/> are the known English genre names.
+/// </summary>
 public sealed record TmdbRecommendation(
     long Id,
     string? Title,

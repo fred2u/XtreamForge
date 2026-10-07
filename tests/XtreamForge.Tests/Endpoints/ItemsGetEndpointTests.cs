@@ -171,6 +171,39 @@ public class ItemsGetEndpointTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task GetAsync_ForSeries_MovesTheShowsRecommendedForTheWatchedSeriesToTheRecommendationsCategory()
+    {
+        var source = new XtreamSource { Protocol = "http", Host = "provider.example.com", Port = 8080 };
+        var drama = new XtreamCategory { XtreamId = "12", Name = "Drama", ContentType = ContentType.Series };
+        source.XtreamCategories.Add(drama);
+        _dbContext.XtreamSources.Add(source);
+        _dbContext.TmdbInfos.AddRange(
+            new TmdbInfo { TmdbId = 201, ContentType = ContentType.Series, Title = "Show A", LoadedAtUtc = DateTimeOffset.UtcNow, NextLoadAtUtc = DateTimeOffset.UtcNow.AddDays(60) },
+            new TmdbInfo { TmdbId = 202, ContentType = ContentType.Series, Title = "Show B", LoadedAtUtc = DateTimeOffset.UtcNow, NextLoadAtUtc = DateTimeOffset.UtcNow.AddDays(60) });
+        // an episode of the series 1399 was watched; the watched movie 999 does not recommend TV shows
+        _dbContext.WatchHistory.Add(new WatchHistoryEntry { ContentType = ContentType.Series, TmdbId = 1399, SeasonNumber = 1, EpisodeNumber = 1, StartedAtUtc = DateTimeOffset.UtcNow });
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        _dbContext.ChangeTracker.Clear();
+        await RecommendAsync(202);
+        _tmdbResponses["tv/1399/recommendations"] = """{ "results": [ { "id": 201 } ] }""";
+        const string UpstreamSeries = """
+            [
+              { "series_id": 1, "name": "Show A", "category_id": "12", "tmdb_id": "201" },
+              { "series_id": 2, "name": "Show B", "category_id": "12", "tmdb_id": "202" }
+            ]
+            """;
+        var httpClientFactory = new StubXtreamHttpClientFactory(new Dictionary<string, (HttpStatusCode, string)> { ["get_series"] = (HttpStatusCode.OK, UpstreamSeries) });
+        var context = CreateContext("?action=get_series", ContentType.Series);
+
+        await CreateEndpoint(httpClientFactory).GetAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [("Show A", RecommendationCategoryId), ("Show B", drama.Id.ToString())],
+            ReadResponseItems(context).Select(item => (item["name"]?.GetValue<string>(), item["category_id"]?.GetValue<string>())));
+        Assert.DoesNotContain(_tmdb.RequestedUris, uri => StubTmdbHttpClientFactory.GetRelativePath(uri) == "movie/999/recommendations");
+    }
+
+    [Fact]
     public async Task GetAsync_WhenAllCategoriesAreRequested_MovesOnlyTheFirstStreamOfATmdbIdToItsVirtualCategory()
     {
         var (_, drama) = await SeedAsync();

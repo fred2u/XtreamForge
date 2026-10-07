@@ -41,14 +41,14 @@ public class CategoriesGetEndpointTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task GetAsync_ForSeries_ReturnsThePopularCategoryWithoutTheRecommendationsCategory()
+    public async Task GetAsync_ForSeries_ReturnsTheRecommendationsAndPopularCategoriesFirst()
     {
         var context = CreateContext(ContentType.Series, "get_series_categories");
 
-        await CreateEndpoint("get_series_categories", new RecommendationOptions(), new PopularOptions { CategoryName = "POPULAIRES" })
+        await CreateEndpoint("get_series_categories", new RecommendationOptions { CategoryName = "Recommandations" }, new PopularOptions { CategoryName = "POPULAIRES" })
             .GetAsync(context, TestContext.Current.CancellationToken);
 
-        Assert.Equal(["POPULAIRES", "Action"], ReadResponse(context).Select(category => category["category_name"]?.GetValue<string>()));
+        Assert.Equal(["Recommandations", "POPULAIRES", "Action"], ReadResponse(context).Select(category => category["category_name"]?.GetValue<string>()));
     }
 
     [Fact]

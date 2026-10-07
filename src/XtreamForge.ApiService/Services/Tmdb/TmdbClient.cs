@@ -95,12 +95,15 @@ public class TmdbClient(IHttpClientFactory httpClientFactory, IOptions<TmdbOptio
     }
 
     /// <summary>
-    /// Returns the first page of the movies recommended by TMDB for a movie, in TMDB order, or an empty list when TMDB does not know the movie.
+    /// Returns the first page of the movies (VOD) or TV shows (series) recommended by TMDB for a movie or TV show, in TMDB order,
+    /// or an empty list when TMDB does not know the movie or TV show.
     /// </summary>
-    public async Task<IReadOnlyList<TmdbRecommendation>> GetMovieRecommendationsAsync(long movieId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<TmdbRecommendation>> GetRecommendationsAsync(ContentType type, long tmdbId, CancellationToken cancellationToken)
     {
+        var path = type == ContentType.Vod ? "movie" : "tv";
+
         var response = await GetAsync<TmdbRecommendationsResponse>(
-            $"movie/{movieId.ToString(CultureInfo.InvariantCulture)}/recommendations?language={Language}",
+            $"{path}/{tmdbId.ToString(CultureInfo.InvariantCulture)}/recommendations?language={Language}",
             cancellationToken);
 
         return [.. (response?.Results ?? [])
@@ -146,11 +149,15 @@ public class TmdbClient(IHttpClientFactory httpClientFactory, IOptions<TmdbOptio
 
     private sealed record TmdbRecommendationsResponse(List<TmdbRecommendationResult>? Results);
 
+    // movies use Title/OriginalTitle/ReleaseDate, TV shows Name/OriginalName/FirstAirDate
     private sealed record TmdbRecommendationResult(
         long Id,
         string? Title,
         string? OriginalTitle,
         string? ReleaseDate,
+        string? Name,
+        string? OriginalName,
+        string? FirstAirDate,
         string? PosterPath,
         double? VoteAverage,
         int? VoteCount,
@@ -158,12 +165,12 @@ public class TmdbClient(IHttpClientFactory httpClientFactory, IOptions<TmdbOptio
     {
         public TmdbRecommendation ToRecommendation()
         {
-            var releaseDate = TmdbText.ParseDate(ReleaseDate);
+            var releaseDate = TmdbText.ParseDate(ReleaseDate ?? FirstAirDate);
 
             return new TmdbRecommendation(
                 Id,
-                Title,
-                OriginalTitle,
+                Title ?? Name,
+                OriginalTitle ?? OriginalName,
                 releaseDate is null ? null : DateOnly.FromDateTime(releaseDate.Value),
                 PosterPath,
                 VoteAverage,

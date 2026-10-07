@@ -71,13 +71,13 @@ public static class RouteExtensions
             endpoints.MapGet("/api/admin/watch-history", WatchHistoryEndpoints.GetListAsync);
             endpoints.MapDelete("/api/admin/watch-history/{id:int}", WatchHistoryEndpoints.DeleteAsync);
 
-            // api/admin/watch-history/activity?timeZone=: movie playbacks per day over the last 53 weeks
+            // api/admin/watch-history/activity?timeZone=: movie and episode playbacks per day over the last 53 weeks
             endpoints.MapGet("/api/admin/watch-history/activity", WatchHistoryEndpoints.GetActivityAsync);
 
             // api/admin/tmdb-infos/{tmdbInfoId}/watch-history: adds a playback of the entry, started now
             endpoints.MapPost("/api/admin/tmdb-infos/{tmdbInfoId:int}/watch-history", WatchHistoryEndpoints.PostAsync);
 
-            // api/admin/recommendations: movies recommended by TMDB for the recently watched movies, never a watched one
+            // api/admin/recommendations?contentType=: movies (default) or TV shows recommended by TMDB for the recently watched ones, never a watched one
             endpoints.MapGet("/api/admin/recommendations", RecommendationEndpoints.GetAsync);
 
             return endpoints;

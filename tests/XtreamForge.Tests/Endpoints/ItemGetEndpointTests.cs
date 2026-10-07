@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using XtreamForge.ApiService.Endpoints.Xtream;
@@ -8,6 +9,7 @@ using XtreamForge.ApiService.Options;
 using XtreamForge.ApiService.Services.Catalog;
 using XtreamForge.ApiService.Services.TmdbIdRetriever;
 using XtreamForge.ApiService.Services.TmdbInfos;
+using XtreamForge.ApiService.Services.WatchHistory;
 using XtreamForge.ApiService.Xtream;
 using XtreamForge.Database;
 using XtreamForge.Domain.Categories;
@@ -29,7 +31,13 @@ public class ItemGetEndpointTests : IAsyncDisposable
         { "seasons": [], "info": { "name": "Action show", "category_id": "10" }, "episodes": {} }
         """;
 
+    private const string UpstreamSeriesInfoWithEpisodes = """
+        { "seasons": [], "info": { "name": "Action show", "category_id": "10" },
+          "episodes": { "1": [ { "id": "1001", "episode_num": 1, "season": 1 }, { "id": "1002", "episode_num": 2, "season": 1 } ] } }
+        """;
+
     private readonly XtreamForgeDbContext _dbContext;
+    private readonly SeriesEpisodeQueue _seriesEpisodeQueue = new();
 
     public ItemGetEndpointTests()
     {
@@ -93,6 +101,45 @@ public class ItemGetEndpointTests : IAsyncDisposable
         Assert.Equal(category.Id.ToString(), payload["info"]?["category_id"]?.GetValue<string>());
         Assert.Equal("1399", payload["info"]?["tmdb_id"]?.GetValue<string>());
         Assert.NotNull(payload["episodes"]);
+    }
+
+    [Fact]
+    public async Task GetAsync_ForSeries_EnqueuesTheEpisodesForTheWatchHistory()
+    {
+        await SeedAsync(ContentType.Series, tmdbId: 1399);
+        var context = CreateContext(ContentType.Series, "?action=get_series_info&series_id=1");
+
+        await CreateEndpoint(CreateHttpClientFactory(HttpStatusCode.OK, UpstreamSeriesInfoWithEpisodes, "get_series_info")).GetAsync(context, TestContext.Current.CancellationToken);
+
+        var source = await _dbContext.XtreamSources.SingleAsync(TestContext.Current.CancellationToken);
+        var request = await ReadSeriesEpisodeRequestAsync();
+        Assert.Equal((source.Id, "1"), (request.XtreamSourceId, request.SeriesId));
+        Assert.Equal([new XtreamEpisode("1001", 1, 1), new XtreamEpisode("1002", 1, 2)], request.Episodes);
+    }
+
+    [Fact]
+    public async Task GetAsync_ForSeries_WhenTheSeriesWouldNotBeListed_StillEnqueuesTheEpisodes()
+    {
+        // the TMDB metadata of the series is not loaded: the client receives an empty payload
+        await SeedAsync(ContentType.Series, tmdbId: 1399);
+        var context = CreateContext(ContentType.Series, "?action=get_series_info&series_id=1");
+
+        await CreateEndpoint(CreateHttpClientFactory(HttpStatusCode.OK, UpstreamSeriesInfoWithEpisodes, "get_series_info")).GetAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.Equal("""{"seasons":[],"info":[],"episodes":[]}""", ReadResponse(context).ToJsonString());
+        Assert.Equal(1, _seriesEpisodeQueue.Count);
+    }
+
+    [Fact]
+    public async Task GetAsync_ForVod_DoesNotEnqueueEpisodes()
+    {
+        await SeedAsync(ContentType.Vod, tmdbId: 603);
+        await AddLoadedTmdbInfoAsync(ContentType.Vod, 603, "Action movie");
+
+        await CreateEndpoint(CreateHttpClientFactory(HttpStatusCode.OK, UpstreamVodInfo))
+            .GetAsync(CreateContext(ContentType.Vod, "?action=get_vod_info&vod_id=1"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, _seriesEpisodeQueue.Count);
     }
 
     [Fact]
@@ -208,7 +255,15 @@ public class ItemGetEndpointTests : IAsyncDisposable
             new CategoryService(_dbContext, TimeProvider.System),
             new ItemService(new TmdbIdRetrieverQueue(), new ProviderTmdbIdQueue(), new TmdbInfoQueue(), Options.Create(new TmdbOptions { ApiKey = "token" }), TimeProvider.System),
             new StubTmdbHttpClientFactory(_ => null).CreateTmdbInfoService(_dbContext, TimeProvider.System),
+            _seriesEpisodeQueue,
             NullLogger<ItemGetEndpoint>.Instance);
+
+    private async Task<SeriesEpisodeRequest> ReadSeriesEpisodeRequestAsync()
+    {
+        await using var requests = _seriesEpisodeQueue.ReadAllAsync(TestContext.Current.CancellationToken).GetAsyncEnumerator(TestContext.Current.CancellationToken);
+        Assert.True(await requests.MoveNextAsync());
+        return requests.Current;
+    }
 
     private static StubXtreamHttpClientFactory CreateHttpClientFactory(HttpStatusCode statusCode, string content, string action = "get_vod_info")
         => new(new Dictionary<string, (HttpStatusCode, string)> { [action] = (statusCode, content) });

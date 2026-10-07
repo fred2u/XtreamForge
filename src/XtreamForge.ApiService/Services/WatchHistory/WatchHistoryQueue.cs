@@ -22,9 +22,9 @@ public sealed class WatchHistoryQueue(TimeProvider timeProvider) : BackgroundQue
     /// <summary>
     /// Registers a running stream request until the returned handle is disposed, and enqueues a playback when the request starts a new one.
     /// </summary>
-    public IDisposable TrackPlayback(string protocol, string host, int port, XtreamMovieStream movie)
+    public IDisposable TrackPlayback(string protocol, string host, int port, XtreamVideoStream stream)
     {
-        var key = new PlaybackKey(protocol, host, port, movie);
+        var key = new PlaybackKey(protocol, host, port, stream);
         var now = timeProvider.GetUtcNow();
 
         bool isNewPlayback;
@@ -43,7 +43,7 @@ public sealed class WatchHistoryQueue(TimeProvider timeProvider) : BackgroundQue
         }
 
         if (isNewPlayback)
-            TryEnqueue(new WatchHistoryRequest(protocol, host, port, movie, now));
+            TryEnqueue(new WatchHistoryRequest(protocol, host, port, stream, now));
 
         return new PlaybackRequest(this, key);
     }
@@ -75,7 +75,7 @@ public sealed class WatchHistoryQueue(TimeProvider timeProvider) : BackgroundQue
         }
     }
 
-    private readonly record struct PlaybackKey(string Protocol, string Host, int Port, XtreamMovieStream Movie);
+    private readonly record struct PlaybackKey(string Protocol, string Host, int Port, XtreamVideoStream Stream);
 
     private sealed class PlaybackState
     {

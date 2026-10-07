@@ -14,7 +14,7 @@ public sealed class DashboardClient(HttpClient httpClient)
         return payload ?? throw new InvalidOperationException("The dashboard status response was empty.");
     }
 
-    /// <summary>Movie playbacks per day of the time zone of the Web server (the dates of the admin UI are shown in it) over the last 53 weeks.</summary>
+    /// <summary>Movie and series episode playbacks per day of the time zone of the Web server (the dates of the admin UI are shown in it) over the last 53 weeks.</summary>
     public async Task<WatchActivityDto> GetWatchActivityAsync(CancellationToken cancellationToken = default)
     {
         var timeZone = Uri.EscapeDataString(TimeZoneInfo.Local.Id);
@@ -23,10 +23,13 @@ public sealed class DashboardClient(HttpClient httpClient)
     }
 }
 
-/// <summary>Number of movie playbacks started on a day.</summary>
-public sealed record WatchActivityDayDto(DateOnly Date, int Count);
+/// <summary>Number of movie and series episode playbacks started on a day.</summary>
+public sealed record WatchActivityDayDto(DateOnly Date, int MovieCount, int EpisodeCount)
+{
+    public int Count => MovieCount + EpisodeCount;
+}
 
-/// <summary>Movie playbacks per day from <see cref="From"/> to <see cref="To"/> (included); the days without playback are omitted.</summary>
+/// <summary>Playbacks per day from <see cref="From"/> to <see cref="To"/> (included); the days without playback are omitted.</summary>
 public sealed record WatchActivityDto(DateOnly From, DateOnly To, IReadOnlyList<WatchActivityDayDto> Days);
 
 public sealed record DashboardStatusDto(

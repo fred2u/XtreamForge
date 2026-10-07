@@ -12,7 +12,7 @@ public class WatchHistoryEntryConfiguration : IEntityTypeConfiguration<WatchHist
 
         watchHistory.HasKey(entry => entry.Id);
 
-        // recommendation seeds: the watched movies grouped by TMDB ID
+        // recommendation seeds: the watched movies and series grouped by TMDB ID
         watchHistory.HasIndex(entry => new { entry.ContentType, entry.TmdbId });
 
         // activity: the playbacks of the last year
@@ -21,6 +21,8 @@ public class WatchHistoryEntryConfiguration : IEntityTypeConfiguration<WatchHist
         watchHistory.Property(entry => entry.Id).HasColumnName("id");
         watchHistory.Property(entry => entry.ContentType).HasColumnName("content_type").HasConversion<string>().HasMaxLength(20);
         watchHistory.Property(entry => entry.TmdbId).HasColumnName("tmdb_id");
+        watchHistory.Property(entry => entry.SeasonNumber).HasColumnName("season_number");
+        watchHistory.Property(entry => entry.EpisodeNumber).HasColumnName("episode_number");
         watchHistory.Property(entry => entry.StartedAtUtc).HasColumnName("started_at_utc");
     }
 }

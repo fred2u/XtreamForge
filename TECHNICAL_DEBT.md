@@ -26,8 +26,8 @@ Fix: decide on a degraded mode (for example an option to return items without a 
 
 Fix: acceptable for a single instance; move migrations to a dedicated step if the API is scaled out.
 
-### Watch history only records movies
+### Watch history records every started playback
 
-Series episodes are not recorded: the episode stream URL (`series/{username}/{password}/{episodeId}.{ext}`) only carries the provider episode ID, while TMDB mappings are keyed by series ID, and no Xtream action resolves an episode to its series. A playback is also recorded from its first request, whatever the part actually watched.
+A playback is recorded from its first request, whatever the part actually watched. A series episode is only recognized once its series has been listed through XtreamForge (`get_series_info`, persisted in `SeriesEpisodes`): an episode list kept in a client cache from before (for example from before the episodes were persisted) is not recorded until the client lists the series again, as no Xtream action resolves an episode ID to its series.
 
-Fix: map episodes to their series (for example from the `get_series_info` payloads seen by `ItemGetEndpoint`), and, if needed, estimate the watched part from the byte ranges served for a playback.
+Fix: if needed, estimate the watched part from the byte ranges served for a playback.

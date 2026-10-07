@@ -1,12 +1,13 @@
 using XtreamForge.ApiService.Services.WatchHistory;
 using XtreamForge.ApiService.Xtream;
+using XtreamForge.Domain.Enums;
 using XtreamForge.Tests.Infrastructure;
 
 namespace XtreamForge.Tests.Services.WatchHistory;
 
 public class WatchHistoryQueueTests
 {
-    private static readonly XtreamMovieStream Movie = new("user", "secret", "42");
+    private static readonly XtreamVideoStream Movie = new(ContentType.Vod, "user", "secret", "42");
 
     private readonly SteppingTimeProvider _time = new();
     private readonly WatchHistoryQueue _queue;
@@ -75,6 +76,16 @@ public class WatchHistoryQueueTests
     }
 
     [Fact]
+    public void TrackPlayback_ForAnEpisodeWithTheIdOfAMovie_EnqueuesAnotherPlayback()
+    {
+        using var movie = Track(Movie);
+
+        using var episode = Track(Movie with { ContentType = ContentType.Series });
+
+        Assert.Equal(2, _queue.Count);
+    }
+
+    [Fact]
     public void TrackPlayback_DisposedTwice_EndsTheRequestOnce()
     {
         var first = Track(Movie);
@@ -89,7 +100,7 @@ public class WatchHistoryQueueTests
         Assert.Equal(1, _queue.Count);
     }
 
-    private IDisposable Track(XtreamMovieStream movie) => _queue.TrackPlayback("http", "provider.example.com", 8080, movie);
+    private IDisposable Track(XtreamVideoStream stream) => _queue.TrackPlayback("http", "provider.example.com", 8080, stream);
 
     private async Task<WatchHistoryRequest> ReadAsync()
     {

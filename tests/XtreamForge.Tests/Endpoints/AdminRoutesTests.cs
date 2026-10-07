@@ -46,7 +46,11 @@ public sealed class AdminRoutesTests : IAsyncDisposable
     [InlineData("/api/admin/tmdb-infos?contentType=Undefined", HttpStatusCode.BadRequest)]
     [InlineData("/api/admin/sources/999/tmdb-mappings?contentType=Vod", HttpStatusCode.NotFound)]
     [InlineData("/api/admin/watch-history?skip=0&take=10", HttpStatusCode.OK)]
+    [InlineData("/api/admin/watch-history?contentType=Series&skip=0&take=10", HttpStatusCode.OK)]
     [InlineData("/api/admin/watch-history/activity?timeZone=UTC", HttpStatusCode.OK)]
+    [InlineData("/api/admin/recommendations", HttpStatusCode.OK)]
+    [InlineData("/api/admin/recommendations?contentType=Series", HttpStatusCode.OK)]
+    [InlineData("/api/admin/recommendations?contentType=Undefined", HttpStatusCode.BadRequest)]
     public async Task Get_BindsRouteQueryAndServices(string path, HttpStatusCode expectedStatusCode)
     {
         var client = await StartAsync();

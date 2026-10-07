@@ -48,6 +48,7 @@ public static class DependenciesExtensions
         AddBackgroundQueue<TmdbIdRetrieverQueue, TmdbIdRetrieverRequest, TmdbIdRetrieverService>(services, workerCount: 2);
         AddBackgroundQueue<ProviderTmdbIdQueue, ProviderTmdbIdRequest, ProviderTmdbIdService>(services);
         AddBackgroundQueue<TmdbInfoQueue, TmdbInfoRequest, TmdbInfoService>(services);
+        AddBackgroundQueue<SeriesEpisodeQueue, SeriesEpisodeRequest, SeriesEpisodeService>(services);
         AddBackgroundQueue<WatchHistoryQueue, WatchHistoryRequest, WatchHistoryService>(services);
         services.AddSingleton<QueueMonitor>();
 

@@ -17,9 +17,10 @@ public class WatchHistoryService(IHttpClientFactory httpClientFactory, XtreamFor
         => RecordAsync(request, cancellationToken);
 
     /// <summary>
-    /// Records a movie playback with its TMDB ID; returns false when the source is unknown or the movie has no TMDB ID.
-    /// The stored TMDB mapping wins, as in the item lists; otherwise the provider <c>get_vod_info</c> payload is read,
-    /// since the movies already identified by the provider have no mapping.
+    /// Records a movie or series episode playback with its TMDB ID (the TMDB ID of the series for an episode); returns false when
+    /// the source is unknown, the episode was not listed by <c>get_series_info</c>, or the movie or series has no TMDB ID.
+    /// The stored TMDB mapping wins, as in the item lists; otherwise the provider <c>get_vod_info</c> / <c>get_series_info</c> payload is read,
+    /// since the items already identified by the provider may have no mapping.
     /// </summary>
     public async Task<bool> RecordAsync(WatchHistoryRequest request, CancellationToken cancellationToken)
     {
@@ -31,33 +32,69 @@ public class WatchHistoryService(IHttpClientFactory httpClientFactory, XtreamFor
         if (sourceId is null)
             return false;
 
-        var tmdbId = await dbContext.StreamTmdbMappings
-            .Where(mapping => mapping.XtreamSourceId == sourceId && mapping.ContentType == ContentType.Vod && mapping.StreamId == request.Movie.StreamId)
-            .Select(mapping => mapping.TmdbId)
-            .SingleOrDefaultAsync(cancellationToken)
-            ?? await GetProviderTmdbIdAsync(request, cancellationToken);
+        var entry = request.Stream.ContentType == ContentType.Series
+            ? await CreateEpisodeEntryAsync(request, sourceId.Value, cancellationToken)
+            : await CreateMovieEntryAsync(request, sourceId.Value, cancellationToken);
 
-        if (tmdbId is null)
+        if (entry is null)
             return false;
 
-        dbContext.WatchHistory.Add(new WatchHistoryEntry
-        {
-            ContentType = ContentType.Vod,
-            TmdbId = tmdbId.Value,
-            StartedAtUtc = request.StartedAtUtc
-        });
+        dbContext.WatchHistory.Add(entry);
         await dbContext.SaveChangesAsync(cancellationToken);
-        recommendationCache.Invalidate(TmdbIdCache.RecommendationsKey);
+        recommendationCache.Invalidate(TmdbIdCache.RecommendationsKey(entry.ContentType));
 
         return true;
     }
 
-    private async Task<long?> GetProviderTmdbIdAsync(WatchHistoryRequest request, CancellationToken cancellationToken)
+    private async Task<WatchHistoryEntry?> CreateMovieEntryAsync(WatchHistoryRequest request, int sourceId, CancellationToken cancellationToken)
     {
-        var movie = request.Movie;
+        var tmdbId = await GetTmdbIdAsync(request, sourceId, ContentType.Vod, request.Stream.StreamId, cancellationToken);
+
+        return tmdbId is null
+            ? null
+            : new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = tmdbId.Value, StartedAtUtc = request.StartedAtUtc };
+    }
+
+    // the stream URL of an episode only carries its ID: its series, season, and number come from the episodes listed by get_series_info
+    private async Task<WatchHistoryEntry?> CreateEpisodeEntryAsync(WatchHistoryRequest request, int sourceId, CancellationToken cancellationToken)
+    {
+        var episode = await dbContext.SeriesEpisodes
+            .AsNoTracking()
+            .Where(episode => episode.XtreamSourceId == sourceId && episode.EpisodeId == request.Stream.StreamId)
+            .Select(episode => new { episode.SeriesId, episode.SeasonNumber, episode.EpisodeNumber })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (episode is null)
+            return null;
+
+        var tmdbId = await GetTmdbIdAsync(request, sourceId, ContentType.Series, episode.SeriesId, cancellationToken);
+
+        return tmdbId is null
+            ? null
+            : new WatchHistoryEntry
+            {
+                ContentType = ContentType.Series,
+                TmdbId = tmdbId.Value,
+                SeasonNumber = episode.SeasonNumber,
+                EpisodeNumber = episode.EpisodeNumber,
+                StartedAtUtc = request.StartedAtUtc
+            };
+    }
+
+    private async Task<long?> GetTmdbIdAsync(WatchHistoryRequest request, int sourceId, ContentType contentType, string streamId, CancellationToken cancellationToken)
+        => await dbContext.StreamTmdbMappings
+            .Where(mapping => mapping.XtreamSourceId == sourceId && mapping.ContentType == contentType && mapping.StreamId == streamId)
+            .Select(mapping => mapping.TmdbId)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? await GetProviderTmdbIdAsync(request, contentType, streamId, cancellationToken);
+
+    private async Task<long?> GetProviderTmdbIdAsync(WatchHistoryRequest request, ContentType contentType, string streamId, CancellationToken cancellationToken)
+    {
+        var (action, idParameter) = contentType == ContentType.Vod ? ("get_vod_info", "vod_id") : ("get_series_info", "series_id");
+        var stream = request.Stream;
         var uriBuilder = new UriBuilder(request.Protocol, request.Host, request.Port, "/player_api.php")
         {
-            Query = $"username={Uri.EscapeDataString(movie.Username)}&password={Uri.EscapeDataString(movie.Password)}&action=get_vod_info&vod_id={Uri.EscapeDataString(movie.StreamId)}"
+            Query = $"username={Uri.EscapeDataString(stream.Username)}&password={Uri.EscapeDataString(stream.Password)}&action={action}&{idParameter}={Uri.EscapeDataString(streamId)}"
         };
 
         var httpClient = httpClientFactory.CreateClient(XtreamProxyOptions.HttpClientName);
@@ -65,9 +102,9 @@ public class WatchHistoryService(IHttpClientFactory httpClientFactory, XtreamFor
         using var responseMessage = await httpClient.GetAsync(uriBuilder.Uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         responseMessage.EnsureSuccessStatusCode();
 
-        await using var stream = await responseMessage.Content.ReadAsStreamAsync(cancellationToken);
-        var payload = await JsonNode.ParseAsync(stream, cancellationToken: cancellationToken);
+        await using var payloadStream = await responseMessage.Content.ReadAsStreamAsync(cancellationToken);
+        var payload = await JsonNode.ParseAsync(payloadStream, cancellationToken: cancellationToken);
 
-        return payload is JsonObject info ? ItemService.ReadInfoTmdbId(info, ContentType.Vod) : null;
+        return payload is JsonObject info ? ItemService.ReadInfoTmdbId(info, contentType) : null;
     }
 }

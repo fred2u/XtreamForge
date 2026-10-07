@@ -30,7 +30,7 @@ public static class WatchHistoryEndpoints
             page.MatchingCount));
     }
 
-    /// <summary>Movie playbacks per day of <paramref name="timeZone"/> (IANA or Windows ID; UTC when empty).</summary>
+    /// <summary>Movie and series episode playbacks per day of <paramref name="timeZone"/> (IANA or Windows ID; UTC when empty).</summary>
     public static async Task<IResult> GetActivityAsync(string? timeZone, WatchHistoryAdminService watchHistoryAdminService, CancellationToken cancellationToken = default)
     {
         var zone = TimeZoneInfo.Utc;

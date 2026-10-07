@@ -4,7 +4,7 @@ using XtreamForge.Domain.Enums;
 namespace XtreamForge.ApiService.Services.VirtualCategories;
 
 /// <summary>
-/// In-memory sets of TMDB IDs computed from TMDB (recommended movies, popular movies and TV shows), shared by the Xtream requests:
+/// In-memory sets of TMDB IDs computed from TMDB (recommended and popular movies and TV shows), shared by the Xtream requests:
 /// computing a set calls TMDB several times. Each set is identified by a key, kept for <see cref="Duration"/> (TMDB lists change slowly),
 /// computed by one request at a time, and can be invalidated (the recommendations, when the watch history changes).
 /// While a set is computed, the other requests get its last known value instead of waiting for TMDB; a failed computation keeps
@@ -12,13 +12,14 @@ namespace XtreamForge.ApiService.Services.VirtualCategories;
 /// </summary>
 public sealed class TmdbIdCache(TimeProvider timeProvider) : IDisposable
 {
-    public const string RecommendationsKey = "recommendations";
-
     public static readonly TimeSpan Duration = TimeSpan.FromHours(6);
 
     public static readonly TimeSpan FailureDuration = TimeSpan.FromMinutes(5);
 
     private readonly ConcurrentDictionary<string, Entry> _entries = new(StringComparer.Ordinal);
+
+    /// <summary>Key of the movies (VOD) or TV shows (series) recommended from the watch history of the same content type.</summary>
+    public static string RecommendationsKey(ContentType contentType) => $"recommendations:{contentType}";
 
     public static string PopularKey(ContentType contentType) => $"popular:{contentType}";
 

@@ -17,6 +17,8 @@ public class WatchHistoryAdminServiceTests : IAsyncDisposable
     private readonly TmdbIdCache _recommendationCache = new(TimeProvider.System);
     private readonly SteppingTimeProvider _time = new() { Now = Day.AddDays(1) };
     private readonly WatchHistoryAdminService _service;
+    private int _vodRecommendationComputeCount;
+    private int _seriesRecommendationComputeCount;
 
     public WatchHistoryAdminServiceTests()
     {
@@ -25,7 +27,7 @@ public class WatchHistoryAdminServiceTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task GetActivityAsync_CountsTheMoviePlaybacksPerDayOfTheTimeZone()
+    public async Task GetActivityAsync_CountsTheMovieAndEpisodePlaybacksPerDayOfTheTimeZone()
     {
         // now: 2026-10-02 22:00 in Brussels (UTC+2)
         var brussels = TimeZoneInfo.FindSystemTimeZoneById("Europe/Brussels");
@@ -41,7 +43,7 @@ public class WatchHistoryAdminServiceTests : IAsyncDisposable
 
         Assert.Equal((new DateOnly(2025, 9, 27), new DateOnly(2026, 10, 2)), (activity.From, activity.To));
         Assert.Equal(
-            [new WatchHistoryDayActivity(new DateOnly(2026, 10, 1), 1), new WatchHistoryDayActivity(new DateOnly(2026, 10, 2), 2)],
+            [new WatchHistoryDayActivity(new DateOnly(2026, 10, 1), 1, 0), new WatchHistoryDayActivity(new DateOnly(2026, 10, 2), 2, 1)],
             activity.Days);
     }
 
@@ -58,7 +60,7 @@ public class WatchHistoryAdminServiceTests : IAsyncDisposable
         var activity = await _service.GetActivityAsync(kiritimati, TestContext.Current.CancellationToken);
 
         Assert.Equal(new DateOnly(2025, 9, 28), activity.From);
-        Assert.Equal([new WatchHistoryDayActivity(new DateOnly(2025, 9, 28), 1)], activity.Days);
+        Assert.Equal([new WatchHistoryDayActivity(new DateOnly(2025, 9, 28), 1, 0)], activity.Days);
     }
 
     [Fact]
@@ -74,6 +76,21 @@ public class WatchHistoryAdminServiceTests : IAsyncDisposable
         Assert.Equal((ContentType.Vod, 603L, _time.Now, "The Lattice", "/lattice.jpg"), (item.ContentType, item.TmdbId, item.StartedAtUtc, item.Title, item.PosterPath));
         var entry = Assert.Single(_dbContext.WatchHistory);
         Assert.Equal((item.Id, ContentType.Vod, 603L, _time.Now), (entry.Id, entry.ContentType, entry.TmdbId, entry.StartedAtUtc));
+    }
+
+    [Fact]
+    public async Task AddAsync_ForATvShow_RecordsAPlaybackWithoutEpisodeAndInvalidatesTheSeriesRecommendations()
+    {
+        var info = new TmdbInfo { ContentType = ContentType.Series, TmdbId = 1399, Title = "Crowns" };
+        _dbContext.TmdbInfos.Add(info);
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        await ReadRecommendationsAsync();
+
+        var item = await _service.AddAsync(info.Id, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(item);
+        Assert.Equal((ContentType.Series, 1399L, (int?)null, (int?)null), (item.ContentType, item.TmdbId, item.SeasonNumber, item.EpisodeNumber));
+        Assert.Equal((1, 2), await ReadRecommendationsAsync());
     }
 
     [Fact]
@@ -100,9 +117,35 @@ public class WatchHistoryAdminServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task DeleteAsync_InvalidatesTheRecommendationsOfBothContentTypes()
+    {
+        var entry = new WatchHistoryEntry { ContentType = ContentType.Series, TmdbId = 1399, StartedAtUtc = Day };
+        _dbContext.WatchHistory.Add(entry);
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        await ReadRecommendationsAsync();
+
+        await _service.DeleteAsync(entry.Id, TestContext.Current.CancellationToken);
+
+        Assert.Equal((2, 2), await ReadRecommendationsAsync());
+    }
+
+    [Fact]
     public async Task DeleteAsync_WithUnknownPlayback_ReturnsFalse()
     {
         Assert.False(await _service.DeleteAsync(42, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task GetPageAsync_ReturnsTheSeasonAndEpisodeOfASeriesPlaybackWithTheTmdbInfoOfItsSeries()
+    {
+        _dbContext.TmdbInfos.Add(new TmdbInfo { ContentType = ContentType.Series, TmdbId = 1399, Title = "Crowns" });
+        _dbContext.WatchHistory.Add(new WatchHistoryEntry { ContentType = ContentType.Series, TmdbId = 1399, SeasonNumber = 2, EpisodeNumber = 5, StartedAtUtc = Day });
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var page = await _service.GetPageAsync(new WatchHistoryListQuery(), TestContext.Current.CancellationToken);
+
+        var item = Assert.Single(page.Items);
+        Assert.Equal((ContentType.Series, 1399L, (int?)2, (int?)5, "Crowns"), (item.ContentType, item.TmdbId, item.SeasonNumber, item.EpisodeNumber, item.Title));
     }
 
     [Fact]
@@ -153,6 +196,29 @@ public class WatchHistoryAdminServiceTests : IAsyncDisposable
         var page = await _service.GetPageAsync(new WatchHistoryListQuery(contentType), TestContext.Current.CancellationToken);
 
         Assert.Equal((expectedCount, expectedCount), (page.Items.Count, page.MatchingCount));
+    }
+
+    // reads the cached movie and series recommendations, computed again only when invalidated; returns how many times each one was computed
+    private async Task<(int Vod, int Series)> ReadRecommendationsAsync()
+    {
+        await _recommendationCache.GetOrComputeAsync(
+            TmdbIdCache.RecommendationsKey(ContentType.Vod),
+            _ =>
+            {
+                _vodRecommendationComputeCount++;
+                return Task.FromResult<IReadOnlySet<long>?>(new HashSet<long>());
+            },
+            TestContext.Current.CancellationToken);
+        await _recommendationCache.GetOrComputeAsync(
+            TmdbIdCache.RecommendationsKey(ContentType.Series),
+            _ =>
+            {
+                _seriesRecommendationComputeCount++;
+                return Task.FromResult<IReadOnlySet<long>?>(new HashSet<long>());
+            },
+            TestContext.Current.CancellationToken);
+
+        return (_vodRecommendationComputeCount, _seriesRecommendationComputeCount);
     }
 
     private async Task SeedAsync()

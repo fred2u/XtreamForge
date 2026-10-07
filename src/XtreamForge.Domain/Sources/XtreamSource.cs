@@ -20,4 +20,6 @@ public sealed class XtreamSource
     public List<ItemRule> ItemRules { get; set; } = [];
 
     public List<StreamTmdbMapping> StreamTmdbMappings { get; set; } = [];
+
+    public List<SeriesEpisode> SeriesEpisodes { get; set; } = [];
 }

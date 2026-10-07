@@ -4,8 +4,9 @@ using XtreamForge.Web.Features.Tmdb;
 
 namespace XtreamForge.Web.Features.Recommendations;
 
-/// <summary>Movie recommended from the watch history; <see cref="IsInCatalogue"/> tells whether a source exposes it.</summary>
+/// <summary>Movie or TV show recommended from the watch history; <see cref="IsInCatalogue"/> tells whether a source exposes it.</summary>
 public sealed record RecommendationDto(
+    ContentType ContentType,
     long TmdbId,
     string? Title,
     string? OriginalTitle,
@@ -45,6 +46,6 @@ public sealed record RecommendationDto(
         }
     }
 
-    /// <summary>Page of the movie on the TMDB website.</summary>
-    public string TmdbUrl => TmdbLinks.Page(ContentType.Vod, TmdbId);
+    /// <summary>Page of the movie or TV show on the TMDB website.</summary>
+    public string TmdbUrl => TmdbLinks.Page(ContentType, TmdbId);
 }

@@ -21,7 +21,8 @@ src/XtreamForge.Web/
     Shared/              # PageHeader, EmptyState, CountBadge, SegmentedControl, LoadErrorState + ApiErrorMessage, LineChart (SVG, ChartSeries + ChartGeometry) (generic UI building blocks only)
   Features/
     Dashboard/           # DashboardPage.razor (/): status + counters grouped by DashboardMetricGroup (configuration, TMDB) + DashboardClient.cs + MetricContent
-    History/             # WatchHistoryPage (/history): playbacks most recent first (FluentDataGrid ItemsProvider + Virtualize), WatchHistoryClient.cs, WatchHistoryModels.cs
+    History/             # WatchHistoryPage (/history): playbacks most recent first, filtered by content type (FluentDataGrid ItemsProvider + Virtualize), WatchHistoryClient.cs, WatchHistoryModels.cs (episode label S01E02)
+    Recommendations/     # RecommendationsPage (/recommendations): recommended movies or series (CategoryScopeBar without source), RecommendationsClient.cs, RecommendationModels.cs
     Monitoring/          # MonitoringPage (/monitoring) + MonitoringClient.cs + QueueMonitorPanel (background queues and upstream rate limits, polled every 5 s; one row per queue: summary + two charts on a shared column template, rate limits in a table; responsive through container queries on `.monitor-section`)
     Sources/             # SourcesPage (/sources): list with per-source and per-content-type counters (categories from the provider, effective after filtering, excluded manually / by provider / by rule, mapped, rules, TMDB StreamId→TmdbId mappings) linking to the filtered category and rule screens (`SourceContentFacts`), create (URL + credentials, not stored), delete; SourcesClient.cs (XtreamSourceSummaryDto with per-source counters)
     Categories/          # XtreamCategoriesPage (/categories/xtream), CustomCategoriesPage (/categories/custom), CategoryRulesPage (/categories/rules),
@@ -94,7 +95,8 @@ The Web project talks to `XtreamForge.ApiService` via HTTP. Endpoints are declar
 - `GET|POST /api/admin/sources/{sourceId}/item-rules`, `PUT|DELETE /api/admin/item-rules/{id}`, `PUT /api/admin/sources/{sourceId}/item-rules/order`: same contracts as the category rules; Web calls both through `CategoriesClient.*RuleAsync(RuleKind, ...)`
 - `GET /api/admin/tmdb-rules?contentType=`, `POST /api/admin/tmdb-rules`, `PUT|DELETE /api/admin/tmdb-rules/{id}`, `PUT /api/admin/tmdb-rules/order`: TMDB rules, global per content type (no source, `XtreamSourceId` is null in `RuleDto`), with a required `field` (`Title` = 1, `Genre` = 2); also called through `CategoriesClient.*RuleAsync(RuleKind.Tmdb, null, ...)`
 - `GET /api/admin/tmdb-infos?contentType=&search=&genre=&decision=&isExcluded=&isLoaded=&skip=&take=` → `{ items, matchingCount, totalCount, excludedCount, manuallyExcludedCount, notLoadedCount, genres }` (each item has `decision`, `exclusionReason` = `ManuallyExcluded`/`Rule`, `decidingRule`, poster URLs `w92`/`w342`); `GET /api/admin/tmdb-infos/{id}` → details (overview, directors, cast, duration); `PATCH /api/admin/tmdb-infos/{id}` with `{ isExcluded }`
-- `GET /api/admin/watch-history?contentType=&skip=&take=` → `{ items, matchingCount }` (most recent first; each item has `contentType`, `tmdbId`, `startedAtUtc`, TMDB title, original title, release date, `w92` poster URL)
+- `GET /api/admin/watch-history?contentType=&skip=&take=` → `{ items, matchingCount }` (most recent first; each item has `contentType`, `tmdbId`, `seasonNumber` and `episodeNumber` (episodes only), `startedAtUtc`, TMDB title, original title, release date, `w92` poster URL)
+- `GET /api/admin/recommendations?contentType=` (`Vod` by default) → recommended movies or TV shows, each with its `contentType`
 
 List endpoints are scoped by source and/or content type. Deleting a custom category still mapped by Xtream categories fails with 500 (FK `Restrict`), so the UI checks mappings first (`CategoriesClient.GetCustomCategoryMappingsAsync`, one call per source and content type).
 

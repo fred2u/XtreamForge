@@ -37,7 +37,7 @@ MapXtreamEndpoints()                    (RouteExtensions.cs: player_api.php, sho
 
 /{protocol}/{host}/{port}/{**rest}      → ForwardXtreamRequestAsync (streams and any other path)
   → XtreamContextBuilder.TryBuild()     (same validation)
-  → XtreamRequestForwardEndpoint        (transparent; a GET of movie/{user}/{pass}/{id}.{ext} answered 2xx or 3xx is tracked by the singleton WatchHistoryQueue while it streams)
+  → XtreamRequestForwardEndpoint        (transparent; a GET of movie|series/{user}/{pass}/{id}.{ext} answered 2xx or 3xx is tracked by the singleton WatchHistoryQueue while it streams)
 
 /{movie|series|live}/{username}/{password}/{file} → ForwardAccountStreamAsync (stream URLs built from the rewritten server_info)
   → XtreamAccountDirectory.Find()      (404 when the account has not authenticated since the start)

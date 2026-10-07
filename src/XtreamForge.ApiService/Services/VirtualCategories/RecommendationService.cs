@@ -9,11 +9,12 @@ using XtreamForge.ServiceDefaults;
 namespace XtreamForge.ApiService.Services.VirtualCategories;
 
 /// <summary>
-/// Movie recommended from the watch history. <see cref="Score"/> sums the weight of the watched movies recommending it
+/// Movie or TV show recommended from the watch history. <see cref="Score"/> sums the weight of the watched movies or TV shows recommending it
 /// (the most recently watched weighs the most), <see cref="RecommendedByCount"/> counts them, and
 /// <see cref="IsInCatalogue"/> tells whether TMDB metadata is known for it, i.e. whether a source exposes it.
 /// </summary>
 public sealed record RecommendationItem(
+    ContentType ContentType,
     long TmdbId,
     string? Title,
     string? OriginalTitle,
@@ -33,47 +34,47 @@ public class RecommendationService(
     IOptions<TmdbOptions> tmdbOptions,
     ILogger<RecommendationService> logger)
 {
-    /// <summary>Number of the most recently watched movies whose TMDB recommendations are requested.</summary>
+    /// <summary>Number of the most recently watched movies or TV shows whose TMDB recommendations are requested.</summary>
     public const int SeedCount = 20;
 
     public const int MaximumCount = 50;
 
     /// <summary>
-    /// Returns the TMDB IDs of the recommended movies for the Xtream requests, from <see cref="TmdbIdCache"/> when available.
+    /// Returns the TMDB IDs of the recommended movies (VOD) or TV shows (series) for the Xtream requests, from <see cref="TmdbIdCache"/> when available.
     /// A TMDB failure is logged and gives no recommendation, so that the catalogue is still returned.
     /// </summary>
-    public Task<IReadOnlySet<long>> GetRecommendedTmdbIdsAsync(CancellationToken cancellationToken = default)
-        => cache.GetOrComputeAsync(TmdbIdCache.RecommendationsKey, ComputeRecommendedTmdbIdsAsync, cancellationToken);
+    public Task<IReadOnlySet<long>> GetRecommendedTmdbIdsAsync(ContentType contentType, CancellationToken cancellationToken = default)
+        => cache.GetOrComputeAsync(TmdbIdCache.RecommendationsKey(contentType), token => ComputeRecommendedTmdbIdsAsync(contentType, token), cancellationToken);
 
     /// <summary>
-    /// Returns the movies recommended by TMDB for the most recently watched movies, the best score first.
-    /// A movie of the watch history, or excluded manually from the TMDB metadata, is never recommended.
-    /// Without <c>Tmdb:ApiKey</c>, TMDB is not called and the list is empty.
+    /// Returns the movies (VOD) or TV shows (series) recommended by TMDB for the most recently watched movies or TV shows (episodes count
+    /// for their series), the best score first. A movie or TV show of the watch history, or excluded manually from the TMDB metadata,
+    /// is never recommended. Without <c>Tmdb:ApiKey</c>, TMDB is not called and the list is empty.
     /// </summary>
-    public async Task<IReadOnlyList<RecommendationItem>> GetAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<RecommendationItem>> GetAsync(ContentType contentType, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(tmdbOptions.Value.ApiKey))
         {
             return [];
         }
 
-        // every watched movie with its last playback; the playbacks are recorded in their start order
-        var watchedMovies = await dbContext.WatchHistory
+        // every watched title with its last playback; the playbacks are recorded in their start order
+        var watchedTitles = await dbContext.WatchHistory
             .AsNoTracking()
-            .Where(entry => entry.ContentType == ContentType.Vod)
+            .Where(entry => entry.ContentType == contentType)
             .GroupBy(entry => entry.TmdbId)
             .Select(group => new { TmdbId = group.Key, LastId = group.Max(entry => entry.Id) })
             .ToListAsync(cancellationToken);
 
-        var seeds = watchedMovies
-            .OrderByDescending(movie => movie.LastId)
+        var seeds = watchedTitles
+            .OrderByDescending(title => title.LastId)
             .Take(SeedCount)
-            .Select(movie => movie.TmdbId)
+            .Select(title => title.TmdbId)
             .ToList();
 
-        var recommendationsBySeed = await Task.WhenAll(seeds.Select(seed => tmdbClient.GetMovieRecommendationsAsync(seed, cancellationToken)));
+        var recommendationsBySeed = await Task.WhenAll(seeds.Select(seed => tmdbClient.GetRecommendationsAsync(contentType, seed, cancellationToken)));
 
-        var watchedIds = watchedMovies.Select(movie => movie.TmdbId).ToHashSet();
+        var watchedIds = watchedTitles.Select(title => title.TmdbId).ToHashSet();
         var candidates = new Dictionary<long, (TmdbRecommendation Recommendation, int Score, int Count)>();
         for (var seedIndex = 0; seedIndex < recommendationsBySeed.Length; seedIndex++)
         {
@@ -94,7 +95,7 @@ public class RecommendationService(
         var candidateIds = candidates.Keys.ToList();
         var knownInfos = await dbContext.TmdbInfos
             .AsNoTracking()
-            .Where(info => info.ContentType == ContentType.Vod && candidateIds.Contains(info.TmdbId))
+            .Where(info => info.ContentType == contentType && candidateIds.Contains(info.TmdbId))
             .Select(info => new { info.TmdbId, info.IsExcluded })
             .ToDictionaryAsync(info => info.TmdbId, info => info.IsExcluded, cancellationToken);
 
@@ -105,6 +106,7 @@ public class RecommendationService(
             .ThenBy(candidate => candidate.Recommendation.Id)
             .Take(MaximumCount)
             .Select(candidate => new RecommendationItem(
+                contentType,
                 candidate.Recommendation.Id,
                 candidate.Recommendation.Title,
                 candidate.Recommendation.OriginalTitle,
@@ -118,11 +120,11 @@ public class RecommendationService(
                 knownInfos.ContainsKey(candidate.Recommendation.Id)))];
     }
 
-    private async Task<IReadOnlySet<long>?> ComputeRecommendedTmdbIdsAsync(CancellationToken cancellationToken)
+    private async Task<IReadOnlySet<long>?> ComputeRecommendedTmdbIdsAsync(ContentType contentType, CancellationToken cancellationToken)
     {
         try
         {
-            var recommendations = await GetAsync(cancellationToken);
+            var recommendations = await GetAsync(contentType, cancellationToken);
             return recommendations.Select(recommendation => recommendation.TmdbId).ToHashSet();
         }
         catch (HttpRequestException exception)

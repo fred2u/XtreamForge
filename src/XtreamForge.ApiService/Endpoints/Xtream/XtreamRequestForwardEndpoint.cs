@@ -24,16 +24,16 @@ public sealed class XtreamRequestForwardEndpoint(IHttpClientFactory httpClientFa
         }
     }
 
-    // only a movie stream served or redirected by the provider is a playback; HEAD requests only probe the stream.
+    // only a movie or series episode stream served or redirected by the provider is a playback; HEAD requests only probe the stream.
     // Redirects are not followed (AllowAutoRedirect is disabled): Xtream panels often redirect a stream to a load balancer,
     // which the client then calls directly
     private IDisposable? TrackPlayback(XtreamContext xtreamContext, HttpResponseMessage responseMessage)
     {
         if ((int)responseMessage.StatusCode is < 200 or >= 400
             || !HttpMethods.IsGet(xtreamContext.Request.Method)
-            || XtreamStreamPath.ParseMovie(xtreamContext.Path) is not { } movie)
+            || XtreamStreamPath.ParseVideo(xtreamContext.Path) is not { } stream)
             return null;
 
-        return watchHistoryQueue.TrackPlayback(xtreamContext.Protocol, xtreamContext.Host, xtreamContext.Port, movie);
+        return watchHistoryQueue.TrackPlayback(xtreamContext.Protocol, xtreamContext.Host, xtreamContext.Port, stream);
     }
 }

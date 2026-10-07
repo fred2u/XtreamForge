@@ -11,6 +11,7 @@ using XtreamForge.ApiService.Services.VirtualCategories;
 using XtreamForge.ApiService.Services.WatchHistory;
 using XtreamForge.ApiService.Services.Tmdb;
 using XtreamForge.ApiService.Xtream;
+using XtreamForge.Domain.Enums;
 using XtreamForge.Tests.Infrastructure;
 
 namespace XtreamForge.Tests.Endpoints;
@@ -74,15 +75,29 @@ public sealed class XtreamRoutesTests : IAsyncDisposable
         await using var requests = _watchHistoryQueue.ReadAllAsync(TestContext.Current.CancellationToken).GetAsyncEnumerator(TestContext.Current.CancellationToken);
         Assert.True(await requests.MoveNextAsync());
         Assert.Equal(
-            ("http", "provider.example.com", 8080, new XtreamMovieStream("user", "secret", "1")),
-            (requests.Current.Protocol, requests.Current.Host, requests.Current.Port, requests.Current.Movie));
+            ("http", "provider.example.com", 8080, new XtreamVideoStream(ContentType.Vod, "user", "secret", "1")),
+            (requests.Current.Protocol, requests.Current.Host, requests.Current.Port, requests.Current.Stream));
+    }
+
+    [Fact]
+    public async Task EpisodeStreamRequest_EnqueuesThePlaybackForTheWatchHistoryWithoutCreatingDbContext()
+    {
+        var client = await StartAsync();
+
+        using var response = await client.GetAsync($"{ProviderPrefix}/series/user/secret/1001.mkv", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(0, _dbContextCount);
+        await using var requests = _watchHistoryQueue.ReadAllAsync(TestContext.Current.CancellationToken).GetAsyncEnumerator(TestContext.Current.CancellationToken);
+        Assert.True(await requests.MoveNextAsync());
+        Assert.Equal(new XtreamVideoStream(ContentType.Series, "user", "secret", "1001"), requests.Current.Stream);
     }
 
     [Theory]
-    [InlineData("GET", "/series/user/secret/1.mp4")]
     [InlineData("GET", "/live/user/secret/1.ts")]
     [InlineData("GET", "/player_api.php?action=get_live_streams")]
     [InlineData("HEAD", "/movie/user/secret/1.mp4")]
+    [InlineData("HEAD", "/series/user/secret/1001.mkv")]
     public async Task OtherForwardedRequest_DoesNotEnqueueAPlayback(string method, string pathAndQuery)
     {
         var client = await StartAsync();
@@ -219,6 +234,7 @@ public sealed class XtreamRoutesTests : IAsyncDisposable
         builder.Services.AddSingleton<ProviderTmdbIdQueue>();
         builder.Services.AddSingleton<TmdbInfoQueue>();
         builder.Services.AddSingleton(_watchHistoryQueue);
+        builder.Services.AddSingleton<SeriesEpisodeQueue>();
         builder.Services.AddSingleton<TmdbClient>();
         builder.Services.AddScoped<SourceService>();
         builder.Services.AddScoped<CategoryService>();

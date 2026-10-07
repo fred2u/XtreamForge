@@ -5,11 +5,16 @@ using XtreamForge.Domain.Enums;
 
 namespace XtreamForge.ApiService.Endpoints.Admin.WatchHistory.Dto;
 
-/// <summary>Playback of the watch history; the TMDB values are null when the metadata of the TMDB ID is not loaded.</summary>
+/// <summary>
+/// Playback of the watch history; the TMDB values are null when the metadata of the TMDB ID is not loaded.
+/// A series episode has the TMDB ID and metadata of its series, and its season and episode numbers when known.
+/// </summary>
 public sealed record AdminWatchHistoryEntryDto(
     int Id,
     ContentType ContentType,
     long TmdbId,
+    int? SeasonNumber,
+    int? EpisodeNumber,
     DateTimeOffset StartedAtUtc,
     string? Title,
     string? OriginalTitle,
@@ -20,6 +25,8 @@ public sealed record AdminWatchHistoryEntryDto(
         item.Id,
         item.ContentType,
         item.TmdbId,
+        item.SeasonNumber,
+        item.EpisodeNumber,
         item.StartedAtUtc,
         item.Title,
         item.OriginalTitle,

@@ -1,4 +1,4 @@
-@* Calendar heatmap of the movie playbacks: one column per week (Monday first), one cell per day, darker with more playbacks. *@
+@* Calendar heatmap of the movie and series episode playbacks: one column per week (Monday first), one cell per day, darker with more playbacks. *@
 @inject DashboardClient DashboardClient
 @implements IDisposable
 
@@ -9,11 +9,11 @@
             <span class="section-count">
                 @if (_activity is not null)
                 {
-                    @($"{TotalCount.ToString("N0", CultureInfo.CurrentCulture)} movie playbacks on {ActiveDayCount.ToString("N0", CultureInfo.CurrentCulture)} days over the last year")
+                    @($"{TotalCount.ToString("N0", CultureInfo.CurrentCulture)} playbacks ({Describe(MovieCount, EpisodeCount)}) on {ActiveDayCount.ToString("N0", CultureInfo.CurrentCulture)} days over the last year")
                 }
                 else
                 {
-                    @("Movie playbacks per day over the last year")
+                    @("Movie and episode playbacks per day over the last year")
                 }
             </span>
             <a class="text-link" href="/history">
@@ -54,8 +54,8 @@
                         {
                             @if (day >= _activity.From && day <= _activity.To)
                             {
-                                var count = _counts.GetValueOrDefault(day);
-                                <span class="@($"heatmap-cell heatmap-level-{Level(count).ToString(CultureInfo.InvariantCulture)}")" title="@CellTitle(day, count)"></span>
+                                var activityDay = _days.GetValueOrDefault(day);
+                                <span class="@($"heatmap-cell heatmap-level-{Level(activityDay?.Count ?? 0).ToString(CultureInfo.InvariantCulture)}")" title="@CellTitle(day, activityDay)"></span>
                             }
                             else
                             {
@@ -81,7 +81,7 @@
 @code {
     private readonly CancellationTokenSource _disposal = new();
     private WatchActivityDto? _activity;
-    private Dictionary<DateOnly, int> _counts = [];
+    private Dictionary<DateOnly, WatchActivityDayDto> _days = [];
 
     // every week holds 7 days from Monday; the days outside the activity range are drawn empty
     private List<DateOnly[]> _weeks = [];
@@ -89,11 +89,15 @@
     private bool _isLoading;
     private Exception? _error;
 
-    private int TotalCount => _counts.Values.Sum();
+    private int TotalCount => _days.Values.Sum(day => day.Count);
 
-    private int ActiveDayCount => _counts.Count;
+    private int MovieCount => _days.Values.Sum(day => day.MovieCount);
 
-    private string AriaLabel => $"Watch activity: {TotalCount.ToString(CultureInfo.CurrentCulture)} movie playbacks over the last year";
+    private int EpisodeCount => _days.Values.Sum(day => day.EpisodeCount);
+
+    private int ActiveDayCount => _days.Count;
+
+    private string AriaLabel => $"Watch activity: {TotalCount.ToString(CultureInfo.CurrentCulture)} playbacks ({Describe(MovieCount, EpisodeCount)}) over the last year";
 
     protected override Task OnInitializedAsync() => LoadAsync();
 
@@ -105,8 +109,8 @@
         try
         {
             var activity = await DashboardClient.GetWatchActivityAsync(_disposal.Token);
-            _counts = activity.Days.ToDictionary(day => day.Date, day => day.Count);
-            _maxCount = _counts.Count == 0 ? 0 : _counts.Values.Max();
+            _days = activity.Days.ToDictionary(day => day.Date);
+            _maxCount = _days.Count == 0 ? 0 : _days.Values.Max(day => day.Count);
             _weeks = BuildWeeks(activity.From, activity.To);
             _activity = activity;
         }
@@ -157,16 +161,20 @@
             : string.Empty;
     }
 
-    private static string CellTitle(DateOnly date, int count)
+    private static string CellTitle(DateOnly date, WatchActivityDayDto? activityDay)
     {
         var day = date.ToString("D", CultureInfo.CurrentCulture);
-        return count switch
-        {
-            0 => $"No playback on {day}",
-            1 => $"1 playback on {day}",
-            _ => $"{count.ToString(CultureInfo.CurrentCulture)} playbacks on {day}"
-        };
+        return activityDay is { Count: > 0 }
+            ? $"{Describe(activityDay.MovieCount, activityDay.EpisodeCount)} on {day}"
+            : $"No playback on {day}";
     }
+
+    // "1 movie, 3 episodes"
+    private static string Describe(int movieCount, int episodeCount) =>
+        $"{Quantity(movieCount, "movie", "movies")}, {Quantity(episodeCount, "episode", "episodes")}";
+
+    private static string Quantity(int count, string singular, string plural) =>
+        $"{count.ToString("N0", CultureInfo.CurrentCulture)} {(count == 1 ? singular : plural)}";
 
     public void Dispose()
     {

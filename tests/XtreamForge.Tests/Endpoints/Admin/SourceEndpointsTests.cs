@@ -12,6 +12,7 @@ using XtreamForge.ApiService.Xtream;
 using XtreamForge.Database;
 using XtreamForge.Domain.Categories;
 using XtreamForge.Domain.Enums;
+using XtreamForge.Domain.History;
 using XtreamForge.Domain.Items;
 using XtreamForge.Domain.Sources;
 using XtreamForge.Tests.Infrastructure;
@@ -219,6 +220,22 @@ public class SourceEndpointsTests : IAsyncDisposable
         Assert.IsType<NoContent>(result);
         Assert.False(await _dbContext.CategoryRules.AnyAsync(r => r.XtreamSourceId == source.Id, TestContext.Current.CancellationToken));
         Assert.False(await _dbContext.ItemRules.AnyAsync(r => r.XtreamSourceId == source.Id, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_WhenSourceHasWatchHistory_KeepsThePlaybacksWithoutSource()
+    {
+        var source = new XtreamSource { Protocol = "http", Host = "source.example.com", Port = 8080 };
+        var entry = new WatchHistoryEntry { XtreamSource = source, ContentType = ContentType.Vod, TmdbId = 603, StartedAtUtc = DateTimeOffset.UtcNow };
+        _dbContext.WatchHistory.Add(entry);
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        _dbContext.ChangeTracker.Clear();
+
+        var result = await SourceEndpoints.DeleteAsync(source.Id, _sourceAdminService, TestContext.Current.CancellationToken);
+
+        Assert.IsType<NoContent>(result);
+        var kept = await _dbContext.WatchHistory.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal((entry.Id, (int?)null), (kept.Id, kept.XtreamSourceId));
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Options;
+using XtreamForge.ApiService.Endpoints.Admin.Sources.Dto;
 using XtreamForge.ApiService.Endpoints.Admin.WatchHistory;
 using XtreamForge.ApiService.Endpoints.Admin.WatchHistory.Dto;
 using XtreamForge.ApiService.Options;
@@ -8,6 +9,7 @@ using XtreamForge.ApiService.Services.Admin;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;
 using XtreamForge.Domain.History;
+using XtreamForge.Domain.Sources;
 using XtreamForge.Domain.Tmdb;
 using XtreamForge.Tests.Infrastructure;
 
@@ -95,6 +97,20 @@ public class WatchHistoryEndpointsTests : IAsyncDisposable
             (603L, ContentType.Vod, startedAtUtc, "The Lattice", "https://image.tmdb.org/t/p/w92/lattice.jpg"),
             (entry.TmdbId, entry.ContentType, entry.StartedAtUtc, entry.Title, entry.PosterThumbnailUrl));
         Assert.Equal(1, page.MatchingCount);
+    }
+
+    [Fact]
+    public async Task Get_ReturnsTheSourceOfThePlayback()
+    {
+        var source = new XtreamSource { Protocol = "https", Host = "provider.example.com", Port = 8443 };
+        _dbContext.WatchHistory.Add(new WatchHistoryEntry { XtreamSource = source, ContentType = ContentType.Vod, TmdbId = 603, StartedAtUtc = DateTimeOffset.UtcNow });
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await WatchHistoryEndpoints.GetListAsync(new WatchHistoryListQuery(), _service, TmdbOptions, TestContext.Current.CancellationToken);
+
+        var page = Assert.IsType<Ok<AdminWatchHistoryPageDto>>(result).Value;
+        Assert.NotNull(page);
+        Assert.Equal(new XtreamSourceDto(source.Id, "https", "provider.example.com", 8443), Assert.Single(page.Items).Source);
     }
 
     [Fact]

@@ -17,7 +17,7 @@ public class WatchHistoryService(IHttpClientFactory httpClientFactory, XtreamFor
         => RecordAsync(request, cancellationToken);
 
     /// <summary>
-    /// Records a movie or series episode playback with its TMDB ID (the TMDB ID of the series for an episode); returns false when
+    /// Records a movie or series episode playback with its source and TMDB ID (the TMDB ID of the series for an episode); returns false when
     /// the source is unknown, the episode was not listed by <c>get_series_info</c>, or the movie or series has no TMDB ID.
     /// The stored TMDB mapping wins, as in the item lists; otherwise the provider <c>get_vod_info</c> / <c>get_series_info</c> payload is read,
     /// since the items already identified by the provider may have no mapping.
@@ -52,7 +52,7 @@ public class WatchHistoryService(IHttpClientFactory httpClientFactory, XtreamFor
 
         return tmdbId is null
             ? null
-            : new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = tmdbId.Value, StartedAtUtc = request.StartedAtUtc };
+            : new WatchHistoryEntry { XtreamSourceId = sourceId, ContentType = ContentType.Vod, TmdbId = tmdbId.Value, StartedAtUtc = request.StartedAtUtc };
     }
 
     // the stream URL of an episode only carries its ID: its series, season, and number come from the episodes listed by get_series_info
@@ -73,6 +73,7 @@ public class WatchHistoryService(IHttpClientFactory httpClientFactory, XtreamFor
             ? null
             : new WatchHistoryEntry
             {
+                XtreamSourceId = sourceId,
                 ContentType = ContentType.Series,
                 TmdbId = tmdbId.Value,
                 SeasonNumber = episode.SeasonNumber,

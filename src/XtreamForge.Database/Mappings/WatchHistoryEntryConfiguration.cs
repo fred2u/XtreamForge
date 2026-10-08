@@ -19,10 +19,17 @@ public class WatchHistoryEntryConfiguration : IEntityTypeConfiguration<WatchHist
         watchHistory.HasIndex(entry => new { entry.ContentType, entry.StartedAtUtc });
 
         watchHistory.Property(entry => entry.Id).HasColumnName("id");
+        watchHistory.Property(entry => entry.XtreamSourceId).HasColumnName("xtream_source_id");
         watchHistory.Property(entry => entry.ContentType).HasColumnName("content_type").HasConversion<string>().HasMaxLength(20);
         watchHistory.Property(entry => entry.TmdbId).HasColumnName("tmdb_id");
         watchHistory.Property(entry => entry.SeasonNumber).HasColumnName("season_number");
         watchHistory.Property(entry => entry.EpisodeNumber).HasColumnName("episode_number");
         watchHistory.Property(entry => entry.StartedAtUtc).HasColumnName("started_at_utc");
+
+        // the history outlives its sources: a deleted source only leaves its playbacks without source
+        watchHistory.HasOne(entry => entry.XtreamSource)
+            .WithMany()
+            .HasForeignKey(entry => entry.XtreamSourceId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

@@ -53,7 +53,7 @@
                             ItemKey="@(entry => entry.Id)"
                             Virtualize="true"
                             ItemSize="64"
-                            GridTemplateColumns="minmax(150px, 0.8fr) minmax(260px, 2.5fr) 120px 64px">
+                            GridTemplateColumns="minmax(150px, 0.8fr) minmax(260px, 2.5fr) minmax(160px, 1fr) 120px 64px">
                 <TemplateColumn Title="Started" HeaderTooltip="Start of the playback, in the time zone of the browser">
                     <span class="cell-secondary">@FormatStartedAt(context.StartedAtUtc)</span>
                 </TemplateColumn>
@@ -74,6 +74,16 @@
                             <span class="cell-secondary cell-truncate">@context.Subtitle</span>
                         </div>
                     </div>
+                </TemplateColumn>
+                <TemplateColumn Title="Source" HeaderTooltip="Source that served the playback; none for a playback added from the TMDB infos, or once its source is deleted">
+                    @if (context.Source is { } source)
+                    {
+                        <span class="cell-secondary cell-truncate" title="@source.DisplayName">@source.DisplayName</span>
+                    }
+                    else
+                    {
+                        <span class="cell-secondary">—</span>
+                    }
                 </TemplateColumn>
                 <TemplateColumn Title="Type">
                     <ContentTypePill ContentType="@context.ContentType" />

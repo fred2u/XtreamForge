@@ -281,7 +281,7 @@ Upstream credentials needed by background work must stay in memory only and must
 
 # Watch History
 
-Movie and series episode playbacks are recorded in `WatchHistory` (`Domain/History/WatchHistoryEntry`: content type, TMDB ID, season and episode numbers of an episode, start date; one entry per playback, no account nor source):
+Movie and series episode playbacks are recorded in `WatchHistory` (`Domain/History/WatchHistoryEntry`: source, content type, TMDB ID, season and episode numbers of an episode, start date; one entry per playback, no account). The source is informative only (the history, recommendations, and activity stay global) and nullable: null for a playback added by the admin or recorded before the source was stored, and set to null when the source is deleted (`SetNull`, the history outlives its sources):
 
 - `XtreamRequestForwardEndpoint` reports each `GET` of a `movie/{username}/{password}/{streamId}.{ext}` or `series/{username}/{password}/{episodeId}.{ext}` path served (2xx) or redirected (3xx, redirects are not followed) by the provider (`XtreamStreamPath.ParseVideo`, returning an `XtreamVideoStream` with its content type) to the singleton `WatchHistoryQueue` for as long as the stream is written; the stream route must keep not resolving a `DbContext`;
 - the queue groups the requests of one playback in memory (same source, account, and stream; running request or last one ended less than `PlaybackIdleTimeout` ago) and enqueues only new playbacks;

@@ -3,6 +3,7 @@ using XtreamForge.ApiService.Services.VirtualCategories;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;
 using XtreamForge.Domain.History;
+using XtreamForge.Domain.Sources;
 
 namespace XtreamForge.ApiService.Services.Admin;
 
@@ -14,10 +15,11 @@ public sealed record WatchHistoryListQuery(
 
 /// <summary>
 /// A playback of the watch history with the TMDB metadata of its TMDB ID, when loaded; a series episode has the TMDB ID and metadata
-/// of its series, and its season and episode numbers when known.
+/// of its series, and its season and episode numbers when known. The source is null for a playback added by the admin, or once deleted.
 /// </summary>
 public sealed record WatchHistoryEntryItem(
     int Id,
+    XtreamSource? Source,
     ContentType ContentType,
     long TmdbId,
     int? SeasonNumber,
@@ -96,7 +98,7 @@ public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TmdbIdCach
         recommendationCache.Invalidate(TmdbIdCache.RecommendationsKey(entry.ContentType));
 
         return new WatchHistoryEntryItem(
-            entry.Id, entry.ContentType, entry.TmdbId, entry.SeasonNumber, entry.EpisodeNumber, entry.StartedAtUtc,
+            entry.Id, null, entry.ContentType, entry.TmdbId, entry.SeasonNumber, entry.EpisodeNumber, entry.StartedAtUtc,
             info.Title, info.OriginalTitle, info.ReleaseDate, info.PosterPath);
     }
 
@@ -140,6 +142,7 @@ public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TmdbIdCach
                 info => new { info.ContentType, info.TmdbId },
                 (entry, info) => new WatchHistoryEntryItem(
                     entry.Id,
+                    entry.XtreamSource,
                     entry.ContentType,
                     entry.TmdbId,
                     entry.SeasonNumber,

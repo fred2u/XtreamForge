@@ -4,6 +4,7 @@ using XtreamForge.ApiService.Services.Admin;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;
 using XtreamForge.Domain.History;
+using XtreamForge.Domain.Sources;
 using XtreamForge.Domain.Tmdb;
 using XtreamForge.Tests.Infrastructure;
 
@@ -64,18 +65,21 @@ public class WatchHistoryAdminServiceTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task AddAsync_RecordsAPlaybackOfTheTmdbInfoStartedNow()
+    public async Task AddAsync_RecordsAPlaybackOfTheTmdbInfoStartedNowWithoutSource()
     {
         var info = new TmdbInfo { ContentType = ContentType.Vod, TmdbId = 603, Title = "The Lattice", PosterPath = "/lattice.jpg" };
         _dbContext.TmdbInfos.Add(info);
+        _dbContext.XtreamSources.Add(new XtreamSource { Protocol = "http", Host = "provider.example.com", Port = 8080 });
         await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var item = await _service.AddAsync(info.Id, TestContext.Current.CancellationToken);
 
         Assert.NotNull(item);
-        Assert.Equal((ContentType.Vod, 603L, _time.Now, "The Lattice", "/lattice.jpg"), (item.ContentType, item.TmdbId, item.StartedAtUtc, item.Title, item.PosterPath));
+        Assert.Equal(
+            ((XtreamSource?)null, ContentType.Vod, 603L, _time.Now, "The Lattice", "/lattice.jpg"),
+            (item.Source, item.ContentType, item.TmdbId, item.StartedAtUtc, item.Title, item.PosterPath));
         var entry = Assert.Single(_dbContext.WatchHistory);
-        Assert.Equal((item.Id, ContentType.Vod, 603L, _time.Now), (entry.Id, entry.ContentType, entry.TmdbId, entry.StartedAtUtc));
+        Assert.Equal((item.Id, (int?)null, ContentType.Vod, 603L, _time.Now), (entry.Id, entry.XtreamSourceId, entry.ContentType, entry.TmdbId, entry.StartedAtUtc));
     }
 
     [Fact]
@@ -160,6 +164,26 @@ public class WatchHistoryAdminServiceTests : IAsyncDisposable
             page.Items.Select(item => (item.TmdbId, item.StartedAtUtc, item.Title)));
         Assert.Equal(3, page.MatchingCount);
         Assert.Equal(("/lattice.jpg", new DateOnly(1999, 3, 31)), (page.Items[0].PosterPath, page.Items[0].ReleaseDate));
+        Assert.Empty(_dbContext.ChangeTracker.Entries());
+    }
+
+    [Fact]
+    public async Task GetPageAsync_ReturnsTheSourceOfEachPlaybackWhenKnown()
+    {
+        var source = new XtreamSource { Protocol = "https", Host = "provider.example.com", Port = 8443 };
+        _dbContext.XtreamSources.Add(source);
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        _dbContext.WatchHistory.AddRange(
+            new WatchHistoryEntry { XtreamSourceId = source.Id, ContentType = ContentType.Vod, TmdbId = 603, StartedAtUtc = Day },
+            new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 604, StartedAtUtc = Day.AddHours(1) });
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        _dbContext.ChangeTracker.Clear();
+
+        var page = await _service.GetPageAsync(new WatchHistoryListQuery(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [(604L, null, null, null), (603L, source.Id, "provider.example.com", 8443)],
+            page.Items.Select(item => (item.TmdbId, item.Source?.Id, item.Source?.Host, item.Source?.Port)));
         Assert.Empty(_dbContext.ChangeTracker.Entries());
     }
 

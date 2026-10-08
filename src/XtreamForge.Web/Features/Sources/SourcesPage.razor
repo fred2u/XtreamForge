@@ -292,7 +292,7 @@ else
         try
         {
             var confirmation = await DialogService.ShowConfirmationAsync(
-                $"Delete the source <strong>{WebUtility.HtmlEncode(source.DisplayName)}</strong>? Its Xtream categories, category rules, item rules and TMDB mappings are deleted as well. Custom categories are kept. This cannot be undone.",
+                $"Delete the source <strong>{WebUtility.HtmlEncode(source.DisplayName)}</strong>? Its Xtream categories, category rules, item rules and TMDB mappings are deleted as well. Custom categories are kept, and its watch history playbacks are kept without source. This cannot be undone.",
                 "Delete source",
                 "Delete",
                 "Cancel");

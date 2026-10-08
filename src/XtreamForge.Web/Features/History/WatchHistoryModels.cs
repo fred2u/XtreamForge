@@ -7,9 +7,11 @@ namespace XtreamForge.Web.Features.History;
 /// <summary>
 /// Playback of the watch history as listed by the API; the TMDB values are null when the metadata of the TMDB ID is not loaded.
 /// A series episode has the TMDB ID and metadata of its series, and its season and episode numbers when known.
+/// The source is null for a playback added from the TMDB infos, or once its source is deleted.
 /// </summary>
 public sealed record WatchHistoryEntryDto(
     int Id,
+    XtreamSourceDto? Source,
     ContentType ContentType,
     long TmdbId,
     int? SeasonNumber,

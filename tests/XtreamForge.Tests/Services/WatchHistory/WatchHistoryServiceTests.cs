@@ -52,20 +52,23 @@ public class WatchHistoryServiceTests : IAsyncDisposable
 
         Assert.True(recorded);
         var entry = await _dbContext.WatchHistory.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
-        Assert.Equal((ContentType.Vod, 603L, StartedAtUtc, (int?)null, (int?)null), (entry.ContentType, entry.TmdbId, entry.StartedAtUtc, entry.SeasonNumber, entry.EpisodeNumber));
+        Assert.Equal(
+            ((int?)source.Id, ContentType.Vod, 603L, StartedAtUtc, (int?)null, (int?)null),
+            (entry.XtreamSourceId, entry.ContentType, entry.TmdbId, entry.StartedAtUtc, entry.SeasonNumber, entry.EpisodeNumber));
         Assert.Empty(httpClientFactory.RequestedUris);
     }
 
     [Fact]
     public async Task RecordAsync_WhenTheMovieIsNotMapped_RecordsTheProviderTmdbId()
     {
-        await CreateSourceAsync();
+        var source = await CreateSourceAsync();
         var httpClientFactory = Provider("""{ "info": [], "movie_data": { "tmdb_id": 603 } }""");
 
         var recorded = await new WatchHistoryService(httpClientFactory, _dbContext, _recommendationCache).RecordAsync(CreateRequest(), TestContext.Current.CancellationToken);
 
         Assert.True(recorded);
-        Assert.Equal(603, (await _dbContext.WatchHistory.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).TmdbId);
+        var entry = await _dbContext.WatchHistory.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(((int?)source.Id, 603L), (entry.XtreamSourceId, entry.TmdbId));
         Assert.Equal(
             "https://provider.example.com:8443/player_api.php?username=us%20er&password=p%26ss&action=get_vod_info&vod_id=42",
             Assert.Single(httpClientFactory.RequestedUris).AbsoluteUri);
@@ -147,7 +150,9 @@ public class WatchHistoryServiceTests : IAsyncDisposable
 
         Assert.True(recorded);
         var entry = await _dbContext.WatchHistory.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
-        Assert.Equal((ContentType.Series, 1399L, (int?)2, (int?)5, StartedAtUtc), (entry.ContentType, entry.TmdbId, entry.SeasonNumber, entry.EpisodeNumber, entry.StartedAtUtc));
+        Assert.Equal(
+            ((int?)source.Id, ContentType.Series, 1399L, (int?)2, (int?)5, StartedAtUtc),
+            (entry.XtreamSourceId, entry.ContentType, entry.TmdbId, entry.SeasonNumber, entry.EpisodeNumber, entry.StartedAtUtc));
         Assert.Empty(httpClientFactory.RequestedUris);
     }
 

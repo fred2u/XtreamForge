@@ -45,6 +45,7 @@ public class WatchHistoryWebTests
 
     private static WatchHistoryEntryDto CreateEntry(ContentType contentType, int? seasonNumber, int? episodeNumber) => new(
         1,
+        null,
         contentType,
         1399,
         seasonNumber,

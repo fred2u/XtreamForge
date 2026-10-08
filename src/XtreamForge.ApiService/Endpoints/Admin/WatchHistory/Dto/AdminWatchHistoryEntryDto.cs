@@ -1,3 +1,4 @@
+using XtreamForge.ApiService.Endpoints.Admin.Sources.Dto;
 using XtreamForge.ApiService.Endpoints.Admin.TmdbInfos.Dto;
 using XtreamForge.ApiService.Services.Admin;
 using XtreamForge.ApiService.Services.Tmdb;
@@ -8,9 +9,11 @@ namespace XtreamForge.ApiService.Endpoints.Admin.WatchHistory.Dto;
 /// <summary>
 /// Playback of the watch history; the TMDB values are null when the metadata of the TMDB ID is not loaded.
 /// A series episode has the TMDB ID and metadata of its series, and its season and episode numbers when known.
+/// The source is null for a playback added by the admin, or once its source is deleted.
 /// </summary>
 public sealed record AdminWatchHistoryEntryDto(
     int Id,
+    XtreamSourceDto? Source,
     ContentType ContentType,
     long TmdbId,
     int? SeasonNumber,
@@ -23,6 +26,7 @@ public sealed record AdminWatchHistoryEntryDto(
 {
     public static AdminWatchHistoryEntryDto From(WatchHistoryEntryItem item, string imageBaseUrl) => new(
         item.Id,
+        item.Source is { } source ? new XtreamSourceDto(source.Id, source.Protocol, source.Host, source.Port) : null,
         item.ContentType,
         item.TmdbId,
         item.SeasonNumber,

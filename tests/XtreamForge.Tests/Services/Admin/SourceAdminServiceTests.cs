@@ -113,6 +113,49 @@ public class SourceAdminServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task AddedSource_HasBothVirtualCategoriesEnabled()
+    {
+        _dbContext.XtreamSources.Add(new XtreamSource { Protocol = "http", Host = "a.example.com", Port = 80 });
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        _dbContext.ChangeTracker.Clear();
+
+        var source = Assert.Single(await _service.GetAllAsync(TestContext.Current.CancellationToken));
+
+        Assert.True(source.IsRecommendationsCategoryEnabled);
+        Assert.True(source.IsPopularCategoryEnabled);
+    }
+
+    [Theory]
+    [InlineData(false, null, false, true)]
+    [InlineData(null, false, true, false)]
+    [InlineData(false, false, false, false)]
+    [InlineData(null, null, true, true)]
+    public async Task PatchAsync_UpdatesOnlyTheGivenVirtualCategories(bool? recommendations, bool? popular, bool expectedRecommendations, bool expectedPopular)
+    {
+        var source = new XtreamSource { Protocol = "http", Host = "a.example.com", Port = 80 };
+        _dbContext.XtreamSources.Add(source);
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        _dbContext.ChangeTracker.Clear();
+
+        var updated = await _service.PatchAsync(source.Id, recommendations, popular, TestContext.Current.CancellationToken);
+
+        Assert.True(updated);
+        _dbContext.ChangeTracker.Clear();
+        var stored = await _service.FindAsync(source.Id, TestContext.Current.CancellationToken);
+        Assert.NotNull(stored);
+        Assert.Equal(expectedRecommendations, stored.IsRecommendationsCategoryEnabled);
+        Assert.Equal(expectedPopular, stored.IsPopularCategoryEnabled);
+    }
+
+    [Fact]
+    public async Task PatchAsync_WhenNotFound_ReturnsFalse()
+    {
+        var updated = await _service.PatchAsync(999, false, false, TestContext.Current.CancellationToken);
+
+        Assert.False(updated);
+    }
+
+    [Fact]
     public async Task DeleteAsync_WhenNotFound_ReturnsFalse()
     {
         var deleted = await _service.DeleteAsync(999, TestContext.Current.CancellationToken);

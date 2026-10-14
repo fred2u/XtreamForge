@@ -9,6 +9,7 @@ using XtreamForge.ApiService.Services.VirtualCategories;
 using XtreamForge.ApiService.Xtream;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;
+using XtreamForge.Domain.Sources;
 using XtreamForge.Tests.Infrastructure;
 
 namespace XtreamForge.Tests.Endpoints;
@@ -62,9 +63,34 @@ public class CategoriesGetEndpointTests : IAsyncDisposable
         Assert.Equal(["Action"], ReadResponse(context).Select(category => category["category_name"]?.GetValue<string>()));
     }
 
+    [Theory]
+    [InlineData(false, true, new[] { "Popular", "Action" })]
+    [InlineData(true, false, new[] { "Recommendations", "Action" })]
+    [InlineData(false, false, new[] { "Action" })]
+    public async Task GetAsync_ReturnsOnlyTheVirtualCategoriesEnabledForTheSource(bool isRecommendationsEnabled, bool isPopularEnabled, string[] expectedNames)
+    {
+        _dbContext.XtreamSources.Add(new XtreamSource
+        {
+            Protocol = "http",
+            Host = "provider.example.com",
+            Port = 8080,
+            IsRecommendationsCategoryEnabled = isRecommendationsEnabled,
+            IsPopularCategoryEnabled = isPopularEnabled
+        });
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        _dbContext.ChangeTracker.Clear();
+        var context = CreateContext(ContentType.Vod, "get_vod_categories");
+
+        await CreateEndpoint("get_vod_categories", new RecommendationOptions(), new PopularOptions())
+            .GetAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.Equal(expectedNames, ReadResponse(context).Select(category => category["category_name"]?.GetValue<string>()));
+    }
+
     private CategoriesGetEndpoint CreateEndpoint(string action, RecommendationOptions recommendationOptions, PopularOptions popularOptions)
         => new(
             new StubXtreamHttpClientFactory(new Dictionary<string, (HttpStatusCode, string)> { [action] = (HttpStatusCode.OK, UpstreamCategories) }),
+            new SourceService(_dbContext, TimeProvider.System),
             new CategoryService(_dbContext, TimeProvider.System),
             new StubTmdbHttpClientFactory(_ => null).CreateVirtualCategoryService(_dbContext, _cache, recommendationOptions, popularOptions),
             NullLogger<CategoriesGetEndpoint>.Instance);

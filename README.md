@@ -312,6 +312,7 @@ Movies and TV shows are recommended from the watch history of the same content t
 
 When `Recommendations:CategoryName` is set, the recommended movies and TV shows are exposed to the Xtream clients in a virtual category, for VOD and series (each content type with its own recommendations):
 
+- each source enables or disables it on the Sources screen (`PATCH /api/admin/sources/{id}` with `isRecommendationsCategoryEnabled`); it is enabled by default. When disabled, the category is not returned to the clients of the source, its items keep their own category (or go to the popular category), and requesting its `category_id` returns `400`
 - `get_vod_categories` / `get_series_categories` return it first, with the ID `Recommendations:CategoryId`
 - `get_vod_streams` / `get_series` with all the categories (`category_id` missing, empty, or `ALL`): a recommended item is returned in the recommendations category (`category_id` and `category_ids` rewritten) instead of its own category
 - `get_vod_streams` / `get_series` with the recommendations `category_id`: the provider is called once with `category_id=ALL` and only the recommended items are returned, in the recommendations category
@@ -325,6 +326,7 @@ When `Recommendations:CategoryName` is set, the recommended movies and TV shows 
 
 When `Popular:CategoryName` is set, the movies and TV shows currently popular on TMDB (`movie/popular` / `tv/popular`, first 5 pages, i.e. up to 100 titles per content type) are exposed in a virtual category, for VOD and series:
 
+- each source enables or disables it independently of the recommendations, on the Sources screen (`PATCH /api/admin/sources/{id}` with `isPopularCategoryEnabled`); it is enabled by default
 - `get_vod_categories` / `get_series_categories` return it after the recommendations category, with the ID `Popular:CategoryId`
 - with all the categories (`get_vod_streams` / `get_series`), a popular item is moved to the popular category, unless it is recommended: the recommendations category wins
 - `get_vod_streams` / `get_series` with the popular `category_id`: the provider is called once with `category_id=ALL` and only the popular items are returned, in the popular category (recommended items included)

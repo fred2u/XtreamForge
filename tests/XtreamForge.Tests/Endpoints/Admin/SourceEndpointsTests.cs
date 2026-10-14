@@ -151,6 +151,33 @@ public class SourceEndpointsTests : IAsyncDisposable
         Assert.False(await _dbContext.XtreamSources.AnyAsync(TestContext.Current.CancellationToken));
     }
 
+    // ─── PATCH /api/admin/sources/{id} ──────────────────────────────────────
+
+    [Fact]
+    public async Task PatchAsync_WhenSourceExists_ReturnsNoContentAndTheSummaryShowsTheVirtualCategories()
+    {
+        var source = new XtreamSource { Protocol = "http", Host = "source.example.com", Port = 8080 };
+        _dbContext.XtreamSources.Add(source);
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        _dbContext.ChangeTracker.Clear();
+
+        var result = await SourceEndpoints.PatchAsync(source.Id, new XtreamSourcePatchRequest(IsRecommendationsCategoryEnabled: false, IsPopularCategoryEnabled: null), _sourceAdminService, TestContext.Current.CancellationToken);
+
+        Assert.IsType<NoContent>(result);
+        var summaries = Assert.IsType<Ok<IEnumerable<XtreamSourceSummaryDto>>>(await SourceEndpoints.GetAsync(_sourceAdminService, TestContext.Current.CancellationToken));
+        var dto = Assert.Single(summaries.Value!);
+        Assert.False(dto.IsRecommendationsCategoryEnabled);
+        Assert.True(dto.IsPopularCategoryEnabled);
+    }
+
+    [Fact]
+    public async Task PatchAsync_WhenSourceDoesNotExist_ReturnsNotFound()
+    {
+        var result = await SourceEndpoints.PatchAsync(999, new XtreamSourcePatchRequest(false, false), _sourceAdminService, TestContext.Current.CancellationToken);
+
+        Assert.IsType<NotFound>(result);
+    }
+
     // ─── DELETE /api/admin/sources/{id} ─────────────────────────────────────
 
     [Fact]

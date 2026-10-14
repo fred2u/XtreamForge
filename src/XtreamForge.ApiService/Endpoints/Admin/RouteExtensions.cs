@@ -39,6 +39,7 @@ public static class RouteExtensions
             // api/admin/sources
             endpoints.MapGet("/api/admin/sources", SourceEndpoints.GetAsync);
             endpoints.MapPost("/api/admin/sources", SourceEndpoints.PostAsync);
+            endpoints.MapPatch("/api/admin/sources/{id:int}", SourceEndpoints.PatchAsync);
             endpoints.MapDelete("/api/admin/sources/{id:int}", SourceEndpoints.DeleteAsync);
 
             // api/admin/sources/{sourceId}/xtream-categories?contentType=

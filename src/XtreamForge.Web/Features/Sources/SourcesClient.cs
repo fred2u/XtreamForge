@@ -30,6 +30,19 @@ public sealed class SourcesClient(HttpClient httpClient)
         }
     }
 
+    /// <summary>Enables or disables the virtual categories of a source; null values are left unchanged.</summary>
+    public async Task<AdminOperationResult> PatchSourceAsync(int id, SourcePatchRequest request, CancellationToken cancellationToken = default)
+    {
+        using var response = await httpClient.PatchAsJsonAsync($"/api/admin/sources/{id}", request, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return AdminOperationResult.NotFound;
+        }
+
+        response.EnsureSuccessStatusCode();
+        return AdminOperationResult.Success;
+    }
+
     public async Task<AdminOperationResult> DeleteSourceAsync(int id, CancellationToken cancellationToken = default)
     {
         using var response = await httpClient.DeleteAsync($"/api/admin/sources/{id}", cancellationToken);
@@ -43,12 +56,17 @@ public sealed class SourcesClient(HttpClient httpClient)
     }
 }
 
-/// <summary>A source with the counters computed by the API, per content type.</summary>
+/// <summary>
+/// A source with the counters computed by the API, per content type, and the virtual categories (recommendations, popular)
+/// returned to its clients.
+/// </summary>
 public sealed record XtreamSourceSummaryDto(
     int Id,
     string Protocol,
     string Host,
     int Port,
+    bool IsRecommendationsCategoryEnabled,
+    bool IsPopularCategoryEnabled,
     SourceContentSummaryDto Vod,
     SourceContentSummaryDto Series)
 {
@@ -77,6 +95,11 @@ public sealed record SourceContentSummaryDto(
     int CategoryRules,
     int ItemRules,
     int TmdbMappings);
+/// <summary>Partial update of a source; null values are left unchanged.</summary>
+public sealed record SourcePatchRequest(
+    bool? IsRecommendationsCategoryEnabled = null,
+    bool? IsPopularCategoryEnabled = null);
+
 public sealed record SourceCreateRequest(
     string Url,
     string Username,

@@ -236,6 +236,54 @@ public class ItemsGetEndpointTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task GetAsync_WhenTheRecommendationsCategoryIsDisabledForTheSource_MovesTheRecommendedPopularMoviesToThePopularCategory()
+    {
+        var (_, drama) = await SeedAsync();
+        await DisableVirtualCategoriesAsync(isRecommendationsEnabled: false, isPopularEnabled: true);
+        await AddLoadedTmdbInfosAsync((101, "Action movie"), (102, "Comedy movie"), (103, "Drama movie"));
+        await RecommendAsync(102);
+        SetPopular("movie/popular", 101, 102);
+        var context = CreateContext("?action=get_vod_streams");
+
+        await CreateEndpoint(CreateHttpClientFactory(HttpStatusCode.OK)).GetAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [("Action movie", PopularCategoryId), ("Comedy movie", PopularCategoryId), ("Drama movie", drama.Id.ToString())],
+            ReadResponseItems(context).Select(item => (item["name"]?.GetValue<string>(), item["category_id"]?.GetValue<string>())));
+    }
+
+    [Fact]
+    public async Task GetAsync_WhenThePopularCategoryIsDisabledForTheSource_KeepsTheProviderCategoryOfThePopularMovies()
+    {
+        var (customCategory, drama) = await SeedAsync();
+        await DisableVirtualCategoriesAsync(isRecommendationsEnabled: true, isPopularEnabled: false);
+        await AddLoadedTmdbInfosAsync((101, "Action movie"), (102, "Comedy movie"), (103, "Drama movie"));
+        await RecommendAsync(102);
+        SetPopular("movie/popular", 101, 102);
+        var context = CreateContext("?action=get_vod_streams");
+
+        await CreateEndpoint(CreateHttpClientFactory(HttpStatusCode.OK)).GetAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [("Action movie", customCategory.Id.ToString()), ("Comedy movie", RecommendationCategoryId), ("Drama movie", drama.Id.ToString())],
+            ReadResponseItems(context).Select(item => (item["name"]?.GetValue<string>(), item["category_id"]?.GetValue<string>())));
+        Assert.DoesNotContain(_tmdb.RequestedUris, uri => StubTmdbHttpClientFactory.GetRelativePath(uri) == "movie/popular");
+    }
+
+    [Fact]
+    public async Task GetAsync_WhenADisabledVirtualCategoryIsRequested_ReturnsBadRequestWithoutCallingUpstream()
+    {
+        await SeedAsync();
+        await DisableVirtualCategoriesAsync(isRecommendationsEnabled: true, isPopularEnabled: false);
+        var httpClientFactory = CreateHttpClientFactory(HttpStatusCode.OK);
+
+        var result = await CreateEndpoint(httpClientFactory).GetAsync(CreateContext($"?action=get_vod_streams&category_id={PopularCategoryId}"), TestContext.Current.CancellationToken);
+
+        Assert.IsType<BadRequest<string>>(result);
+        Assert.Empty(httpClientFactory.RequestedUris);
+    }
+
+    [Fact]
     public async Task GetAsync_WhenSourceIsUnknown_ReturnsBadRequestWithoutCallingUpstream()
     {
         var httpClientFactory = CreateHttpClientFactory(HttpStatusCode.OK);
@@ -448,6 +496,13 @@ public class ItemsGetEndpointTests : IAsyncDisposable
 
         return (customCategory, drama);
     }
+
+    private async Task DisableVirtualCategoriesAsync(bool isRecommendationsEnabled, bool isPopularEnabled)
+        => await _dbContext.XtreamSources.ExecuteUpdateAsync(
+            setters => setters
+                .SetProperty(source => source.IsRecommendationsCategoryEnabled, isRecommendationsEnabled)
+                .SetProperty(source => source.IsPopularCategoryEnabled, isPopularEnabled),
+            TestContext.Current.CancellationToken);
 
     // loaded metadata without release date: the enriched name is the TMDB title alone
     private async Task AddLoadedTmdbInfosAsync(params (long TmdbId, string Title)[] infos)

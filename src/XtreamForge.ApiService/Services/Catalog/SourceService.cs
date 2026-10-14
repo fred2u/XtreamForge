@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using XtreamForge.ApiService.Services.VirtualCategories;
 using XtreamForge.ApiService.Xtream;
 using XtreamForge.Database;
 
@@ -18,6 +19,18 @@ public class SourceService(XtreamForgeDbContext dbContext, TimeProvider timeProv
     /// </summary>
     public Task<XtreamSourceSnapshot?> GetItemSnapshotAsync(XtreamContext xtreamContext, string streamId, CancellationToken cancellationToken)
         => LoadSnapshotAsync(xtreamContext, streamId, cancellationToken);
+
+    /// <summary>Virtual categories enabled for the source matching the request destination; none when the source is unknown.</summary>
+    public async Task<SourceVirtualCategories> GetVirtualCategoriesAsync(XtreamContext xtreamContext, CancellationToken cancellationToken)
+    {
+        var virtualCategories = await dbContext.XtreamSources
+            .AsNoTracking()
+            .Where(s => s.Protocol == xtreamContext.Protocol && s.Host == xtreamContext.Host && s.Port == xtreamContext.Port)
+            .Select(s => new SourceVirtualCategories(s.IsRecommendationsCategoryEnabled, s.IsPopularCategoryEnabled))
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return virtualCategories ?? SourceVirtualCategories.None;
+    }
 
     private async Task<XtreamSourceSnapshot?> LoadSnapshotAsync(XtreamContext xtreamContext, string? streamId, CancellationToken cancellationToken)
     {
@@ -65,6 +78,7 @@ public class SourceService(XtreamForgeDbContext dbContext, TimeProvider timeProv
             [.. source.ItemRules.OrderBy(rule => rule.Sequence)],
             streamTmdbMappings,
             deferredTmdbLookups,
-            tmdbRules);
+            tmdbRules,
+            new SourceVirtualCategories(source.IsRecommendationsCategoryEnabled, source.IsPopularCategoryEnabled));
     }
 }

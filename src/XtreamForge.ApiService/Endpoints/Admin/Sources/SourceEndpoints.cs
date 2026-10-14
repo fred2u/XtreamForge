@@ -15,6 +15,8 @@ public static class SourceEndpoints
             s.Source.Protocol,
             s.Source.Host,
             s.Source.Port,
+            s.Source.IsRecommendationsCategoryEnabled,
+            s.Source.IsPopularCategoryEnabled,
             ToDto(s.Vod),
             ToDto(s.Series)));
 
@@ -52,6 +54,15 @@ public static class SourceEndpoints
         var dto = new XtreamSourceDto(source.Id, source.Protocol, source.Host, source.Port);
 
         return TypedResults.Created($"/api/admin/sources/{source.Id}", dto);
+    }
+
+    public static async Task<IResult> PatchAsync(int id, XtreamSourcePatchRequest request, SourceAdminService sourceAdminService, CancellationToken cancellationToken = default)
+    {
+        var updated = await sourceAdminService.PatchAsync(id, request.IsRecommendationsCategoryEnabled, request.IsPopularCategoryEnabled, cancellationToken);
+
+        return updated
+            ? TypedResults.NoContent()
+            : TypedResults.NotFound();
     }
 
     public static async Task<IResult> DeleteAsync(int id, SourceAdminService sourceAdminService, CancellationToken cancellationToken = default)

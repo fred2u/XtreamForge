@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using XtreamForge.ApiService.Endpoints.Xtream.Dto;
 using XtreamForge.ApiService.Services.Catalog;
+using XtreamForge.ApiService.Services.VirtualCategories;
 using XtreamForge.ApiService.Xtream;
 using XtreamForge.Database;
 using XtreamForge.Domain.Categories;
@@ -383,7 +384,7 @@ public class CategoryServiceTests : IAsyncDisposable
     }
 
     private static XtreamSourceSnapshot CreateSnapshot(int sourceId, params CategoryRule[] categoryRules)
-        => new(sourceId, categoryRules, [], new Dictionary<string, long>(), new HashSet<string>(), []);
+        => new(sourceId, categoryRules, [], new Dictionary<string, long>(), new HashSet<string>(), [], new SourceVirtualCategories(true, true));
 
     private async Task<XtreamSource> AddSourceAsync()
     {

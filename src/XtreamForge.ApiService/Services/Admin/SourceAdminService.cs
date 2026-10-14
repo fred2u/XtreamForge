@@ -82,6 +82,32 @@ public class SourceAdminService(XtreamForgeDbContext dbContext)
             .AnyAsync(s => s.Protocol == protocol && s.Host == host && s.Port == port, cancellationToken);
     }
 
+    /// <summary>Enables or disables the virtual categories of a source; null values are left unchanged. False when the source does not exist.</summary>
+    public async Task<bool> PatchAsync(int id, bool? isRecommendationsCategoryEnabled, bool? isPopularCategoryEnabled, CancellationToken cancellationToken = default)
+    {
+        var source = await dbContext.XtreamSources
+            .FindAsync([id], cancellationToken);
+
+        if (source is null)
+        {
+            return false;
+        }
+
+        if (isRecommendationsCategoryEnabled is { } isRecommendationsEnabled)
+        {
+            source.IsRecommendationsCategoryEnabled = isRecommendationsEnabled;
+        }
+
+        if (isPopularCategoryEnabled is { } isPopularEnabled)
+        {
+            source.IsPopularCategoryEnabled = isPopularEnabled;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return true;
+    }
+
     public async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)
     {
         var source = await dbContext.XtreamSources

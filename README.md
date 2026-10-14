@@ -86,20 +86,20 @@ The administration UI is a modern Blazor app built with Fluent UI, with light an
 
 ## 🚀 Quick start
 
-**With Docker Compose** (recommended for a home server or a NAS): copy [`deploy/synology/docker-compose.yml`](deploy/synology/docker-compose.yml) and [`deploy/synology/.env.example`](deploy/synology/.env.example) (renamed `.env`), fill in your TMDB token, your provider host and a database password, then:
+**With Docker Compose** (recommended for a home server or a NAS): copy [`deploy/synology/docker-compose.yml`](deploy/synology/docker-compose.yml) and [`deploy/synology/.env.example`](deploy/synology/.env.example) (renamed `.env`), fill in your TMDB token, your provider hosts, the subnet of your reverse proxy network and a database password, then:
 
 ```bash
 docker compose up -d
 ```
 
-The [Synology guide](deploy/synology/README.md) walks through every step. Then, in your IPTV player, replace the server URL:
+The compose file sits behind [Nginx Proxy Manager](https://nginxproxymanager.com/); the [Synology guide](deploy/synology/README.md) walks through every step, proxy hosts included. Then, in your IPTV player, append the provider address to the XtreamForge URL:
 
 ```text
 before: http://provider.example.com:8080
-after:  http://your-server:8080/http/provider.example.com/8080
+after:  https://iptv.your-domain.com/http/provider.example.com/8080
 ```
 
-Keep the same username and password. That's it: your player now receives the filtered and enriched catalogue, and the admin UI is on port `8081`.
+Keep the same username and password. That's it: your player now receives the filtered and enriched catalogue.
 
 > The admin UI and API are not authenticated yet: keep XtreamForge on a trusted network (see [Deployment](#deployment)).
 
@@ -229,7 +229,7 @@ The Web image needs `Backend__BaseUrl`, the URL of the backend (for example `htt
 
 Published images: the `Publish images` workflow (`.github/workflows/publish-images.yml`) builds both images for `linux/amd64` and `linux/arm64` on every push to `main` (or on demand) and pushes them to GitHub Container Registry as `ghcr.io/fred2u/xtreamforge-api` and `ghcr.io/fred2u/xtreamforge-web`, tagged `latest` and with the commit SHA.
 
-Docker Compose: `deploy/synology/docker-compose.yml` runs PostgreSQL, the backend, and the Web UI from those images, with the host ports, the TMDB token, the upstream Xtream host, and the database password read from a `.env` file next to it (template: `deploy/synology/.env.example`; `.env` files are git-ignored). `deploy/synology/README.md` is a step-by-step guide for Synology Container Manager.
+Docker Compose: `deploy/synology/docker-compose.yml` runs PostgreSQL 18, the backend, and the Web UI from those images behind Nginx Proxy Manager (no host port is published: the backend and the Web UI join its external `npm_internal` network), with the TMDB token, up to three upstream Xtream hosts, the subnet of `npm_internal` (trusted as reverse proxy), and the database password read from a `.env` file next to it (template: `deploy/synology/.env.example`; `.env` files are git-ignored). `deploy/synology/README.md` is a step-by-step guide for Synology Container Manager.
 
 Exposure:
 

@@ -2,13 +2,13 @@
 
 ## Overview
 
-During development, Aspire starts everything. On the NAS, a **Docker Compose project** replaces Aspire and runs 3 containers:
+During development, Aspire starts everything. On the NAS, a **Docker Compose project** replaces Aspire and runs 3 containers. No port is published on the NAS: [Nginx Proxy Manager](https://nginxproxymanager.com/) (NPM), already running on the NAS, reaches the backend and the administration UI through its external Docker network `npm_internal`, and terminates TLS.
 
-| Container | Role | Port on the NAS |
-|---|---|---|
-| `postgres` | database (migrations are applied automatically when the backend starts) | none (internal) |
-| `api` | Xtream proxy + admin API | `API_PORT` (default 8080) |
-| `web` | Blazor administration UI | `ADMIN_PORT` (default 8081) |
+| Container | Role | Networks | Reached by |
+|---|---|---|---|
+| `xtreamforge-postgres` | database (migrations are applied automatically when the backend starts) | project network only | the backend |
+| `xtreamforge-api` | Xtream proxy + admin API, port 8080 in the container | project network + `npm_internal` | NPM, and the Web UI |
+| `xtreamforge-web` | Blazor administration UI, port 8080 in the container | `npm_internal` | NPM |
 
 The images are built from the repository Dockerfiles (`src/XtreamForge.ApiService/Dockerfile` and `src/XtreamForge.Web/Dockerfile`). This folder holds the NAS `docker-compose.yml` and the template of its settings file, `.env.example`.
 
@@ -24,18 +24,23 @@ The images are built from the repository Dockerfiles (`src/XtreamForge.ApiServic
 
 ## Step 2: prepare the folder on the NAS
 
-1. **File Station** > `docker` shared folder (created by Container Manager) > create `xtreamforge`, and inside it a `postgres` subfolder.
-2. Put both files in `/docker/xtreamforge`:
+1. Nginx Proxy Manager must already run on the NAS, attached to an external Docker network named `npm_internal` (if it does not exist yet: `sudo docker network create npm_internal`, then add the NPM container to it). Note its subnet, needed below:
+
+   ```bash
+   sudo docker network inspect npm_internal --format '{{(index .IPAM.Config 0).Subnet}}'
+   ```
+
+2. **File Station** > `docker` shared folder (created by Container Manager) > create `xtreamforge`, and inside it a `postgres-data` subfolder.
+3. Put both files in `/docker/xtreamforge`:
    - [docker-compose.yml](docker-compose.yml), unchanged;
    - [.env.example](.env.example), **renamed to `.env`** (right-click > Rename in File Station). It is the only file to edit, and it stays on the NAS: the TMDB token and the database password never go through GitHub.
-3. In `.env`, set:
-   - `API_PORT`: host port of the Xtream proxy (default 8080);
-   - `ADMIN_PORT`: host port of the administration UI (default 8081);
+4. In `.env`, set:
    - `TMDB_API_KEY`: on themoviedb.org > Settings > API, the **"API Read Access Token"** (the long one, not the short "API Key"). **Required**: without it no metadata is loaded and the catalogue returned to the devices stays empty;
-   - `XTREAM_HOST`: the upstream provider host, for example `provider.example.com` (without `http://` or port). **Required**: without an allowed host, the backend fails at startup;
+   - `XTREAM_HOST_0`: the upstream provider host, for example `provider.example.com` (without `http://` or port). **Required**: without an allowed host, the backend fails at startup. `XTREAM_HOST_1` and `XTREAM_HOST_2` are optional, for up to two more providers (leave them empty otherwise); only the listed hosts can be proxied;
+   - `REVERSE_PROXY_NETWORK`: the subnet of `npm_internal` noted above, for example `172.20.0.0/16`. **Required**: NPM is then trusted for its `X-Forwarded-Proto` and `X-Forwarded-Host` headers, so that the stream URLs given to the devices use your public scheme, host, and port;
    - `POSTGRES_PASSWORD`: a long password of your choice. Do not change it after the first start (the database keeps the original one).
 
-To change a port or the TMDB token later: edit `.env`, then Container Manager > Project > `xtreamforge` > **Action** > **Build** (a plain stop/start does not re-read `.env`).
+To change the TMDB token or a provider host later: edit `.env`, then Container Manager > Project > `xtreamforge` > **Action** > **Build** (a plain stop/start does not re-read `.env`).
 
 ## Step 3: create the project in Container Manager
 
@@ -45,26 +50,44 @@ To change a port or the TMDB token later: edit `.env`, then Container Manager > 
 4. "Web portal settings" screen: leave everything unchecked.
 5. **Done**. Container Manager pulls the images and starts the 3 containers. The first start takes about a minute (database creation).
 
-## Step 4: check
+## Step 4: create the proxy hosts in Nginx Proxy Manager
 
-- Administration UI: `http://NAS-IP:8081` (or your `ADMIN_PORT`)
-- Backend health: `http://NAS-IP:8080/health` (or your `API_PORT`) must return `Healthy`.
-- On the IPTV devices, the Xtream server URL becomes `http://NAS-IP:8080` or your `API_PORT` (credentials unchanged: they are passed through to the provider).
+In NPM > **Hosts** > **Proxy Hosts** > **Add Proxy Host**, create two hosts (with a Let's Encrypt certificate on the **SSL** tab if you want HTTPS):
+
+| Domain name (example) | Scheme | Forward hostname | Forward port | Options |
+|---|---|---|---|---|
+| `iptv.example.com` | `http` | `xtreamforge-api` | `8080` | none |
+| `xtreamforge-admin.example.com` | `http` | `xtreamforge-web` | `8080` | **Websockets Support** required (Blazor Interactive Server), and an **Access List** to restrict who can open it |
+
+On the `iptv` host, block the admin API for everyone: **Advanced** tab > Custom Nginx Configuration:
+
+```nginx
+location /api/admin/ { return 403; }
+```
+
+The Web UI is not affected: it calls the backend directly over `npm_internal`, not through NPM.
+
+## Step 5: check
+
+- Administration UI: `https://xtreamforge-admin.example.com`
+- Backend health: `https://iptv.example.com/health` must return `Healthy`.
+- On the IPTV devices, the Xtream server URL becomes the XtreamForge URL **followed by the provider address**, as `/{protocol}/{host}/{port}`: for a provider at `http://provider.example.com:8080`, use `https://iptv.example.com/http/provider.example.com/8080` (credentials unchanged: they are passed through to the provider). `provider.example.com` must be one of the `XTREAM_HOST_*` values.
 - If something goes wrong: Container Manager > Container > `xtreamforge-api` > **Log**. Configuration errors (missing host, database connection) show up at startup.
 
 ## Updating
 
-After a push to `main` and once the GitHub workflow has finished: Container Manager > Project > `xtreamforge` > **Action** > **Build** (or Stop, then Clean, then Start) to pull the `latest` images again. The database is kept in `/docker/xtreamforge/postgres`.
+After a push to `main` and once the GitHub workflow has finished: Container Manager > Project > `xtreamforge` > **Action** > **Build** (or Stop, then Clean, then Start) to pull the `latest` images again. The database is kept in `/docker/xtreamforge/postgres-data`.
+
+Upgrading from a previous version of this guide (PostgreSQL 17, data in `/docker/xtreamforge/postgres`): PostgreSQL 18 cannot open a PostgreSQL 17 data folder. Before switching, back up with `sudo docker exec xtreamforge-postgres pg_dump -U xtreamforge xtreamforge > backup.sql`; after the first start of the new project, stop `xtreamforge-api`, empty the new database with `sudo docker exec xtreamforge-postgres psql -U xtreamforge xtreamforge -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'`, restore with `sudo docker exec -i xtreamforge-postgres psql -U xtreamforge xtreamforge < backup.sql`, then start `xtreamforge-api` again.
 
 ## Security: read before exposing anything to the Internet
 
-The admin API **is not authenticated** and shares port 8080 with the Xtream proxy. If you forward port 8080 on your router to watch away from home, anyone can change your rules and sources. Until authentication exists:
+The admin API and the administration UI **are not authenticated**, and the admin API is served by the same container as the Xtream proxy. If the `iptv` proxy host is reachable from the Internet without the `/api/admin/` block, anyone can change your rules and sources. Until authentication exists:
 
-- keep everything on the **local network**, or reach it from outside through a **VPN** (Synology VPN Server, Tailscale, WireGuard);
-- **never** expose port 8081 (the administration UI).
-
-If you later put the DSM reverse proxy (Login Portal) in front, declare its network in `ReverseProxy__KnownNetworks__0` (the project's Docker network, visible in Container Manager > Network, for example `172.18.0.0/16`) so that the stream URLs are correct.
+- keep the `/api/admin/` block of step 4 on the `iptv` proxy host;
+- protect the administration UI with an NPM **Access List** (local network only, or a login), or reach it through a **VPN** (Synology VPN Server, Tailscale, WireGuard);
+- the Xtream proxy itself only forwards to the `XTREAM_HOST_*` hosts.
 
 ## Backup
 
-Hyper Backup of the `/docker/xtreamforge/postgres` folder is enough, ideally with the project stopped. For a live backup: `sudo docker exec xtreamforge-postgres pg_dump -U xtreamforge xtreamforge > backup.sql`.
+Hyper Backup of the `/docker/xtreamforge/postgres-data` folder is enough, ideally with the project stopped. For a live backup: `sudo docker exec xtreamforge-postgres pg_dump -U xtreamforge xtreamforge > backup.sql`.

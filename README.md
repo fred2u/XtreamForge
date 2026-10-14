@@ -1,10 +1,119 @@
+<div align="center">
+
 # XtreamForge
 
-XtreamForge is an early-stage, self-hosted .NET application that sits in front of an Xtream-compatible API and acts as a transformation and enrichment layer.
+**Your IPTV catalogue, finally under control.**
+
+XtreamForge is a self-hosted layer that sits between your IPTV players and your Xtream-compatible provider.
+It cleans up categories, filters out the noise, enriches every movie and series with TMDB metadata, and learns from what you watch to recommend what to watch next.
+Your players keep working exactly as before: you only change the server URL.
+
+[![CI](https://github.com/fred2u/XtreamForge/actions/workflows/ci.yml/badge.svg)](https://github.com/fred2u/XtreamForge/actions/workflows/ci.yml)
+[![Publish images](https://github.com/fred2u/XtreamForge/actions/workflows/publish-images.yml/badge.svg)](https://github.com/fred2u/XtreamForge/actions/workflows/publish-images.yml)
+![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
+![Blazor](https://img.shields.io/badge/Blazor-Fluent%20UI-0078D4?logo=blazor&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-amd64%20%7C%20arm64-2496ED?logo=docker&logoColor=white)
+
+[Features](#-why-xtreamforge) · [Screenshots](#-a-tour-of-the-admin-ui) · [Quick start](#-quick-start) · [How it works](#architecture) · [Disclaimer](#disclaimer)
+
+<img src="docs/screenshots/dashboard.png" alt="XtreamForge dashboard with configuration counters, TMDB counters and a one-year watch activity heatmap" width="900">
+
+</div>
 
 > XtreamForge is an independent project and is not affiliated with Xtream Codes or TMDB.
 >
 > XtreamForge does not provide any content and must only be used with services and content you are legally entitled to access. See [Disclaimer](#disclaimer).
+
+## ✨ Why XtreamForge?
+
+Provider catalogues are huge, messy, and the same for everyone: hundreds of categories in languages you don't speak, duplicated entries, missing posters, and no idea of what you actually like. XtreamForge fixes that **once, on the server**, for every player in the house.
+
+| | |
+|---|---|
+| 🧹 **A catalogue that fits you** | Hide whole categories, merge several provider categories into your own custom ones, and filter individual movies and series with ordered include/exclude rules. |
+| 🎬 **Rich, consistent metadata** | Every item is matched to TMDB in the background: title, poster, overview, genres, cast, directors, rating and runtime, in your preferred language. |
+| 🎯 **Filter by what the content *is*** | TMDB rules exclude by genre or title across all your sources, whatever the provider called it. |
+| 💡 **Recommendations that learn** | Every playback through the proxy feeds a watch history; TMDB recommendations are computed from it and exposed as a `RECOMMANDATIONS` category right inside your player, next to a `POPULAIRES` category. |
+| 📊 **See your viewing habits** | A GitHub-style heatmap shows a full year of movies and episodes watched. |
+| 🔌 **Zero client changes** | Any Xtream-compatible player works: point it to XtreamForge instead of the provider, keep your credentials. |
+| 🔒 **Privacy by design** | Provider credentials are never stored and are redacted from logs and traces; upstream hosts are allowlisted (SSRF protection). |
+| 🐳 **Easy to host** | Multi-arch Docker images (`amd64`, `arm64`) and a ready-to-use Docker Compose file, with a step-by-step guide for Synology NAS. |
+
+## 📸 A tour of the admin UI
+
+The administration UI is a modern Blazor app built with Fluent UI, with light and dark themes.
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/categories.png"><img src="docs/screenshots/categories.png" alt="Xtream categories screen"></a>
+      <p align="center"><b>Categories</b><br>See at a glance which provider categories your players receive, and why: manual exclusion, rule, or default. Map them to your own custom categories.</p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/category-rules.png"><img src="docs/screenshots/category-rules.png" alt="Category rules screen"></a>
+      <p align="center"><b>Rules in plain language</b><br>Ordered include/exclude rules that read like sentences. Drag to reorder, toggle to disable, the first match wins.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/tmdb-infos.png"><img src="docs/screenshots/tmdb-infos.png" alt="TMDB infos screen"></a>
+      <p align="center"><b>TMDB metadata</b><br>Browse every movie and series with poster, genres and rating, filter by state or genre, exclude anything with one click.</p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/tmdb-details.png"><img src="docs/screenshots/tmdb-details.png" alt="TMDB info details dialog"></a>
+      <p align="center"><b>Every detail</b><br>Overview, cast, directors and duration, plus the decision explained: which rule includes or excludes the title.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/history.png"><img src="docs/screenshots/history.png" alt="Watch history screen"></a>
+      <p align="center"><b>Watch history</b><br>Movies and episodes played through the proxy are recorded automatically, with season and episode numbers.</p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/recommendations.png"><img src="docs/screenshots/recommendations.png" alt="Recommendations screen"></a>
+      <p align="center"><b>Recommendations</b><br>What to watch next, scored from your recent history, with availability in your catalogue.</p>
+    </td>
+  </tr>
+</table>
+
+<p align="center">
+  <a href="docs/screenshots/dashboard-dark.png"><img src="docs/screenshots/dashboard-dark.png" alt="Dashboard in dark mode" width="700"></a><br>
+  <sub>Dark mode included.</sub>
+</p>
+
+<sub>Screenshots use fictional demo data: titles, people and posters are invented for illustration.</sub>
+
+## 🚀 Quick start
+
+**With Docker Compose** (recommended for a home server or a NAS): copy [`deploy/synology/docker-compose.yml`](deploy/synology/docker-compose.yml) and [`deploy/synology/.env.example`](deploy/synology/.env.example) (renamed `.env`), fill in your TMDB token, your provider host and a database password, then:
+
+```bash
+docker compose up -d
+```
+
+The [Synology guide](deploy/synology/README.md) walks through every step. Then, in your IPTV player, replace the server URL:
+
+```text
+before: http://provider.example.com:8080
+after:  http://your-server:8080/http/provider.example.com/8080
+```
+
+Keep the same username and password. That's it: your player now receives the filtered and enriched catalogue, and the admin UI is on port `8081`.
+
+> The admin UI and API are not authenticated yet: keep XtreamForge on a trusted network (see [Deployment](#deployment)).
+
+**For development**, with the .NET 10 SDK and Docker installed:
+
+```bash
+dotnet run --project src/XtreamForge.AppHost
+```
+
+.NET Aspire starts PostgreSQL, the backend, the admin UI and the Aspire dashboard. See [Run with .NET Aspire](#run-with-net-aspire) and [Configuration](#configuration) for details.
+
+---
+
+# Technical documentation
 
 ## Current status
 

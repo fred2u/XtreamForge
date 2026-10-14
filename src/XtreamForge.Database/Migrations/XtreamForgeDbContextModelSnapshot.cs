@@ -336,6 +336,14 @@ namespace XtreamForge.Database.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("host");
 
+                    b.Property<bool>("IsPopularCategoryEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_popular_category_enabled");
+
+                    b.Property<bool>("IsRecommendationsCategoryEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_recommendations_category_enabled");
+
                     b.Property<int>("Port")
                         .HasColumnType("integer")
                         .HasColumnName("port");

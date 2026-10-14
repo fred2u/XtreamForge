@@ -39,7 +39,7 @@ public class ItemsGetEndpoint(
             }
 
             // a virtual category (recommendations, popular) is filled from all the categories
-            var isVirtualCategory = virtualCategoryService.IsVirtualCategoryRequested(xtreamContext);
+            var isVirtualCategory = virtualCategoryService.IsVirtualCategoryRequested(xtreamContext, source.VirtualCategories);
             var xtreamCategoryIdMapping = isVirtualCategory
                 ? await categoryService.GetAllXtreamCategoryIdMappingAsync(xtreamContext, source, cancellationToken)
                 : await categoryService.GetXtreamCategoryIdMappingAsync(xtreamContext, source, cancellationToken);
@@ -54,7 +54,7 @@ public class ItemsGetEndpoint(
                 : "ALL";
 
             // with all the categories, an item is moved to its virtual category; a requested virtual category only lists its items
-            var virtualCategories = await virtualCategoryService.GetListAssignmentAsync(xtreamContext, cancellationToken);
+            var virtualCategories = await virtualCategoryService.GetListAssignmentAsync(xtreamContext, source.VirtualCategories, cancellationToken);
 
             var targetUri = xtreamContext.BuildTargetUri(new KeyValuePair<string, string>("category_id", upstreamCategoryId));
             using var responseMessage = await XtreamHttpForwarder.SendAsync(httpClientFactory, xtreamContext, targetUri, cancellationToken);

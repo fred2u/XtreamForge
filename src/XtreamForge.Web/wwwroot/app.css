@@ -858,6 +858,13 @@ div.decision-details-reason {
     font-weight: 600;
 }
 
+.source-virtual-categories {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1.5rem;
+}
+
 .source-blocks {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));

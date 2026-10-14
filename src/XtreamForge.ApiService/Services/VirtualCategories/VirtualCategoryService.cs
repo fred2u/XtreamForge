@@ -14,6 +14,12 @@ public sealed record VirtualCategory(int CategoryId, IReadOnlySet<long> TmdbIds)
     public bool Contains(long? tmdbId) => tmdbId is { } id && TmdbIds.Contains(id);
 }
 
+/// <summary>Virtual categories enabled for one source; a category also needs a name in its options to be exposed.</summary>
+public sealed record SourceVirtualCategories(bool IsRecommendationsEnabled, bool IsPopularEnabled)
+{
+    public static readonly SourceVirtualCategories None = new(false, false);
+}
+
 /// <summary>
 /// Virtual categories applied to the items of one list response. When a virtual category is requested, only its items are returned,
 /// in that category; otherwise an item is moved to the first of the categories (by priority) that contains it.
@@ -47,6 +53,7 @@ public sealed class VirtualCategoryAssignment(IReadOnlyList<VirtualCategory> cat
 /// <summary>
 /// Exposes the virtual categories configured by <see cref="RecommendationOptions"/> and <see cref="PopularOptions"/> (VOD and series),
 /// in priority order: a recommended movie or TV show that is also popular belongs to the recommendations.
+/// Each source enables or disables each category (<see cref="SourceVirtualCategories"/>).
 /// </summary>
 public class VirtualCategoryService(
     RecommendationService recommendationService,
@@ -55,30 +62,31 @@ public class VirtualCategoryService(
     IOptions<PopularOptions> popularOptions)
 {
     /// <summary>Virtual categories of a content type, returned first by <c>get_vod_categories</c> / <c>get_series_categories</c>.</summary>
-    public IReadOnlyList<XtreamCategoryDto> GetCategories(ContentType contentType)
-        => [.. GetDefinitions(contentType).Select(definition => new XtreamCategoryDto(definition.Id.ToString(CultureInfo.InvariantCulture), definition.Name))];
+    public IReadOnlyList<XtreamCategoryDto> GetCategories(ContentType contentType, SourceVirtualCategories sourceCategories)
+        => [.. GetDefinitions(contentType, sourceCategories).Select(definition => new XtreamCategoryDto(definition.Id.ToString(CultureInfo.InvariantCulture), definition.Name))];
 
     /// <summary>True when the requested <c>category_id</c> is a virtual category, filled from all the provider categories.</summary>
-    public bool IsVirtualCategoryRequested(XtreamContext xtreamContext) => GetRequestedDefinition(xtreamContext) is not null;
+    public bool IsVirtualCategoryRequested(XtreamContext xtreamContext, SourceVirtualCategories sourceCategories)
+        => GetRequestedDefinition(xtreamContext, sourceCategories) is not null;
 
     /// <summary>
     /// Returns the virtual categories to apply to an item list: only the requested virtual category, or every virtual category
     /// when all the categories are requested; null for a provider category, whose items keep their category.
     /// </summary>
-    public async Task<VirtualCategoryAssignment?> GetListAssignmentAsync(XtreamContext xtreamContext, CancellationToken cancellationToken)
+    public async Task<VirtualCategoryAssignment?> GetListAssignmentAsync(XtreamContext xtreamContext, SourceVirtualCategories sourceCategories, CancellationToken cancellationToken)
     {
-        if (GetRequestedDefinition(xtreamContext) is { } requested)
+        if (GetRequestedDefinition(xtreamContext, sourceCategories) is { } requested)
             return new VirtualCategoryAssignment([], await LoadAsync(requested, xtreamContext.ContentType, cancellationToken));
 
         return CategoryService.IsGetAll(xtreamContext)
-            ? await GetAllAssignmentAsync(xtreamContext.ContentType, cancellationToken)
+            ? await GetAllAssignmentAsync(xtreamContext.ContentType, sourceCategories, cancellationToken)
             : null;
     }
 
     // every virtual category of the content type, to move the items of the list of all the categories to their virtual category
-    private async Task<VirtualCategoryAssignment?> GetAllAssignmentAsync(ContentType contentType, CancellationToken cancellationToken)
+    private async Task<VirtualCategoryAssignment?> GetAllAssignmentAsync(ContentType contentType, SourceVirtualCategories sourceCategories, CancellationToken cancellationToken)
     {
-        var definitions = GetDefinitions(contentType);
+        var definitions = GetDefinitions(contentType, sourceCategories);
         if (definitions.Count == 0)
             return null;
 
@@ -91,26 +99,26 @@ public class VirtualCategoryService(
         return new VirtualCategoryAssignment(categories);
     }
 
-    private Definition? GetRequestedDefinition(XtreamContext xtreamContext)
+    private Definition? GetRequestedDefinition(XtreamContext xtreamContext, SourceVirtualCategories sourceCategories)
     {
         var requestedCategoryId = xtreamContext.Request.Query["category_id"].ToString();
         if (!int.TryParse(requestedCategoryId, NumberStyles.None, CultureInfo.InvariantCulture, out var categoryId))
             return null;
 
-        return GetDefinitions(xtreamContext.ContentType).FirstOrDefault(definition => definition.Id == categoryId);
+        return GetDefinitions(xtreamContext.ContentType, sourceCategories).FirstOrDefault(definition => definition.Id == categoryId);
     }
 
     // in priority order; the recommendations of a content type are computed from its own watch history
-    private List<Definition> GetDefinitions(ContentType contentType)
+    private List<Definition> GetDefinitions(ContentType contentType, SourceVirtualCategories sourceCategories)
     {
         List<Definition> definitions = [];
         if (contentType is not (ContentType.Vod or ContentType.Series))
             return definitions;
 
-        if (recommendationOptions.Value.IsCategoryEnabled)
+        if (sourceCategories.IsRecommendationsEnabled && recommendationOptions.Value.IsCategoryEnabled)
             definitions.Add(new Definition(Kind.Recommendations, recommendationOptions.Value.CategoryId, recommendationOptions.Value.CategoryName));
 
-        if (popularOptions.Value.IsCategoryEnabled)
+        if (sourceCategories.IsPopularEnabled && popularOptions.Value.IsCategoryEnabled)
             definitions.Add(new Definition(Kind.Popular, popularOptions.Value.CategoryId, popularOptions.Value.CategoryName));
 
         return definitions;

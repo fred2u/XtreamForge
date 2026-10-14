@@ -1,3 +1,4 @@
+using XtreamForge.ApiService.Services.VirtualCategories;
 using XtreamForge.Domain.Categories;
 using XtreamForge.Domain.Items;
 using XtreamForge.Domain.Tmdb;
@@ -8,6 +9,7 @@ namespace XtreamForge.ApiService.Services.Catalog;
 /// Read-only data of an Xtream source needed to process a catalogue request for one content type.
 /// Rules are ordered by ascending sequence and only contain enabled rules; <see cref="TmdbRules"/> are the global TMDB rules of the content type.
 /// <see cref="DeferredTmdbLookups"/> contains the streams without TMDB ID whose next lookup is not due yet.
+/// <see cref="VirtualCategories"/> are the virtual categories (recommendations, popular) enabled for the source.
 /// </summary>
 public sealed record XtreamSourceSnapshot(
     int Id,
@@ -15,4 +17,5 @@ public sealed record XtreamSourceSnapshot(
     IReadOnlyList<ItemRule> ItemRules,
     IReadOnlyDictionary<string, long> StreamTmdbMappings,
     IReadOnlySet<string> DeferredTmdbLookups,
-    IReadOnlyList<TmdbRule> TmdbRules);
+    IReadOnlyList<TmdbRule> TmdbRules,
+    SourceVirtualCategories VirtualCategories);

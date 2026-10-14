@@ -6,6 +6,7 @@ using XtreamForge.ApiService.Services.Catalog;
 using XtreamForge.ApiService.Services.Queues;
 using XtreamForge.ApiService.Services.TmdbIdRetriever;
 using XtreamForge.ApiService.Services.TmdbInfos;
+using XtreamForge.ApiService.Services.VirtualCategories;
 using XtreamForge.ApiService.Xtream;
 using XtreamForge.Domain.Enums;
 using XtreamForge.Domain.Items;
@@ -580,7 +581,7 @@ public class ItemServiceTests
         HashSet<string>? deferredTmdbLookups = null,
         IReadOnlyList<TmdbRule>? tmdbRules = null,
         params ItemRule[] itemRules)
-        => new(SourceId, [], itemRules, streamTmdbMappings ?? new Dictionary<string, long>(), deferredTmdbLookups ?? [], tmdbRules ?? []);
+        => new(SourceId, [], itemRules, streamTmdbMappings ?? new Dictionary<string, long>(), deferredTmdbLookups ?? [], tmdbRules ?? [], new SourceVirtualCategories(true, true));
 
     private static XtreamContext CreateContext(ContentType contentType, string queryString = "")
     {

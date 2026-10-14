@@ -78,6 +78,7 @@ else
         @foreach (var source in _sources)
         {
             var isBusy = _busyIds.Contains(source.Id);
+            var isToggling = _togglingIds.Contains(source.Id);
             <li @key="source.Id">
                 <FluentCard Class="surface source-card">
                     <div class="source-card-header">
@@ -90,8 +91,19 @@ else
                                       IconStart="@(new Icons.Regular.Size16.Delete())"
                                       aria-label="@($"Delete {source.DisplayName}")" Tooltip="Delete"
                                       Loading="@isBusy"
-                                      Disabled="@isBusy"
+                                      Disabled="@(isBusy || isToggling)"
                                       OnClick="@(() => DeleteAsync(source))" />
+                    </div>
+                    <div class="source-virtual-categories" role="group" aria-label="@($"Virtual categories of {source.DisplayName}")">
+                        <span class="cell-secondary">Virtual categories sent to clients, VOD and series</span>
+                        <FluentSwitch Label="Recommendations"
+                                      Value="@source.IsRecommendationsCategoryEnabled"
+                                      ValueChanged="@((bool value) => SetVirtualCategoryAsync(source, new SourcePatchRequest(IsRecommendationsCategoryEnabled: value), "Recommendations", value))"
+                                      Disabled="@(isBusy || isToggling)" />
+                        <FluentSwitch Label="Popular"
+                                      Value="@source.IsPopularCategoryEnabled"
+                                      ValueChanged="@((bool value) => SetVirtualCategoryAsync(source, new SourcePatchRequest(IsPopularCategoryEnabled: value), "Popular", value))"
+                                      Disabled="@(isBusy || isToggling)" />
                     </div>
                     <div class="source-blocks">
                         <SourceContentFacts SourceId="@source.Id" ContentType="ContentType.Vod" Summary="@source.Vod" />
@@ -149,6 +161,7 @@ else
 @code {
     private readonly CancellationTokenSource _disposal = new();
     private readonly HashSet<int> _busyIds = [];
+    private readonly HashSet<int> _togglingIds = [];
     private IReadOnlyList<XtreamSourceSummaryDto> _sources = [];
     private bool _isLoading = true;
     private bool _isRefreshing;
@@ -282,9 +295,41 @@ else
         }
     }
 
+    private async Task SetVirtualCategoryAsync(XtreamSourceSummaryDto source, SourcePatchRequest request, string categoryName, bool isEnabled)
+    {
+        if (_busyIds.Contains(source.Id) || !_togglingIds.Add(source.Id))
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await SourcesClient.PatchSourceAsync(source.Id, request, _disposal.Token);
+            if (result == AdminOperationResult.NotFound)
+            {
+                await NotificationService.ShowWarningToastAsync($"\"{source.DisplayName}\" no longer exists.");
+            }
+            else
+            {
+                await NotificationService.ShowSuccessToastAsync($"{categoryName} category {(isEnabled ? "enabled" : "disabled")} for \"{source.DisplayName}\".");
+            }
+        }
+        catch (Exception exception) when (!_disposal.IsCancellationRequested)
+        {
+            await NotificationService.ShowErrorToastAsync($"Unable to update \"{source.DisplayName}\".", ApiErrorMessage.Describe(exception));
+        }
+        finally
+        {
+            _togglingIds.Remove(source.Id);
+        }
+
+        // also restores the switch after a failure
+        await LoadAsync(showLoading: false);
+    }
+
     private async Task DeleteAsync(XtreamSourceSummaryDto source)
     {
-        if (!_busyIds.Add(source.Id))
+        if (_togglingIds.Contains(source.Id) || !_busyIds.Add(source.Id))
         {
             return;
         }

@@ -5,6 +5,8 @@ public sealed record XtreamSourceSummaryDto(
     string Protocol,
     string Host,
     int Port,
+    bool IsRecommendationsCategoryEnabled,
+    bool IsPopularCategoryEnabled,
     XtreamSourceContentSummaryDto Vod,
     XtreamSourceContentSummaryDto Series);
 

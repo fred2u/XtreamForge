@@ -6,7 +6,12 @@ using XtreamForge.ApiService.Xtream;
 
 namespace XtreamForge.ApiService.Endpoints.Xtream;
 
-public class CategoriesGetEndpoint(IHttpClientFactory httpClientFactory, CategoryService categoryService, VirtualCategoryService virtualCategoryService, ILogger<CategoriesGetEndpoint> logger)
+public class CategoriesGetEndpoint(
+    IHttpClientFactory httpClientFactory,
+    SourceService sourceService,
+    CategoryService categoryService,
+    VirtualCategoryService virtualCategoryService,
+    ILogger<CategoriesGetEndpoint> logger)
 {
     public async Task<IResult> GetAsync(XtreamContext xtreamContext, CancellationToken cancellationToken)
     {
@@ -30,8 +35,9 @@ public class CategoriesGetEndpoint(IHttpClientFactory httpClientFactory, Categor
 
             var syncedCategories = await categoryService.SyncCategoriesAsync(xtreamContext, xtreamCategories ?? [], cancellationToken);
 
-            // the virtual categories (recommendations, popular) come first
-            IReadOnlyCollection<XtreamCategoryDto> categories = [.. virtualCategoryService.GetCategories(xtreamContext.ContentType), .. syncedCategories];
+            // the virtual categories (recommendations, popular) enabled for the source come first
+            var sourceVirtualCategories = await sourceService.GetVirtualCategoriesAsync(xtreamContext, cancellationToken);
+            IReadOnlyCollection<XtreamCategoryDto> categories = [.. virtualCategoryService.GetCategories(xtreamContext.ContentType, sourceVirtualCategories), .. syncedCategories];
 
             await xtreamContext.Response.WriteAsJsonAsync(categories, cancellationToken);
 

@@ -18,5 +18,7 @@ public class XtreamSourceConfiguration : IEntityTypeConfiguration<XtreamSource>
         builder.Property(source => source.Protocol).HasColumnName("protocol").HasMaxLength(10).IsRequired();
         builder.Property(source => source.Host).HasColumnName("host").HasMaxLength(255).IsRequired();
         builder.Property(source => source.Port).HasColumnName("port");
+        builder.Property(source => source.IsRecommendationsCategoryEnabled).HasColumnName("is_recommendations_category_enabled");
+        builder.Property(source => source.IsPopularCategoryEnabled).HasColumnName("is_popular_category_enabled");
     }
 }

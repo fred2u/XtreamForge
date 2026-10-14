@@ -32,7 +32,7 @@ public sealed class AdminRoutesTests : IAsyncDisposable
             .OfType<RouteEndpoint>()
             .ToList();
 
-        Assert.Equal(36, routes.Count);
+        Assert.Equal(37, routes.Count);
         Assert.All(routes, route => Assert.StartsWith("/api/admin/", route.RoutePattern.RawText, StringComparison.Ordinal));
     }
 

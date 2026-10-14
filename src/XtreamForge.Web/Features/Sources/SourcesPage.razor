@@ -81,34 +81,50 @@ else
             var isToggling = _togglingIds.Contains(source.Id);
             <li @key="source.Id">
                 <FluentCard Class="surface source-card">
-                    <div class="source-card-header">
+                    <header class="source-card-header">
                         <span class="source-card-icon" aria-hidden="true"><FluentIcon Value="@(new Icons.Regular.Size20.PlugConnected())" /></span>
                         <div class="source-card-title">
-                            <span class="source-card-name cell-truncate" title="@source.DisplayName">@source.DisplayName</span>
-                            <span class="cell-secondary">ID @source.Id</span>
+                            <h2 class="source-card-name cell-truncate" title="@source.DisplayName">@source.Host</h2>
+                            <div class="source-card-meta">
+                                <span class="source-protocol">@source.Protocol.ToUpperInvariant()</span>
+                                <span>Port @source.Port</span>
+                                <span>ID @source.Id</span>
+                            </div>
                         </div>
-                        <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" IconOnly="true"
+                        <div class="source-card-summary" title="Categories sent to clients, VOD and series">
+                            <strong>@Format(source.TotalEffectiveCategories)</strong>
+                            <span>of @Format(source.TotalCategories) categories sent</span>
+                        </div>
+                        <FluentButton Class="source-card-delete" Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small" IconOnly="true"
                                       IconStart="@(new Icons.Regular.Size16.Delete())"
                                       aria-label="@($"Delete {source.DisplayName}")" Tooltip="Delete"
                                       Loading="@isBusy"
                                       Disabled="@(isBusy || isToggling)"
                                       OnClick="@(() => DeleteAsync(source))" />
-                    </div>
-                    <div class="source-virtual-categories" role="group" aria-label="@($"Virtual categories of {source.DisplayName}")">
-                        <span class="cell-secondary">Virtual categories sent to clients, VOD and series</span>
-                        <FluentSwitch Label="Recommendations"
-                                      Value="@source.IsRecommendationsCategoryEnabled"
-                                      ValueChanged="@((bool value) => SetVirtualCategoryAsync(source, new SourcePatchRequest(IsRecommendationsCategoryEnabled: value), "Recommendations", value))"
-                                      Disabled="@(isBusy || isToggling)" />
-                        <FluentSwitch Label="Popular"
-                                      Value="@source.IsPopularCategoryEnabled"
-                                      ValueChanged="@((bool value) => SetVirtualCategoryAsync(source, new SourcePatchRequest(IsPopularCategoryEnabled: value), "Popular", value))"
-                                      Disabled="@(isBusy || isToggling)" />
-                    </div>
+                    </header>
                     <div class="source-blocks">
                         <SourceContentFacts SourceId="@source.Id" ContentType="ContentType.Vod" Summary="@source.Vod" />
                         <SourceContentFacts SourceId="@source.Id" ContentType="ContentType.Series" Summary="@source.Series" />
                     </div>
+                    <footer class="source-card-footer" role="group" aria-label="@($"Virtual categories of {source.DisplayName}")">
+                        <div class="source-card-footer-text">
+                            <span class="source-card-footer-title">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Sparkle())" aria-hidden="true" />
+                                Virtual categories
+                            </span>
+                            <span class="cell-secondary">Extra categories added for this source's clients, in VOD and series.</span>
+                        </div>
+                        <div class="source-card-switches">
+                            <FluentSwitch Label="Recommendations"
+                                          Value="@source.IsRecommendationsCategoryEnabled"
+                                          ValueChanged="@((bool value) => SetVirtualCategoryAsync(source, new SourcePatchRequest(IsRecommendationsCategoryEnabled: value), "Recommendations", value))"
+                                          Disabled="@(isBusy || isToggling)" />
+                            <FluentSwitch Label="Popular"
+                                          Value="@source.IsPopularCategoryEnabled"
+                                          ValueChanged="@((bool value) => SetVirtualCategoryAsync(source, new SourcePatchRequest(IsPopularCategoryEnabled: value), "Popular", value))"
+                                          Disabled="@(isBusy || isToggling)" />
+                        </div>
+                    </footer>
                 </FluentCard>
             </li>
         }
@@ -367,6 +383,8 @@ else
             _busyIds.Remove(source.Id);
         }
     }
+
+    private static string Format(int value) => value.ToString("N0", CultureInfo.CurrentCulture);
 
     public void Dispose()
     {

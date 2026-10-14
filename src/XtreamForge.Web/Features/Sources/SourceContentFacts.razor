@@ -6,46 +6,41 @@
             <FluentIcon Value="@Icon" aria-hidden="true" />
             @Title
         </h3>
-        <a class="text-link source-block-headline" href="@CategoriesHref("decision=Included")">
-            <strong>@Format(Summary.EffectiveCategories)</strong>&nbsp;of&nbsp;@Format(Summary.Categories) categories sent to clients
-        </a>
-    </header>
-
-    <div class="source-bar" role="img" aria-label="@BarDescription">
         @if (Summary.Categories > 0)
         {
+            <a class="text-link source-block-headline" href="@CategoriesHref("decision=Included")">
+                <strong>@Format(Summary.EffectiveCategories)</strong>&nbsp;of&nbsp;@Format(Summary.Categories) sent
+            </a>
+        }
+    </header>
+
+    @if (Summary.Categories == 0)
+    {
+        <p class="source-block-empty">No @(IsVod ? "movie" : "series") category discovered for this source.</p>
+    }
+    else
+    {
+        <div class="source-bar" role="img" aria-label="@BarDescription">
             <span class="source-bar-segment source-bar-sent" style="flex-grow: @Summary.EffectiveCategories"></span>
             <span class="source-bar-segment source-bar-manual" style="flex-grow: @Summary.ManuallyExcludedCategories"></span>
             <span class="source-bar-segment source-bar-provider" style="flex-grow: @Summary.ProviderDisabledCategories"></span>
             <span class="source-bar-segment source-bar-rule" style="flex-grow: @Summary.RuleExcludedCategories"></span>
-        }
-    </div>
-
-    <ul class="source-legend" aria-label="Categories by outcome">
-        <li><a class="source-legend-item" href="@CategoriesHref("decision=Included")"><span class="source-dot source-bar-sent"></span>Sent to clients<strong>@Format(Summary.EffectiveCategories)</strong></a></li>
-        <li><a class="source-legend-item" href="@CategoriesHref("manual=Excluded")"><span class="source-dot source-bar-manual"></span>Excluded manually<strong>@Format(Summary.ManuallyExcludedCategories)</strong></a></li>
-        <li><a class="source-legend-item" href="@CategoriesHref("provider=Disabled")"><span class="source-dot source-bar-provider"></span>Disabled by the provider<strong>@Format(Summary.ProviderDisabledCategories)</strong></a></li>
-        <li><a class="source-legend-item" href="@CategoriesHref("decision=Excluded", "manual=NotExcluded", "provider=Enabled")"><span class="source-dot source-bar-rule"></span>Excluded by a rule<strong>@Format(Summary.RuleExcludedCategories)</strong></a></li>
-    </ul>
-
-    <div class="source-tiles">
-        <a class="source-tile" href="@CategoriesHref("mapping=Mapped")">
-            <strong>@Format(Summary.MappedCategories)</strong>
-            <span>Mapped to a custom category</span>
-        </a>
-        <a class="source-tile" href="@($"/categories/rules?{Scope}")">
-            <strong>@Format(Summary.CategoryRules)</strong>
-            <span>Category rules</span>
-        </a>
-        <a class="source-tile" href="@($"/items/rules?{Scope}")">
-            <strong>@Format(Summary.ItemRules)</strong>
-            <span>Item rules</span>
-        </a>
-        <div class="source-tile" title="Streams whose TMDB ID is known (StreamId → TmdbId), resolved in the background">
-            <strong>@Format(Summary.TmdbMappings)</strong>
-            <span>TMDB IDs resolved</span>
         </div>
-    </div>
+
+        <ul class="source-legend" aria-label="Categories by outcome">
+            <LegendItem Href="@CategoriesHref("decision=Included")" DotClass="source-bar-sent" Label="Sent to clients" Count="@Summary.EffectiveCategories" />
+            <LegendItem Href="@CategoriesHref("manual=Excluded")" DotClass="source-bar-manual" Label="Excluded manually" Count="@Summary.ManuallyExcludedCategories" />
+            <LegendItem Href="@CategoriesHref("provider=Disabled")" DotClass="source-bar-provider" Label="Disabled by the provider" Count="@Summary.ProviderDisabledCategories" />
+            <LegendItem Href="@CategoriesHref("decision=Excluded", "manual=NotExcluded", "provider=Enabled")" DotClass="source-bar-rule" Label="Excluded by a rule" Count="@Summary.RuleExcludedCategories" />
+        </ul>
+    }
+
+    <ul class="source-links" aria-label="Related settings">
+        <li><a class="source-link@(ZeroClass(Summary.MappedCategories))" href="@CategoriesHref("mapping=Mapped")"><FluentIcon Value="@(new Icons.Regular.Size16.Tag())" aria-hidden="true" /><strong>@Format(Summary.MappedCategories)</strong> mapped</a></li>
+        <li><a class="source-link@(ZeroClass(Summary.CategoryRules))" href="@($"/categories/rules?{Scope}")"><FluentIcon Value="@(new Icons.Regular.Size16.Filter())" aria-hidden="true" /><strong>@Format(Summary.CategoryRules)</strong> category @(Summary.CategoryRules == 1 ? "rule" : "rules")</a></li>
+        <li><a class="source-link@(ZeroClass(Summary.ItemRules))" href="@($"/items/rules?{Scope}")"><FluentIcon Value="@(new Icons.Regular.Size16.Filter())" aria-hidden="true" /><strong>@Format(Summary.ItemRules)</strong> item @(Summary.ItemRules == 1 ? "rule" : "rules")</a></li>
+        <li><span class="source-link@(ZeroClass(Summary.TmdbMappings))" title="Streams whose TMDB ID is known (StreamId → TmdbId), resolved in the background"><FluentIcon Value="@(new Icons.Regular.Size16.Link())" aria-hidden="true" /><strong>@Format(Summary.TmdbMappings)</strong> TMDB @(Summary.TmdbMappings == 1 ? "ID" : "IDs")</span></li>
+    </ul>
 </section>
 
 @code {
@@ -72,6 +67,8 @@
 
     private string CategoriesHref(params string[] filters) =>
         $"/categories/xtream?{Scope}{string.Concat(filters.Select(filter => "&" + filter))}";
+
+    private static string ZeroClass(int value) => value == 0 ? " is-zero" : string.Empty;
 
     private static string Format(int value) => value.ToString("N0", CultureInfo.CurrentCulture);
 }

@@ -175,7 +175,7 @@ else
                                     <span class="cell-secondary">@AttemptsText(context.LookupAttemptCount)</span>
                                     @if (context.NextLookupAtUtc is { } nextLookup)
                                     {
-                                        <span class="cell-secondary">Next: @nextLookup.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)</span>
+                                        <span class="cell-secondary">Next: <LocalDateTime Value="@nextLookup" /></span>
                                     }
                                 </div>
                             }

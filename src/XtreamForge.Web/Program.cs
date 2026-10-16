@@ -20,10 +20,12 @@ builder.Services.AddBackendApiClients();
 builder.Services.AddScoped<CategoryScreenState>();
 builder.Services.AddScoped<TmdbScreenState>();
 builder.Services.AddScoped<BrowserTimeZone>();
+builder.Services.AddBrowserCulture();
 
 var app = builder.Build();
 
 app.MapDefaultEndpoints();
+app.UseRequestLocalization();
 app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

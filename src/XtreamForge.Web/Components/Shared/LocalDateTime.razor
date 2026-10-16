@@ -1,0 +1,25 @@
+@inject BrowserTimeZone BrowserTimeZone
+@* A date and time shown in the time zone and the format of the browser; nothing is rendered until the time zone is known. *@
+@if (BrowserTimeZone.Current is { } timeZone)
+{
+    @TimeZoneInfo.ConvertTime(Value, timeZone).ToString(Format, CultureInfo.CurrentCulture)
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public DateTimeOffset Value { get; set; }
+
+    /// <summary>Standard or custom .NET format, applied with the culture of the browser; the short date and time by default.</summary>
+    [Parameter]
+    public string Format { get; set; } = "g";
+
+    // The time zone of the browser is only readable once rendered; it is read once per circuit.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && BrowserTimeZone.Current is null)
+        {
+            await BrowserTimeZone.GetAsync();
+            StateHasChanged();
+        }
+    }
+}

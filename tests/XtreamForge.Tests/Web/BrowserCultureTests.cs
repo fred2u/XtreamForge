@@ -36,7 +36,7 @@ public class BrowserCultureTests
     {
         var culture = await CultureOfRequestAsync("fr-BE");
 
-        Assert.Equal("16/10/2026", new DateTime(2026, 10, 16).ToString("d", culture));
+        Assert.Equal("16/10/2026", new DateOnly(2026, 10, 16).ToString("d", culture));
     }
 
     private static async Task<CultureInfo> CultureOfRequestAsync(string? acceptLanguage)

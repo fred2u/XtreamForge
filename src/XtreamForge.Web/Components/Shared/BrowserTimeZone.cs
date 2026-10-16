@@ -13,6 +13,9 @@ public sealed class BrowserTimeZone(IJSRuntime jsRuntime)
 
     private TimeZoneInfo? _timeZone;
 
+    /// <summary>Time zone already read for this circuit, null until <see cref="GetAsync"/> has completed once.</summary>
+    public TimeZoneInfo? Current => _timeZone;
+
     /// <summary>
     /// Reads the time zone of the browser once per circuit; UTC when the browser zone is missing or unknown to the server.
     /// JS interop is only available once the component has rendered (<c>OnAfterRenderAsync</c>).

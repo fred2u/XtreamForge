@@ -4,6 +4,7 @@
     The layout is a fixed grid (header, fixed-width Y axis, plot, X axis): charts displayed side by side or stacked have their
     titles, plots and axes aligned whatever their values, and the axis labels are centered on the grid lines.
 *@
+@inject BrowserTimeZone BrowserTimeZone
 
 <figure class="line-chart" aria-label="@Label">
     <figcaption class="line-chart-header">
@@ -106,7 +107,19 @@
     private string Tooltip(int index) =>
         $"{FormatTime(Times[index])} · " + string.Join(" · ", Series.Select(series => $"{series.Name}: {FormatValue(series.Values[index])}"));
 
-    private static string FormatTime(DateTimeOffset time) => time.ToLocalTime().ToString("HH:mm:ss", CultureInfo.CurrentCulture);
+    // The time zone of the browser is only readable once rendered; UTC is shown until it is known.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && BrowserTimeZone.Current is null)
+        {
+            await BrowserTimeZone.GetAsync();
+            StateHasChanged();
+        }
+    }
+
+    // long time pattern of the browser culture: the seconds matter for points a few seconds apart
+    private string FormatTime(DateTimeOffset time) =>
+        TimeZoneInfo.ConvertTime(time, BrowserTimeZone.Current ?? TimeZoneInfo.Utc).ToString("T", CultureInfo.CurrentCulture);
 
     private static string FormatValue(double value) => value.ToString("N0", CultureInfo.CurrentCulture);
 

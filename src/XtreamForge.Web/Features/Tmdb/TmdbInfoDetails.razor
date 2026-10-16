@@ -73,7 +73,16 @@
             <dt>Rating</dt>
             <dd>@RatingText()</dd>
             <dt>Metadata</dt>
-            <dd>@LoadStateText()</dd>
+            <dd>
+                @if (Info.LoadedAtUtc is { } loadedAt)
+                {
+                    <text>Loaded <LocalDateTime Value="@loadedAt" />, next refresh <LocalDateTime Value="@Info.NextLoadAtUtc" /></text>
+                }
+                else
+                {
+                    <text>Not loaded yet (@Info.LoadAttemptCount.ToString(CultureInfo.CurrentCulture) failed attempts), next attempt <LocalDateTime Value="@Info.NextLoadAtUtc" /></text>
+                }
+            </dd>
         </dl>
 
         @if (!string.IsNullOrWhiteSpace(Details.Overview))
@@ -105,13 +114,6 @@
             ? $"{voteAverage.ToString("0.0", CultureInfo.CurrentCulture)} / 10 ({voteCount.ToString("N0", CultureInfo.CurrentCulture)} votes)"
             : "No votes";
 
-    private string LoadStateText()
-    {
-        var nextLoad = Info.NextLoadAtUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
-        return Info.LoadedAtUtc is { } loadedAt
-            ? $"Loaded {loadedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)}, next refresh {nextLoad}"
-            : $"Not loaded yet ({Info.LoadAttemptCount.ToString(CultureInfo.CurrentCulture)} failed attempts), next attempt {nextLoad}";
-    }
 
     private string PriorityText(RuleDto rule)
     {

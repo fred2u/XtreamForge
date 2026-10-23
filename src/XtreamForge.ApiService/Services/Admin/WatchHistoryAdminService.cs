@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using XtreamForge.ApiService.Services.VirtualCategories;
+using XtreamForge.ApiService.Services.WatchHistory;
 using XtreamForge.Database;
 using XtreamForge.Domain.Enums;
 using XtreamForge.Domain.History;
@@ -82,7 +83,7 @@ public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TmdbIdCach
 
     /// <summary>
     /// Records a playback of a TMDB metadata entry (movie or TV show, without season nor episode) started now, as if it had been played
-    /// through the proxy; returns null when the entry does not exist.
+    /// through the proxy, so a playback of the last 36 hours is updated instead; returns null when the entry does not exist.
     /// </summary>
     public async Task<WatchHistoryEntryItem?> AddAsync(int tmdbInfoId, CancellationToken cancellationToken = default)
     {
@@ -92,8 +93,10 @@ public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TmdbIdCach
             return null;
         }
 
-        var entry = new WatchHistoryEntry { ContentType = info.ContentType, TmdbId = info.TmdbId, StartedAtUtc = timeProvider.GetUtcNow() };
-        dbContext.WatchHistory.Add(entry);
+        var entry = await WatchHistoryDeduplication.AddOrUpdateAsync(
+            dbContext,
+            new WatchHistoryEntry { ContentType = info.ContentType, TmdbId = info.TmdbId, StartedAtUtc = timeProvider.GetUtcNow() },
+            cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         recommendationCache.Invalidate(TmdbIdCache.RecommendationsKey(entry.ContentType));
 
@@ -117,8 +120,8 @@ public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TmdbIdCach
     }
 
     /// <summary>
-    /// Returns a page of the watch history, the most recent playback first: the playbacks are recorded in their start order,
-    /// so the most recent one has the highest ID.
+    /// Returns a page of the watch history, the most recent playback first: an entry updated by a later playback moves up,
+    /// so the entries are ordered by start date, then by ID for the same date.
     /// </summary>
     public async Task<WatchHistoryPage> GetPageAsync(WatchHistoryListQuery query, CancellationToken cancellationToken = default)
     {
@@ -133,7 +136,8 @@ public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TmdbIdCach
 
         // TMDB metadata is identified by content type and TMDB ID
         var items = await entries
-            .OrderByDescending(entry => entry.Id)
+            .OrderByDescending(entry => entry.StartedAtUtc)
+            .ThenByDescending(entry => entry.Id)
             .Skip(Math.Max(query.Skip, 0))
             .Take(Math.Clamp(query.Take, 1, MaximumPageSize))
             .LeftJoin(
@@ -155,6 +159,6 @@ public class WatchHistoryAdminService(XtreamForgeDbContext dbContext, TmdbIdCach
             .ToListAsync(cancellationToken);
 
         // the join does not keep the order of the page
-        return new WatchHistoryPage([.. items.OrderByDescending(item => item.Id)], matchingCount);
+        return new WatchHistoryPage([.. items.OrderByDescending(item => item.StartedAtUtc).ThenByDescending(item => item.Id)], matchingCount);
     }
 }

@@ -124,18 +124,71 @@ public class WatchHistoryServiceTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task RecordAsync_KeepsOneEntryPerPlayback()
+    public async Task RecordAsync_WithinTheWindowOfTheLastPlayback_UpdatesItsStartDateAndSource()
+    {
+        var source = await CreateSourceAsync();
+        var otherSource = await CreateSourceAsync("other.example.com");
+        await AddMappingAsync(source.Id, ContentType.Vod, 603);
+        await AddMappingAsync(otherSource.Id, ContentType.Vod, 603);
+        var service = new WatchHistoryService(Provider("{}"), _dbContext, _recommendationCache);
+
+        await service.RecordAsync(CreateRequest(), TestContext.Current.CancellationToken);
+        await service.RecordAsync(CreateRequest() with { StartedAtUtc = StartedAtUtc.AddHours(20) }, TestContext.Current.CancellationToken);
+        await service.RecordAsync(
+            CreateRequest() with { Host = "other.example.com", StartedAtUtc = StartedAtUtc.AddHours(20) + WatchHistoryDeduplication.Window },
+            TestContext.Current.CancellationToken);
+
+        var entry = await _dbContext.WatchHistory.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(((int?)otherSource.Id, StartedAtUtc.AddHours(56)), (entry.XtreamSourceId, entry.StartedAtUtc));
+    }
+
+    [Fact]
+    public async Task RecordAsync_AfterTheWindowOfTheLastPlayback_AddsAnEntry()
     {
         var source = await CreateSourceAsync();
         await AddMappingAsync(source.Id, ContentType.Vod, 603);
         var service = new WatchHistoryService(Provider("{}"), _dbContext, _recommendationCache);
 
         await service.RecordAsync(CreateRequest(), TestContext.Current.CancellationToken);
-        await service.RecordAsync(CreateRequest() with { StartedAtUtc = StartedAtUtc.AddDays(1) }, TestContext.Current.CancellationToken);
+        await service.RecordAsync(CreateRequest() with { StartedAtUtc = StartedAtUtc.AddHours(37) }, TestContext.Current.CancellationToken);
 
         Assert.Equal(
-            [StartedAtUtc, StartedAtUtc.AddDays(1)],
+            [StartedAtUtc, StartedAtUtc.AddHours(37)],
             await _dbContext.WatchHistory.Where(entry => entry.TmdbId == 603).OrderBy(entry => entry.Id).Select(entry => entry.StartedAtUtc).ToListAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task RecordAsync_WhenAMoreRecentPlaybackIsRecorded_KeepsItsStartDate()
+    {
+        var source = await CreateSourceAsync();
+        await AddMappingAsync(source.Id, ContentType.Vod, 603);
+        var service = new WatchHistoryService(Provider("{}"), _dbContext, _recommendationCache);
+
+        await service.RecordAsync(CreateRequest() with { StartedAtUtc = StartedAtUtc.AddHours(1) }, TestContext.Current.CancellationToken);
+        var recorded = await service.RecordAsync(CreateRequest(), TestContext.Current.CancellationToken);
+
+        Assert.True(recorded);
+        var entry = await _dbContext.WatchHistory.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(StartedAtUtc.AddHours(1), entry.StartedAtUtc);
+    }
+
+    [Fact]
+    public async Task RecordAsync_KeepsOneEntryPerEpisodeWithinTheWindow()
+    {
+        var source = await CreateSourceAsync();
+        await AddMappingAsync(source.Id, ContentType.Series, 1399);
+        await AddEpisodeAsync(source.Id, "1001", seriesId: "42", seasonNumber: 1, episodeNumber: 1);
+        await AddEpisodeAsync(source.Id, "1002", seriesId: "42", seasonNumber: 1, episodeNumber: 2);
+        var service = new WatchHistoryService(Provider("{}"), _dbContext, _recommendationCache);
+
+        await service.RecordAsync(CreateEpisodeRequest("1001"), TestContext.Current.CancellationToken);
+        await service.RecordAsync(CreateEpisodeRequest("1002") with { StartedAtUtc = StartedAtUtc.AddHours(1) }, TestContext.Current.CancellationToken);
+        await service.RecordAsync(CreateEpisodeRequest("1001") with { StartedAtUtc = StartedAtUtc.AddHours(2) }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [((int?)1, StartedAtUtc.AddHours(2)), ((int?)2, StartedAtUtc.AddHours(1))],
+            (await _dbContext.WatchHistory.AsNoTracking().OrderBy(entry => entry.Id).ToListAsync(TestContext.Current.CancellationToken))
+                .Select(entry => (entry.EpisodeNumber, entry.StartedAtUtc)));
     }
 
     [Fact]

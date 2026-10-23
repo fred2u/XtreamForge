@@ -4,7 +4,7 @@ using XtreamForge.Domain.Sources;
 namespace XtreamForge.Domain.History;
 
 /// <summary>
-/// A playback started through the proxy, identified by its TMDB ID; the same TMDB ID appears once per playback.
+/// A playback started through the proxy, identified by its TMDB ID; a movie or episode played again within 36 hours keeps one entry, moved to the last playback.
 /// A series episode is identified by the TMDB ID of its series, with its season and episode numbers when the provider gives them.
 /// The history is global: it does not keep the Xtream account, and its source is informative only.
 /// </summary>

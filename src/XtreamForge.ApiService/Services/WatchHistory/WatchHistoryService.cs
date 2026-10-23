@@ -21,6 +21,7 @@ public class WatchHistoryService(IHttpClientFactory httpClientFactory, XtreamFor
     /// the source is unknown, the episode was not listed by <c>get_series_info</c>, or the movie or series has no TMDB ID.
     /// The stored TMDB mapping wins, as in the item lists; otherwise the provider <c>get_vod_info</c> / <c>get_series_info</c> payload is read,
     /// since the items already identified by the provider may have no mapping.
+    /// A playback of a movie or episode already played in the last 36 hours updates its entry instead (see <see cref="WatchHistoryDeduplication"/>).
     /// </summary>
     public async Task<bool> RecordAsync(WatchHistoryRequest request, CancellationToken cancellationToken)
     {
@@ -39,7 +40,7 @@ public class WatchHistoryService(IHttpClientFactory httpClientFactory, XtreamFor
         if (entry is null)
             return false;
 
-        dbContext.WatchHistory.Add(entry);
+        await WatchHistoryDeduplication.AddOrUpdateAsync(dbContext, entry, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         recommendationCache.Invalidate(TmdbIdCache.RecommendationsKey(entry.ContentType));
 

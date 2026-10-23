@@ -98,6 +98,42 @@ public class WatchHistoryAdminServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task AddAsync_WithinTheWindowOfTheLastPlayback_UpdatesItsStartDate()
+    {
+        var info = new TmdbInfo { ContentType = ContentType.Vod, TmdbId = 603, Title = "The Lattice" };
+        _dbContext.TmdbInfos.Add(info);
+        var source = new XtreamSource { Protocol = "http", Host = "provider.example.com", Port = 8080 };
+        _dbContext.XtreamSources.Add(source);
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var playback = new WatchHistoryEntry { XtreamSourceId = source.Id, ContentType = ContentType.Vod, TmdbId = 603, StartedAtUtc = _time.Now.AddHours(-30) };
+        _dbContext.WatchHistory.Add(playback);
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        _dbContext.ChangeTracker.Clear();
+
+        var item = await _service.AddAsync(info.Id, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(item);
+        Assert.Equal((playback.Id, _time.Now), (item.Id, item.StartedAtUtc));
+        var entry = Assert.Single(_dbContext.WatchHistory.AsNoTracking());
+        Assert.Equal((playback.Id, (int?)null, _time.Now), (entry.Id, entry.XtreamSourceId, entry.StartedAtUtc));
+    }
+
+    [Fact]
+    public async Task GetPageAsync_OrdersTheEntriesByStartDate()
+    {
+        _dbContext.WatchHistory.AddRange(
+            new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 1, StartedAtUtc = Day.AddDays(3) },
+            new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 2, StartedAtUtc = Day.AddDays(1) },
+            new WatchHistoryEntry { ContentType = ContentType.Vod, TmdbId = 3, StartedAtUtc = Day.AddDays(2) });
+        await _dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        _dbContext.ChangeTracker.Clear();
+
+        var page = await _service.GetPageAsync(new WatchHistoryListQuery(Take: 2), TestContext.Current.CancellationToken);
+
+        Assert.Equal([1L, 3L], page.Items.Select(item => item.TmdbId));
+    }
+
+    [Fact]
     public async Task AddAsync_WithUnknownTmdbInfo_ReturnsNullAndRecordsNothing()
     {
         var item = await _service.AddAsync(42, TestContext.Current.CancellationToken);

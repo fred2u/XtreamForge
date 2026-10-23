@@ -5,6 +5,8 @@
   <ItemGroup>
     <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.5.4" />
     <PackageVersion Include="Aspire.Hosting.Testing" Version="13.5.4" />
+    <!-- transitive dependency of Aspire.Hosting, referenced directly for the fix of GHSA-qhrr-8q5h-9q3h (2.5.302 and below) -->
+    <PackageVersion Include="MessagePack" Version="2.5.307" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />

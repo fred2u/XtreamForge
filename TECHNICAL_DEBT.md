@@ -28,6 +28,12 @@ Fix: acceptable for a single instance; move migrations to a dedicated step if th
 
 ### Watch history records every started playback
 
-A playback is recorded from its first request, whatever the part actually watched. A series episode is only recognized once its series has been listed through XtreamForge (`get_series_info`, persisted in `SeriesEpisodes`): an episode list kept in a client cache from before (for example from before the episodes were persisted) is not recorded until the client lists the series again, as no Xtream action resolves an episode ID to its series.
+A playback is recorded from its first request, whatever the part actually watched; a movie or episode played again within 36 hours only moves its entry (`WatchHistoryDeduplication`), so the history does not tell how many times it was watched in that window. A series episode is only recognized once its series has been listed through XtreamForge (`get_series_info`, persisted in `SeriesEpisodes`): an episode list kept in a client cache from before (for example from before the episodes were persisted) is not recorded until the client lists the series again, as no Xtream action resolves an episode ID to its series.
 
 Fix: if needed, estimate the watched part from the byte ranges served for a playback.
+
+### Watch history deduplication without database constraint
+
+`WatchHistoryDeduplication` reads the last entry of the same movie or episode, then adds or updates it, without a lock nor a unique constraint. The background queue records the playbacks one at a time, but an admin `POST /api/admin/tmdb-infos/{id}/watch-history` running at the same time as the recording of the same title can still add a second entry within the 36 hours. An episode whose season and episode numbers are unknown is matched with the other unknown episodes of its series, as they cannot be told apart.
+
+Fix: acceptable at the current usage; if needed, serialize the writes (for example a PostgreSQL advisory lock per title) or record the admin playbacks through the same queue.

@@ -1,4 +1,4 @@
-<Project Sdk="Aspire.AppHost.Sdk/13.6.4">
+<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -10,12 +10,9 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Aspire.Hosting.AppHost" />
+        <PackageReference Include="Aspire.Hosting.Dotnet" />
         <PackageReference Include="Aspire.Hosting.PostgreSQL" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <ProjectReference Include="..\XtreamForge.ApiService\XtreamForge.ApiService.csproj" />
-        <ProjectReference Include="..\XtreamForge.Web\XtreamForge.Web.csproj" />
     </ItemGroup>
 
 </Project>

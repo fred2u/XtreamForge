@@ -7,13 +7,13 @@ var postgres = builder.AddPostgres("postserv")
 var database = postgres.AddDatabase("database", "xtreamforge");
 
 // the Xtream proxy must be reachable by the IPTV devices; the admin API it also serves is not authenticated yet
-var apiService = builder.AddProject<Projects.XtreamForge_ApiService>("xtreamforge-apiservice")
+var apiService = builder.AddDotnetProject("xtreamforge-apiservice", "../XtreamForge.ApiService/XtreamForge.ApiService.csproj")
     .WithExternalHttpEndpoints()
     .WithHttpHealthCheck("/health")
     .WithReference(database)
     .WaitFor(database);
 
-builder.AddProject<Projects.XtreamForge_Web>("xtreamforge-blazor")
+builder.AddDotnetProject("xtreamforge-blazor", "../XtreamForge.Web/XtreamForge.Web.csproj")
     .WithExternalHttpEndpoints()
     .WithHttpHealthCheck("/health")
     .WithReference(apiService)

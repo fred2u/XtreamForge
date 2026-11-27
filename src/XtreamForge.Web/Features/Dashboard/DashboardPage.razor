@@ -119,7 +119,7 @@ else
             _status = await DashboardClient.GetStatusAsync();
             if (_heatmap is not null)
             {
-                await _heatmap.LoadAsync();
+                await _heatmap.ReloadAsync();
             }
         }
         catch (Exception exception)

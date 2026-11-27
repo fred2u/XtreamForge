@@ -42,16 +42,33 @@ public class BrowserTimeZoneTests
         Assert.Equal(["xtreamForge.getTimeZone"], jsRuntime.Identifiers);
     }
 
-    private sealed class StubJsRuntime(string? timeZoneId) : IJSRuntime
+    [Fact]
+    public async Task GetAsync_WhenTheBrowserFunctionFails_ReturnsUtc()
+    {
+        var browserTimeZone = new BrowserTimeZone(new StubJsRuntime("Europe/Brussels", new JSException("getTimeZone failed")));
+
+        var timeZone = await browserTimeZone.GetAsync(TestContext.Current.CancellationToken);
+
+        Assert.Same(TimeZoneInfo.Utc, timeZone);
+    }
+
+    private sealed class StubJsRuntime(string? timeZoneId, Exception? failure = null) : IJSRuntime
     {
         public List<string> Identifiers { get; } = [];
 
-        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args) =>
-            InvokeAsync<TValue>(identifier, CancellationToken.None, args);
+        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args) => Invoke<TValue>(identifier);
 
-        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, CancellationToken cancellationToken, object?[]? args)
+        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, CancellationToken cancellationToken, object?[]? args) =>
+            Invoke<TValue>(identifier);
+
+        private ValueTask<TValue> Invoke<TValue>(string identifier)
         {
             Identifiers.Add(identifier);
+            if (failure is not null)
+            {
+                return ValueTask.FromException<TValue>(failure);
+            }
+
             // a default ValueTask is completed with a null result
             return timeZoneId is null ? default : ValueTask.FromResult((TValue)(object)timeZoneId);
         }

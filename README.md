@@ -10,7 +10,7 @@ Your players keep working exactly as before: you only change the server URL.
 
 [![CI](https://github.com/fred2u/XtreamForge/actions/workflows/ci.yml/badge.svg)](https://github.com/fred2u/XtreamForge/actions/workflows/ci.yml)
 [![Publish images](https://github.com/fred2u/XtreamForge/actions/workflows/publish-images.yml/badge.svg)](https://github.com/fred2u/XtreamForge/actions/workflows/publish-images.yml)
-![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
+![.NET 11](https://img.shields.io/badge/.NET-11-512BD4?logo=dotnet&logoColor=white)
 ![Blazor](https://img.shields.io/badge/Blazor-Fluent%20UI-0078D4?logo=blazor&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-amd64%20%7C%20arm64-2496ED?logo=docker&logoColor=white)
@@ -103,7 +103,7 @@ Keep the same username and password. That's it: your player now receives the fil
 
 > The admin UI and API are not authenticated yet: keep XtreamForge on a trusted network (see [Deployment](#deployment)).
 
-**For development**, with the .NET 10 SDK and Docker installed:
+**For development**, with the .NET 11 SDK and Docker installed:
 
 ```bash
 dotnet run --project src/XtreamForge.AppHost
@@ -160,7 +160,7 @@ flowchart LR
 
 ## Prerequisites
 
-- .NET SDK 10.0.x (see `global.json`)
+- .NET SDK 11.0.x (see `global.json`)
 - Docker (for PostgreSQL via Aspire)
 
 ## Configuration

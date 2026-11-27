@@ -101,8 +101,14 @@
 
     protected override Task OnInitializedAsync() => LoadAsync();
 
-    /// <summary>Reloads the activity, for example when the dashboard is refreshed.</summary>
-    public async Task LoadAsync()
+    /// <summary>Reloads the activity when the dashboard is refreshed, which does not render this component again by itself.</summary>
+    public async Task ReloadAsync()
+    {
+        await LoadAsync();
+        StateHasChanged();
+    }
+
+    private async Task LoadAsync()
     {
         _isLoading = true;
         _error = null;
@@ -125,9 +131,6 @@
         finally
         {
             _isLoading = false;
-
-            // also called by the dashboard refresh, which does not render this component again by itself
-            StateHasChanged();
         }
     }
 

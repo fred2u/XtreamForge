@@ -18,8 +18,8 @@ Respect:
 Read from the repository, never guess:
 
 - Solution file: `XtreamForge.slnx` (`.slnx` format — use `dotnet build XtreamForge.slnx`, not a `.sln` file)
-- Target framework: `net10.0` across all projects
-- C# language version: C# 14 (inferred from `net10.0`); extension member syntax is in active use:
+- Target framework: `net11.0` across all projects
+- C# language version: C# 15 (inferred from `net11.0`); extension member syntax is in active use:
   ```csharp
   public static class FooExtensions
   {

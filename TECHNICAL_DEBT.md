@@ -37,3 +37,11 @@ Fix: if needed, estimate the watched part from the byte ranges served for a play
 `WatchHistoryDeduplication` reads the last entry of the same movie or episode, then adds or updates it, without a lock nor a unique constraint. The background queue records the playbacks one at a time, but an admin `POST /api/admin/tmdb-infos/{id}/watch-history` running at the same time as the recording of the same title can still add a second entry within the 36 hours. An episode whose season and episode numbers are unknown is matched with the other unknown episodes of its series, as they cannot be told apart.
 
 Fix: acceptable at the current usage; if needed, serialize the writes (for example a PostgreSQL advisory lock per title) or record the admin playbacks through the same queue.
+
+## Maintenance
+
+### .NET 11 is a Standard Term Support release
+
+The solution targets `net11.0` (STS, supported until November 2028), while .NET 10 is the current LTS. Aspire 17 packages only ship a `net10.0` build, which runs on .NET 11.
+
+Fix: move to .NET 12 (LTS, expected November 2027) when it is released, and keep the .NET 11 patch releases applied until then.

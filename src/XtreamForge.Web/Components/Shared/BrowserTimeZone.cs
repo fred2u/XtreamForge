@@ -17,14 +17,29 @@ public sealed class BrowserTimeZone(IJSRuntime jsRuntime)
     public TimeZoneInfo? Current => _timeZone;
 
     /// <summary>
-    /// Reads the time zone of the browser once per circuit; UTC when the browser zone is missing or unknown to the server.
+    /// Reads the time zone of the browser once per circuit; UTC when the browser zone is missing, cannot be read or is unknown to the server.
     /// JS interop is only available once the component has rendered (<c>OnAfterRenderAsync</c>).
     /// </summary>
     public async ValueTask<TimeZoneInfo> GetAsync(CancellationToken cancellationToken = default)
     {
         if (_timeZone is null)
         {
-            var id = await jsRuntime.InvokeAsync<string?>(GetTimeZoneFunction, cancellationToken);
+            string? id;
+            try
+            {
+                id = await jsRuntime.InvokeAsync<string?>(GetTimeZoneFunction, cancellationToken);
+            }
+            catch (JSException)
+            {
+                // the function failed in the browser: fall back to UTC
+                id = null;
+            }
+            catch (JSDisconnectedException)
+            {
+                // the circuit is gone: nothing is rendered anymore
+                id = null;
+            }
+
             _timeZone = !string.IsNullOrWhiteSpace(id) && TimeZoneInfo.TryFindSystemTimeZoneById(id, out var timeZone)
                 ? timeZone
                 : TimeZoneInfo.Utc;

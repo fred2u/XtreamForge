@@ -52,6 +52,8 @@ public class BrowserTimeZoneTests
         Assert.Same(TimeZoneInfo.Utc, timeZone);
     }
 
+    // BL0016 sees the members of this stub as JS interop calls, but the stub is the JS runtime itself
+#pragma warning disable BL0016
     private sealed class StubJsRuntime(string? timeZoneId, Exception? failure = null) : IJSRuntime
     {
         public List<string> Identifiers { get; } = [];
@@ -73,4 +75,5 @@ public class BrowserTimeZoneTests
             return timeZoneId is null ? default : ValueTask.FromResult((TValue)(object)timeZoneId);
         }
     }
+#pragma warning restore BL0016
 }
